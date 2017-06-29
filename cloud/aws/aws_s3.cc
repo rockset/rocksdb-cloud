@@ -12,6 +12,7 @@
 
 #include "cloud/aws/aws_env.h"
 #include "cloud/aws/aws_file.h"
+#include "rocksdb/cloud/cloud_statistics.h"
 #include "util/coding.h"
 #include "util/stderr_logger.h"
 #include "util/string_util.h"
@@ -453,7 +454,7 @@ Status S3WritableFile::CopyManifestToS3(uint64_t size_hint, bool force) {
 
   uint64_t now = env_->NowMicros();
   if (is_manifest_ && (force || (manifest_last_sync_time_ +
-                                     manifest_durable_periodicity_millis_ <
+                                     manifest_durable_periodicity_millis_ * 1000 <
                                  now))) {
     // Upload manifest file only if it has not been uploaded in the last
     // manifest_durable_periodicity_millis_  milliseconds.
@@ -465,6 +466,13 @@ Status S3WritableFile::CopyManifestToS3(uint64_t size_hint, bool force) {
           "[s3] S3WritableFile made manifest %s durable to "
           "bucket %s bucketpath %s.",
           fname_.c_str(), s3_bucket_.c_str(), s3_object_.c_str());
+
+      // If cloud stats are present, record the manifest write and its latency in millis.
+      auto stats = env_->cloud_env_options.cloud_statistics;
+      if (stats) {
+          stats->recordTick(NUMBER_MANIFEST_WRITES, 1);
+          stats->measureTime(MANIFEST_WRITES_TIME, env_->s3client_result_.micros / 1000);
+      }
     } else {
       Log(InfoLogLevel::ERROR_LEVEL, env_->info_log_,
           "[s3] S3WritableFile failed to make manifest %s durable to "
@@ -473,6 +481,7 @@ Status S3WritableFile::CopyManifestToS3(uint64_t size_hint, bool force) {
           stat.ToString().c_str());
     }
   }
+
   return stat;
 }
 

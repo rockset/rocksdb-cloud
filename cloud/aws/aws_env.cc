@@ -19,13 +19,11 @@ namespace rocksdb {
 
 class AwsS3ClientWrapper::Timer {
  public:
-  Timer(CloudRequestCallback* callback, CloudRequestOpType type,
+  Timer(CloudRequestCallback& callback, CloudRequestOpType type,
         uint64_t size = 0)
       : callback_(callback), type_(type), size_(size), start_(now()) {}
   ~Timer() {
-    if (callback_) {
-      (*callback_)(type_, size_, now() - start_, success_);
-    }
+      callback_(type_, size_, now() - start_, success_);
   }
   void SetSize(uint64_t size) { size_ = size; }
   void SetSuccess(bool success) { success_ = success; }
@@ -37,7 +35,7 @@ class AwsS3ClientWrapper::Timer {
                std::chrono::system_clock::from_time_t(0))
         .count();
   }
-  CloudRequestCallback* callback_;
+  CloudRequestCallback& callback_;
   CloudRequestOpType type_;
   uint64_t size_;
   bool success_{false};
@@ -47,13 +45,13 @@ class AwsS3ClientWrapper::Timer {
 
 AwsS3ClientWrapper::AwsS3ClientWrapper(
     std::unique_ptr<Aws::S3::S3Client> client,
-    std::shared_ptr<CloudRequestCallback> cloud_request_callback)
+    CloudRequestCallback callback)
     : client_(std::move(client)),
-      cloud_request_callback_(std::move(cloud_request_callback)) {}
+      callback_(std::move(callback)) {}
 
 Aws::S3::Model::ListObjectsOutcome AwsS3ClientWrapper::ListObjects(
     const Aws::S3::Model::ListObjectsRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kListOp);
+  Timer t(callback_, CloudRequestOpType::kListOp);
   auto outcome = client_->ListObjects(request);
   t.SetSuccess(outcome.IsSuccess());
   return outcome;
@@ -61,13 +59,13 @@ Aws::S3::Model::ListObjectsOutcome AwsS3ClientWrapper::ListObjects(
 
 Aws::S3::Model::CreateBucketOutcome AwsS3ClientWrapper::CreateBucket(
     const Aws::S3::Model::CreateBucketRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kCreateOp);
+  Timer t(callback_, CloudRequestOpType::kCreateOp);
   return client_->CreateBucket(request);
 }
 
 Aws::S3::Model::DeleteObjectOutcome AwsS3ClientWrapper::DeleteObject(
     const Aws::S3::Model::DeleteObjectRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kDeleteOp);
+  Timer t(callback_, CloudRequestOpType::kDeleteOp);
   auto outcome = client_->DeleteObject(request);
   t.SetSuccess(outcome.IsSuccess());
   return outcome;
@@ -75,7 +73,7 @@ Aws::S3::Model::DeleteObjectOutcome AwsS3ClientWrapper::DeleteObject(
 
 Aws::S3::Model::CopyObjectOutcome AwsS3ClientWrapper::CopyObject(
     const Aws::S3::Model::CopyObjectRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kCopyOp);
+  Timer t(callback_, CloudRequestOpType::kCopyOp);
   auto outcome = client_->CopyObject(request);
   t.SetSuccess(outcome.IsSuccess());
   return outcome;
@@ -83,7 +81,7 @@ Aws::S3::Model::CopyObjectOutcome AwsS3ClientWrapper::CopyObject(
 
 Aws::S3::Model::GetObjectOutcome AwsS3ClientWrapper::GetObject(
     const Aws::S3::Model::GetObjectRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kReadOp);
+  Timer t(callback_, CloudRequestOpType::kReadOp);
   auto outcome = client_->GetObject(request);
   if (outcome.IsSuccess()) {
     t.SetSize(outcome.GetResult().GetContentLength());
@@ -94,7 +92,7 @@ Aws::S3::Model::GetObjectOutcome AwsS3ClientWrapper::GetObject(
 
 Aws::S3::Model::PutObjectOutcome AwsS3ClientWrapper::PutObject(
     const Aws::S3::Model::PutObjectRequest& request, uint64_t size_hint) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kWriteOp,
+  Timer t(callback_, CloudRequestOpType::kWriteOp,
           size_hint);
   auto outcome = client_->PutObject(request);
   t.SetSuccess(outcome.IsSuccess());
@@ -103,7 +101,7 @@ Aws::S3::Model::PutObjectOutcome AwsS3ClientWrapper::PutObject(
 
 Aws::S3::Model::HeadObjectOutcome AwsS3ClientWrapper::HeadObject(
     const Aws::S3::Model::HeadObjectRequest& request) {
-  Timer t(cloud_request_callback_.get(), CloudRequestOpType::kInfoOp);
+  Timer t(callback_, CloudRequestOpType::kInfoOp);
   auto outcome = client_->HeadObject(request);
   t.SetSuccess(outcome.IsSuccess());
   return outcome;
@@ -113,6 +111,8 @@ Aws::S3::Model::HeadObjectOutcome AwsS3ClientWrapper::HeadObject(
 // The AWS credentials are specified to the constructor via
 // access_key_id and secret_key.
 //
+thread_local AwsS3ClientResult AwsEnv::s3client_result_;
+
 AwsEnv::AwsEnv(Env* underlying_env, const std::string& src_bucket_prefix,
                const std::string& src_object_prefix,
                const std::string& src_bucket_region,
@@ -216,8 +216,13 @@ AwsEnv::AwsEnv(Env* underlying_env, const std::string& src_bucket_prefix,
   {
     std::unique_ptr<Aws::S3::S3Client> s3client(
         new Aws::S3::S3Client(creds, config));
+    std::function<void(CloudRequestOpType, uint64_t, uint64_t, bool)> s3callback =
+            std::bind(&AwsEnv::S3ClientCallback, this,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4);
+
     s3client_ = std::make_shared<AwsS3ClientWrapper>(
-        std::move(s3client), cloud_env_options.cloud_request_callback);
+        std::move(s3client), std::move(s3callback));
   }
 
   // create dest bucket if specified
@@ -310,6 +315,16 @@ AwsEnv::~AwsEnv() {
   if (tid_.joinable()) {
     tid_.join();
   }
+}
+
+void AwsEnv::S3ClientCallback(CloudRequestOpType type, uint64_t size, uint64_t micros, bool ok) {
+    if (cloud_env_options.cloud_request_callback) {
+        (*cloud_env_options.cloud_request_callback)(type, size, micros, ok);
+    }
+    s3client_result_.type = type;
+    s3client_result_.size = size;
+    s3client_result_.micros = micros;
+    s3client_result_.ok = ok;
 }
 
 Status AwsEnv::CreateTailer() {

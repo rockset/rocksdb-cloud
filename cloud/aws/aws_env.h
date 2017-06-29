@@ -29,7 +29,7 @@ class AwsS3ClientWrapper {
  public:
   AwsS3ClientWrapper(
       std::unique_ptr<Aws::S3::S3Client> client,
-      std::shared_ptr<CloudRequestCallback> cloud_request_callback);
+      CloudRequestCallback callback);
 
   Aws::S3::Model::ListObjectsOutcome ListObjects(
       const Aws::S3::Model::ListObjectsRequest& request);
@@ -54,9 +54,16 @@ class AwsS3ClientWrapper {
 
  private:
   std::unique_ptr<Aws::S3::S3Client> client_;
-  std::shared_ptr<CloudRequestCallback> cloud_request_callback_;
+  CloudRequestCallback callback_;
 
   class Timer;
+};
+
+struct AwsS3ClientResult {
+    CloudRequestOpType type;
+    uint64_t size;
+    uint64_t micros;
+    bool ok;
 };
 
 //
@@ -244,6 +251,9 @@ class AwsEnv : public CloudEnvImpl {
   // The S3 client
   std::shared_ptr<AwsS3ClientWrapper> s3client_;
 
+  // Results of last S3 client call; used in stats collection.
+  static thread_local AwsS3ClientResult s3client_result_;
+
   // The Kinesis client
   std::shared_ptr<Aws::Kinesis::KinesisClient> kinesis_client_;
 
@@ -303,6 +313,11 @@ class AwsEnv : public CloudEnvImpl {
                   const std::string& dest_bucket_region,
                   const CloudEnvOptions& cloud_options,
                   std::shared_ptr<Logger> info_log = nullptr);
+
+  // When the s3 client performs an operation, it calls this function back with the result.
+  // Arguments are forwarded to every element in the callback list s3client_callbacks_ and to the
+  // callback supplied in cloud_env_options.
+  void S3ClientCallback(CloudRequestOpType type, uint64_t size, uint64_t micros, bool ok);
 
   // The pathname that contains a list of all db's inside a bucket.
   static constexpr const char* dbid_registry_ = "/.rockset/dbid/";
@@ -548,11 +563,10 @@ class AwsEnv : public CloudEnvImpl {
                             const std::string& dbid) override {
     return s3_notsup;
   }
-  virtual Status Savepoint() override {
-    return s3_notsup;
-  }
+
   const CloudEnvOptions& GetCloudEnvOptions() override {
-      return CloudEnvOptions();
+      static CloudEnvOptions options{};
+      return options;
   }
   Status ListObjects(const std::string& bucket_name_prefix,
                      const std::string& bucket_object_prefix,

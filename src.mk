@@ -197,6 +197,7 @@ LIB_SOURCES =                                                   \
   cloud/db_cloud_impl.cc                                        \
   cloud/cloud_env.cc                                            \
   cloud/cloud_env_options.cc                                    \
+  cloud/cloud_statistics_impl.cc                                \
   cloud/manifest.cc                                             \
   cloud/purge.cc                                                \
 
