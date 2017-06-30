@@ -195,15 +195,15 @@ std::string CloudStatisticsImpl::ToString() const {
     }
     for (const auto& h : CloudHistogramsNameMap) {
       if ((h.first & CLOUD_HISTOGRAM_ENUM_START) && (h.first < CLOUD_HISTOGRAM_ENUM_MAX)) {
-        uint64_t histogramIndex = h.first ^ CLOUD_HISTOGRAM_ENUM_START;
-        HistogramData histogramData;
-        histograms_[histogramIndex].getMergedHistogram()->Data(&histogramData);
+        uint64_t histIndex = h.first ^ CLOUD_HISTOGRAM_ENUM_START;
+        HistogramData histData;
+        histograms_[histIndex].getMergedHistogram()->Data(&histData);
 
         snprintf(
             buffer, kTmpStrBufferSize,
             "%s statistics Percentiles :=> 50 : %f 95 : %f 99 : %f 100 : %f\n",
-            h.second.c_str(), histogramData.median, histogramData.percentile95,
-            histogramData.percentile99, histogramData.max);
+            h.second.c_str(), histData.median, histData.percentile95,
+            histData.percentile99, histData.max);
         str.append(buffer);
       }
     }
