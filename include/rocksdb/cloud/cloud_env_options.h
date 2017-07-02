@@ -36,8 +36,11 @@ enum class CloudRequestOpType {
   kCopyOp,
   kInfoOp
 };
+
 using CloudRequestCallback =
     std::function<void(CloudRequestOpType, uint64_t, uint64_t, bool)>;
+
+class CloudStatistics;
 
 //
 // The cloud environment for rocksdb. It allows configuring the rocksdb
@@ -86,19 +89,24 @@ class CloudEnvOptions {
   // parameters: (op, size, latency in microseconds, is_success)
   std::shared_ptr<CloudRequestCallback> cloud_request_callback;
 
+  // If non-null, then we should collect metrics about cloud environment operations
+  std::shared_ptr<CloudStatistics> cloud_statistics;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kAws,
       bool _keep_local_sst_files = false, bool _keep_local_log_files = true,
       uint64_t _manifest_durable_periodicity_millis = 60 * 1000,
       uint64_t _purger_periodicity_millis = 10 * 60 * 1000,
-      std::shared_ptr<CloudRequestCallback> _cloud_request_callback = nullptr)
+      std::shared_ptr<CloudRequestCallback> _cloud_request_callback = nullptr,
+      std::shared_ptr<CloudStatistics> _cloud_statistics = nullptr)
       : cloud_type(_cloud_type),
         keep_local_sst_files(_keep_local_sst_files),
         keep_local_log_files(_keep_local_log_files),
         manifest_durable_periodicity_millis(
             _manifest_durable_periodicity_millis),
         purger_periodicity_millis(_purger_periodicity_millis),
-        cloud_request_callback(_cloud_request_callback) {
+        cloud_request_callback(_cloud_request_callback),
+        cloud_statistics(_cloud_statistics) {
     assert(manifest_durable_periodicity_millis == 0 ||
            keep_local_log_files == true);
   }
