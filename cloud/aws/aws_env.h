@@ -2,10 +2,14 @@
 //
 
 #pragma once
-#include <stdio.h>
-#include <time.h>
 #include <algorithm>
+#include <cstdio>
+#include <ctime>
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "cloud/cloud_env_impl.h"
 #include "port/sys_time.h"
 
@@ -18,9 +22,14 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/BucketLocationConstraint.h>
 
-#include <list>
-#include <unordered_map>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <list>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+#include <utility>
 
 namespace rocksdb {
 
@@ -240,7 +249,7 @@ class AwsEnv : public CloudEnvImpl {
   const std::string& GetDestObjectPrefix() { return dest_object_prefix_; }
 
   const CloudEnvOptions& GetCloudEnvOptions() override {
-      return cloud_env_options;
+    return cloud_env_options;
   }
 
   std::shared_ptr<Logger> info_log_;  // informational messages
@@ -563,29 +572,29 @@ class AwsEnv : public CloudEnvImpl {
                             const std::string& dbid) override {
     return s3_notsup;
   }
-  virtual Status Savepoint() override {
+  virtual Status Savepoint() {
     return s3_notsup;
   }
   const CloudEnvOptions& GetCloudEnvOptions() override {
-      return CloudEnvOptions();
+    return cloud_env_options_;
   }
   Status ListObjects(const std::string& bucket_name_prefix,
                      const std::string& bucket_object_prefix,
-                     BucketObjectMetadata* meta) {
+                     BucketObjectMetadata* meta) override {
     return s3_notsup;
   }
   Status DeleteObject(const std::string& bucket_name_prefix,
-                      const std::string& bucket_object_path) {
+                      const std::string& bucket_object_path) override {
     return s3_notsup;
   }
   Status ExistsObject(const std::string& bucket_name_prefix,
-                      const std::string& bucket_object_path) {
+                      const std::string& bucket_object_path) override {
     return s3_notsup;
   }
   Status CopyObject(const std::string& bucket_name_prefix_src,
                     const std::string& bucket_object_path_src,
                     const std::string& bucket_name_prefix_dest,
-                    const std::string& bucket_object_path_dest) {
+                    const std::string& bucket_object_path_dest) override {
     return s3_notsup;
   }
 
@@ -603,6 +612,9 @@ class AwsEnv : public CloudEnvImpl {
                                    std::string* aws_secret_access_key) {
     return s3_notsup;
   }
+
+ private:
+  const CloudEnvOptions cloud_env_options_;
 };
 }
 
