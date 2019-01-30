@@ -278,11 +278,56 @@ AwsEnv::AwsEnv(Env* underlying_env, const std::string& src_bucket_prefix,
          creds ? "[given]" : "[not given]");
 
   base_env_ = underlying_env;
-  Aws::InitAPI(Aws::SDKOptions());
-  // create AWS S3 client with appropriate timeouts
+
+  // Get additional data for 'sdk_options' and 'config' from cloud_env_options.aws_options
+  // Check if the corresponded value is not usable - use defaults
+
+  Aws::SDKOptions sdk_options;
   Aws::Client::ClientConfiguration config;
-  config.connectTimeoutMs = 30000;
-  config.requestTimeoutMs = 600000;
+
+  // General SDK options: logging
+  if (cloud_env_options.aws_options.logLevel != -1)
+    sdk_options.loggingOptions.logLevel = (Aws::Utils::Logging::LogLevel)cloud_env_options.aws_options.logLevel;
+  Aws::InitAPI(sdk_options);
+
+  // Timeout control
+  if (cloud_env_options.aws_options.connectTimeoutMs != -1)
+    config.connectTimeoutMs = cloud_env_options.aws_options.connectTimeoutMs;
+  else
+    config.connectTimeoutMs = 30000;
+
+  if (cloud_env_options.aws_options.requestTimeoutMs != -1)
+    config.requestTimeoutMs = cloud_env_options.aws_options.requestTimeoutMs;
+  else
+    config.requestTimeoutMs = 600000;
+
+  // Endpoint override
+  if (cloud_env_options.aws_options.endpointOverride != "")
+    config.endpointOverride = cloud_env_options.aws_options.endpointOverride.c_str();
+
+  if (cloud_env_options.aws_options.scheme != "")
+    config.scheme = Aws::Http::SchemeMapper::FromString(cloud_env_options.aws_options.scheme.c_str());
+
+  if (cloud_env_options.aws_options.verifySSL != -1)
+    config.verifySSL = (bool)cloud_env_options.aws_options.verifySSL;
+
+  // Proxy settings, not using by default and if proxyHost == ""
+  if (cloud_env_options.aws_options.proxyHost != "")
+  {
+    config.proxyHost = cloud_env_options.aws_options.proxyHost.c_str();
+
+    if (cloud_env_options.aws_options.proxyScheme != "")
+      config.proxyScheme = Aws::Http::SchemeMapper::FromString(cloud_env_options.aws_options.proxyScheme.c_str());
+
+    if (cloud_env_options.aws_options.proxyPort > 0)
+      config.proxyPort = cloud_env_options.aws_options.proxyPort;
+
+    if (cloud_env_options.aws_options.proxyUserName != "")
+      config.proxyUserName = cloud_env_options.aws_options.proxyUserName.c_str();
+
+    if (cloud_env_options.aws_options.proxyPassword != "")
+      config.proxyPassword = cloud_env_options.aws_options.proxyPassword.c_str();
+  }
 
   // Setup how retries need to be done
   config.retryStrategy =

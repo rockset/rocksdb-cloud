@@ -46,6 +46,47 @@ class KafkaLogOptions {
    std::unordered_map<std::string, std::string> client_config_params;
 };
 
+// Extra data to fill-in Aws::SDKOptions and Aws::Client::ClientConfiguration
+// inside AwsEnv::AwsEnv()
+// Not usable values, using defaults instead:
+//  -1 for int/long
+//  "" for std::string
+class AwsOptions {
+ public:
+  // General SDK options: logging
+  int logLevel;                    // see https://sdk.amazonaws.com/cpp/api/0.14.3/aws-cpp-sdk-core_2include_2aws_2core_2utils_2logging_2_log_level_8h_source.html
+
+  // Timeout control
+  long requestTimeoutMs;
+  long connectTimeoutMs;
+
+  // Endpoint override
+  std::string endpointOverride;    // local S3/Minio server "127.0.0.1:9000"
+  std::string scheme;              // "http" or "https"
+  int verifySSL;                   // 0 - don't verify, 1 - do verify
+
+  // Proxy settings, not using by default and if proxyHost == ""
+  std::string proxyScheme;
+  std::string proxyHost;
+  unsigned proxyPort;
+  std::string proxyUserName;
+  std::string proxyPassword;
+
+  // Setting not usable values as defaults (librocksdb/AWS defaults will be used)
+  AwsOptions() :
+    logLevel(-1),
+    requestTimeoutMs(-1),
+    connectTimeoutMs(-1),
+    endpointOverride(""),
+    scheme(""),
+    verifySSL(-1),
+    proxyScheme(""),
+    proxyHost(""),
+    proxyPort(0),
+    proxyUserName(""),
+    proxyPassword("") {}
+};
+
 enum class CloudRequestOpType {
   kReadOp,
   kWriteOp,
@@ -76,6 +117,9 @@ class CloudEnvOptions {
 
   // Only used if keep_local_log_files is true and log_type is kKafka.
   KafkaLogOptions kafka_log_options;
+
+  // To specify AWS related extras: server IP:port, scheme, timeouts, proxy.
+  AwsOptions aws_options;
 
   //
   // If true,  then sst files are stored locally and uploaded to the cloud in
