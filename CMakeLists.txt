@@ -49,6 +49,8 @@ option(WITH_SNAPPY "build with SNAPPY" OFF)
 option(WITH_LZ4 "build with lz4" OFF)
 option(WITH_ZLIB "build with zlib" OFF)
 option(WITH_ZSTD "build with zstd" OFF)
+option(WITH_KAFKA "build with librdkafka (system)" ON)
+option(WITH_AWS "build with aws-sdk-cpp (GIT submodule)" ON)
 if(MSVC)
   # Defaults currently different for GFLAGS.
   #  We will address find_package work a little later
@@ -114,6 +116,25 @@ else()
     add_definitions(-DZSTD)
     include_directories(${ZSTD_INCLUDE_DIR})
     list(APPEND THIRDPARTY_LIBS ${ZSTD_LIBRARIES})
+  endif()
+
+  if(WITH_KAFKA)
+    # System lib used
+    # rdkafka uses pkgconfig instead of Findrdkafka.cmake
+    # https://stackoverflow.com/questions/29191855/what-is-the-proper-way-to-use-pkg-config-from-cmake
+    # find_package(rdkafka REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(RDKAFKA REQUIRED rdkafka++)
+    add_definitions(-DUSE_KAFKA)
+    include_directories(${RDKAFKA_INCLUDE_DIR})
+    list(APPEND THIRDPARTY_LIBS ${RDKAFKA_LIBRARIES})
+  endif()
+
+  if(WITH_AWS)
+    add_definitions(-DUSE_AWS)
+    list(APPEND THIRDPARTY_LIBS aws-cpp-sdk-s3 aws-cpp-sdk-kinesis aws-cpp-sdk-core)
+    include_directories(../../aws-sdk-cpp/aws-cpp-sdk-s3/include ../../aws-sdk-cpp/aws-cpp-sdk-kinesis/include ../../aws-sdk-cpp/aws-cpp-sdk-core/include)
+    link_directories(../../aws-sdk-cpp/aws-cpp-sdk-s3 ../../aws-sdk-cpp/aws-cpp-sdk-kinesis ../../aws-sdk-cpp/aws-cpp-sdk-core)
   endif()
 endif()
 
@@ -456,6 +477,18 @@ add_subdirectory(third-party/gtest-1.7.0/fused-src/gtest)
 # Main library source code
 
 set(SOURCES
+        cloud/aws/aws_env.cc
+        cloud/aws/aws_kafka.cc
+        cloud/aws/aws_kinesis.cc
+        cloud/aws/aws_log.cc
+        cloud/aws/aws_retry.cc
+        cloud/aws/aws_s3.cc
+        cloud/db_cloud_impl.cc
+        cloud/cloud_env.cc
+        cloud/cloud_env_options.cc
+        cloud/manifest_reader.cc
+        cloud/purge.cc
+        cloud/cloud_manifest.cc
         cache/clock_cache.cc
         cache/lru_cache.cc
         cache/sharded_cache.cc
