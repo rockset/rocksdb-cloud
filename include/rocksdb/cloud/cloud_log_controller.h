@@ -5,18 +5,20 @@
 #include <thread>
 
 #include "rocksdb/env.h"
+#include "rocksdb/options.h"
 #include "rocksdb/status.h"
 
 namespace rocksdb {
 class CloudEnv;
-class CloudEnvOptions;
+struct CloudEnvOptions;
 
 // Creates a new file, appends data to a file or delete an existing file via
 // logging into a cloud stream (such as Kinesis).
 //
 class CloudLogWritableFile : public WritableFile {
  public:
-  CloudLogWritableFile(CloudEnv* env, const std::string& fname, const EnvOptions& options);
+  CloudLogWritableFile(CloudEnv* env, const std::string& fname,
+                       const EnvOptions& options);
   virtual ~CloudLogWritableFile();
 
   virtual Status Flush() {
@@ -52,14 +54,14 @@ class CloudLogController {
 
   // Delay in Cloud Log stream: writes to read visibility
   static const std::chrono::microseconds kRetryPeriod;
-
   static const uint32_t kAppend = 0x1;  // add a new record to a logfile
   static const uint32_t kDelete = 0x2;  // delete a log file
   static const uint32_t kClosed = 0x4;  // closing a file
 
-  CloudLogController(CloudEnv* env);
   virtual ~CloudLogController();
-
+  static const char *Type() { return "CloudLogController"; }
+  static Status CreateKinesisController(std::unique_ptr<CloudLogController>* result);
+  static Status CreateKafkaController(std::unique_ptr<CloudLogController>* result);
   // Create a stream to store all log files.
   virtual Status CreateStream(const std::string& topic) = 0;
 
@@ -75,10 +77,10 @@ class CloudLogController {
                                                    const EnvOptions& options) = 0;
 
   // Returns name of the cloud log type (Kinesis, etc.).
-  virtual const char *Name() const { return "cloudlog"; }
+  virtual const char* Name() const { return "cloudlog"; }
 
   // Directory where files are cached locally.
-  const std::string & GetCacheDir() const { return cache_dir_; }
+  const std::string& GetCacheDir() const { return cache_dir_; }
 
   Status const status() { return status_; }
 
@@ -95,13 +97,16 @@ class CloudLogController {
   // Retries fnc until success or timeout has expired.
   typedef std::function<Status()> RetryType;
   Status Retry(RetryType func);
-  Status StartTailingStream(const std::string & topic);
-  void StopTailingStream();
+  virtual Status StartTailingStream(const std::string& topic);
+  virtual void StopTailingStream();
+  virtual Status Prepare(CloudEnv * env);
+  virtual Status Verify() const;
  protected:
   CloudEnv* env_;
   Status status_;
   std::string cache_dir_;
-
+  CloudLogController() : running_(false) { }
+  virtual Status Initialize(CloudEnv *env);
   // A cache of pathnames to their open file _escriptors
   std::map<std::string, std::unique_ptr<RandomRWFile>> cache_fds_;
 
@@ -110,12 +115,11 @@ class CloudLogController {
                                Slice* filename, uint64_t* offset_in_file,
                                uint64_t* file_size, Slice* data);
   bool IsRunning() const { return running_; }
-private:
+
+ private:
   // Background thread to tail stream
   std::unique_ptr<std::thread> tid_;
   std::atomic<bool> running_;
 };
-Status CreateKinesisController(CloudEnv* env, std::unique_ptr<CloudLogController> * result);
-Status CreateKafkaController(CloudEnv* env, std::unique_ptr<CloudLogController> * result);
 } // namespace rocksdb
 

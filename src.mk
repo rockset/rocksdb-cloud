@@ -235,6 +235,7 @@ LIB_SOURCES =                                                   \
   cloud/cloud_env_impl.cc                                       \
   cloud/cloud_env_options.cc                                    \
   cloud/cloud_log_controller.cc                                 \
+  cloud/cloud_storage_provider.cc                               \
   cloud/manifest_reader.cc                                      \
   cloud/purge.cc                                                \
   cloud/cloud_manifest.cc                                       \

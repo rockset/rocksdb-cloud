@@ -9,66 +9,15 @@
 #include "cloud/cloud_env_impl.h"
 #include "port/sys_time.h"
 
-#ifdef USE_AWS
-
-#include <aws/core/Aws.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/utils/Outcome.h>
-#include <aws/kinesis/KinesisClient.h>
-#include <aws/s3/S3Client.h>
-#include <aws/s3/model/BucketLocationConstraint.h>
-#include <aws/transfer/TransferManager.h>
 
 #include <chrono>
 #include <list>
 #include <unordered_map>
 
 namespace rocksdb {
+class ObjectLibrary;
 
-class S3ReadableFile;
-
-class AwsS3ClientWrapper {
- public:
-  AwsS3ClientWrapper(
-      std::shared_ptr<Aws::S3::S3Client> client,
-      std::shared_ptr<CloudRequestCallback> cloud_request_callback);
-
-  Aws::S3::Model::ListObjectsOutcome ListObjects(
-      const Aws::S3::Model::ListObjectsRequest& request);
-
-  Aws::S3::Model::CreateBucketOutcome CreateBucket(
-      const Aws::S3::Model::CreateBucketRequest& request);
-
-  Aws::S3::Model::HeadBucketOutcome HeadBucket(
-      const Aws::S3::Model::HeadBucketRequest& request);
-
-  Aws::S3::Model::DeleteObjectOutcome DeleteObject(
-      const Aws::S3::Model::DeleteObjectRequest& request);
-
-  Aws::S3::Model::CopyObjectOutcome CopyObject(
-      const Aws::S3::Model::CopyObjectRequest& request);
-
-  Aws::S3::Model::GetObjectOutcome GetObject(
-      const Aws::S3::Model::GetObjectRequest& request);
-
-  Aws::S3::Model::PutObjectOutcome PutObject(
-      const Aws::S3::Model::PutObjectRequest& request, uint64_t size_hint = 0);
-
-  Aws::S3::Model::HeadObjectOutcome HeadObject(
-      const Aws::S3::Model::HeadObjectRequest& request);
-
-  const std::shared_ptr<Aws::S3::S3Client>& GetClient() const {
-    return client_;
-  }
-
- private:
-  std::shared_ptr<Aws::S3::S3Client> client_;
-  std::shared_ptr<CloudRequestCallback> cloud_request_callback_;
-};
-
-namespace detail {
-struct JobHandle;
-}  // namespace detail
+#ifdef USE_AWS
 
 //
 // The S3 environment for rocksdb. This class overrides all the
@@ -99,14 +48,19 @@ class AwsEnv : public CloudEnvImpl {
   static Status NewAwsEnv(Env* env,
                           const CloudEnvOptions& env_options,
                           const std::shared_ptr<Logger> & info_log, CloudEnv** cenv);
-
+  static Status CreateS3StorageProvider(std::unique_ptr<CloudStorageProvider>* provider);
+  static Status CreateKinesisController(std::unique_ptr<CloudLogController>* controller);
+  explicit AwsEnv(Env* underlying_env,
+                  const CloudEnvOptions& cloud_options,
+                  const std::shared_ptr<Logger>& logger);
   virtual ~AwsEnv();
+  const char *Name() const override { return "AWS"; }
 
   // We cannot invoke Aws::ShutdownAPI from the destructor because there could
   // be
   // multiple AwsEnv's ceated by a process and Aws::ShutdownAPI should be called
   // only once by the entire process when all AwsEnvs are destroyed.
-  static void Shutdown() { Aws::ShutdownAPI(Aws::SDKOptions()); }
+  static void Shutdown();
 
   // If you do not specify a region, then S3 buckets are created in the
   // standard-region which might not satisfy read-your-own-writes. So,
@@ -234,16 +188,8 @@ class AwsEnv : public CloudEnvImpl {
 
   virtual uint64_t GetThreadID() const override { return AwsEnv::gettid(); }
 
-  virtual Status EmptyBucket(const std::string& bucket,
-                             const std::string& path) override;
-
   std::string GetWALCacheDir();
 
-  // The S3 client
-  std::shared_ptr<AwsS3ClientWrapper> s3client_;
-
-  // AWS's utility to help out with uploading and downloading S3 file
-  std::shared_ptr<Aws::Transfer::TransferManager> awsTransferManager_;
 
   // Saves and retrieves the dbid->dirname mapping in S3
   Status SaveDbid(const std::string& bucket_name, const std::string& dbid,
@@ -254,104 +200,17 @@ class AwsEnv : public CloudEnvImpl {
                      DbidList* dblist) override;
   Status DeleteDbid(const std::string& bucket,
                     const std::string& dbid) override;
-  Status ListObjects(const std::string& bucket_name,
-                     const std::string& bucket_object,
-                     BucketObjectMetadata* meta) override;
-  Status DeleteObject(const std::string& bucket_name,
-                      const std::string& bucket_object_path) override;
-  Status ExistsObject(const std::string& bucket_name,
-                      const std::string& bucket_object_path) override;
-  Status GetObjectSize(const std::string& bucket_name,
-                       const std::string& bucket_object_path,
-                       uint64_t* filesize) override;
-  Status CopyObject(const std::string& bucket_name_src,
-                    const std::string& bucket_object_path_src,
-                    const std::string& bucket_name_dest,
-                    const std::string& bucket_object_path_dest) override;
-  Status GetObject(const std::string& bucket_name,
-                   const std::string& bucket_object_path,
-                   const std::string& local_path) override;
-  Status PutObject(const std::string& local_path,
-                   const std::string& bucket_name,
-                   const std::string& bucket_object_path) override;
-  Status DeleteCloudFileFromDest(const std::string& fname) override;
-
-  void RemoveFileFromDeletionQueue(const std::string& filename);
-
-  void TEST_SetFileDeletionDelay(std::chrono::seconds delay) {
-    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
-    file_deletion_delay_ = delay;
-  }
-
+  Status Prepare() override;
+protected:
  private:
-  //
-  // The AWS credentials are specified to the constructor via
-  // access_key_id and secret_key.
-  //
-  explicit AwsEnv(Env* underlying_env,
-                  const CloudEnvOptions& cloud_options,
-                  const std::shared_ptr<Logger> & info_log = nullptr);
-
-  struct GetObjectResult {
-    bool success{false};
-    Aws::Client::AWSError<Aws::S3::S3Errors> error;  // if success == false
-    size_t objectSize{0};
-  };
-
-  GetObjectResult DoGetObject(const Aws::String& bucket, const Aws::String& key,
-                              const std::string& destination);
-  GetObjectResult DoGetObjectWithTransferManager(
-      const Aws::String& bucket, const Aws::String& key,
-      const std::string& destination);
-
-
-  struct PutObjectResult {
-    bool success{false};
-    Aws::Client::AWSError<Aws::S3::S3Errors> error;  // if success == false
-  };
-
-  PutObjectResult DoPutObject(const std::string& filename,
-                              const Aws::String& bucket, const Aws::String& key,
-                              uint64_t sizeHint);
-
-  PutObjectResult DoPutObjectWithTransferManager(const std::string& filename,
-                                                 const Aws::String& bucket,
-                                                 const Aws::String& key,
-                                                 uint64_t sizeHint);
-
   // The pathname that contains a list of all db's inside a bucket.
   static constexpr const char* dbid_registry_ = "/.rockset/dbid/";
 
   Status create_bucket_status_;
-
-  std::mutex files_to_delete_mutex_;
-  std::chrono::seconds file_deletion_delay_ = std::chrono::hours(1);
-  std::unordered_map<std::string, std::shared_ptr<detail::JobHandle>>
-      files_to_delete_;
-
-  Aws::S3::Model::BucketLocationConstraint bucket_location_;
-
   Status status();
-
-  // Delete the specified path from S3
-  Status DeletePathInS3(const std::string& bucket,
-                        const std::string& fname);
 
   // Validate options
   Status CheckOption(const EnvOptions& options);
-
-  // Return the list of children of the specified path
-  Status GetChildrenFromS3(const std::string& path,
-                           const std::string& bucket,
-                           std::vector<std::string>* result);
-
-  // If metadata, size or modtime is non-nullptr, returns requested data
-  Status HeadObject(const std::string& bucket, const std::string& path,
-                    Aws::Map<Aws::String, Aws::String>* metadata = nullptr,
-                    uint64_t* size = nullptr, uint64_t* modtime = nullptr);
-
-  Status NewS3ReadableFile(const std::string& bucket, const std::string& fname,
-                           std::unique_ptr<S3ReadableFile>* result);
 
   // Save IDENTITY file to S3. Update dbid registry.
   Status SaveIdentitytoS3(const std::string& localfile,
@@ -363,7 +222,9 @@ class AwsEnv : public CloudEnvImpl {
   // Converts a local pathname to an object name in the dest bucket
   std::string destname(const std::string& localname);
 };
-
-}  // namespace rocksdb
-
 #endif  // USE_AWS
+
+extern "C" {
+void RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
+}  // extern "C"
+}  // namespace rocksdb

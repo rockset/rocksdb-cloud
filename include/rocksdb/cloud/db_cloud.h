@@ -6,11 +6,12 @@
 #include <string>
 #include <vector>
 
-#include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/db.h"
 #include "rocksdb/utilities/stackable_db.h"
 
 namespace rocksdb {
+class BucketOptions;
+struct CheckpointToCloudOptions;  
 
 //
 // Database with Cloud support.

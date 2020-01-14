@@ -1222,9 +1222,10 @@ rocksdb::Env* CreateAwsEnv(const std::string& dbpath ,
   return s;
 }
 
-static rocksdb::Registrar<rocksdb::Env>
-  s3_reg("s3://.*", [](const std::string& uri,
-                       std::unique_ptr<rocksdb::Env>* env_guard) {
+static auto & registrar = rocksdb::ObjectLibrary::Default()->Register<rocksdb::Env>(
+         "s3://.*", [](const std::string& uri,
+                       std::unique_ptr<rocksdb::Env>* env_guard,
+                       std::string* /*errmsg*/) {
   CreateAwsEnv(uri, env_guard);
   return env_guard->get();
 });

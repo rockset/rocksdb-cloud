@@ -1,19 +1,16 @@
 // Copyright (c) 2017 Rockset.
 #ifndef ROCKSDB_LITE
 
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS
-#endif
-
 #include "cloud/db_cloud_impl.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "cloud/aws/aws_env.h"
 #include "cloud/filename.h"
 #include "cloud/manifest_reader.h"
 #include "file/file_util.h"
 #include "logging/auto_roll_logger.h"
+#include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/options.h"
@@ -172,12 +169,13 @@ Status DBCloudImpl::Savepoint() {
   std::vector<LiveFileMetaData> live_files;
   GetLiveFilesMetaData(&live_files);
 
+  auto & provider = cenv->GetCloudEnvOptions().storage_provider;
   // If an sst file does not exist in the destination path, then remember it
   std::vector<std::string> to_copy;
   for (auto onefile : live_files) {
     auto remapped_fname = cenv->RemapFilename(onefile.name);
     std::string destpath = cenv->GetDestObjectPath() + "/" + remapped_fname;
-    if (!cenv->ExistsObject(cenv->GetDestBucketName(), destpath).ok()) {
+    if (!provider->ExistsObject(cenv->GetDestBucketName(), destpath).ok()) {
       to_copy.push_back(remapped_fname);
     }
   }
@@ -193,7 +191,7 @@ Status DBCloudImpl::Savepoint() {
         break;
       }
       auto& onefile = to_copy[idx];
-      Status s = cenv->CopyObject(
+      Status s = provider->CopyObject(
           cenv->GetSrcBucketName(), cenv->GetSrcObjectPath() + "/" + onefile,
           cenv->GetDestBucketName(), cenv->GetDestObjectPath() + "/" + onefile);
       if (!s.ok()) {
@@ -299,8 +297,8 @@ Status DBCloudImpl::DoCheckpointToCloud(
       }
 
       auto& f = files_to_copy[idx];
-      auto copy_st =
-          cenv->PutObject(GetName() + "/" + f.first, destination.GetBucketName(),
+            auto copy_st =
+        cenv->GetCloudEnvOptions().storage_provider->PutObject(GetName() + "/" + f.first, destination.GetBucketName(),
                           destination.GetObjectPath() + "/" + f.second);
       if (!copy_st.ok()) {
         thread_statuses[threadId] = std::move(copy_st);

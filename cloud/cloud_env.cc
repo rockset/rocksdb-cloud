@@ -5,17 +5,20 @@
 
 #include "cloud/aws/aws_env.h"
 #include "cloud/cloud_env_impl.h"
-#include "cloud/cloud_env_wrapper.h"
-#include "cloud/cloud_log_controller.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
 #include "port/likely.h"
+#include "rocksdb/cloud/cloud_log_controller.h"
+#include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 
 namespace rocksdb {
+
+const std::string CloudEnv::kCloudEnvOpts ="CloudEnvOptions";
+const std::string CloudEnv::kCloudEnvName = "CloudEnv";
 
 bool CloudEnvOptions::GetNameFromEnvironment(const char *name, const char *alt, std::string * result) {
 
@@ -37,6 +40,7 @@ void CloudEnvOptions::TEST_Initialize(const std::string& bucket,
   dest_bucket = src_bucket;
   credentials.TEST_Initialize();
 }
+
 
 BucketOptions::BucketOptions() {
     prefix_ = "rockset.";
@@ -86,15 +90,75 @@ void BucketOptions::TEST_Initialize(const std::string& bucket,
   }
 }
 
-CloudEnv::CloudEnv(const CloudEnvOptions& options, Env *base, const std::shared_ptr<Logger>& logger)
-  : cloud_env_options(options),
-    base_env_(base),
-    info_log_(logger) {
+CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base, const std::shared_ptr<Logger>& logger)
+    : cloud_env_options(options), base_env_(base), info_log_(logger) {
 }
-  
-CloudEnv::~CloudEnv() {}
 
-CloudEnvWrapper::~CloudEnvWrapper() {}
+CloudEnv::~CloudEnv() {
+  cloud_env_options.storage_provider.reset();
+  cloud_env_options.log_controller.reset();
+}
+
+  
+Status CloudEnv::Verify() const {
+  Status s;
+  if (!cloud_env_options.storage_provider) {
+    s = Status::InvalidArgument("Cloud environment requires a storage provider");
+  } else {
+    s = cloud_env_options.storage_provider->Verify();
+  }
+  if (s.ok()) {
+    if (cloud_env_options.log_controller) {
+      s = cloud_env_options.log_controller->Verify();
+    } else if (!cloud_env_options.keep_local_log_files) {
+      s = Status::InvalidArgument("Log controller required for remote log files");
+    }
+  }
+  return s;
+}
+
+Status CloudEnv::Prepare() {
+  Header(info_log_, "     %s.src_bucket_name: %s",
+         Name(), cloud_env_options.src_bucket.GetBucketName().c_str());
+  Header(info_log_, "     %s.src_object_path: %s",
+         Name(), cloud_env_options.src_bucket.GetObjectPath().c_str());
+  Header(info_log_, "     %s.src_bucket_region: %s",
+         Name(), cloud_env_options.src_bucket.GetRegion().c_str());
+  Header(info_log_, "     %s.dest_bucket_name: %s",
+         Name(), cloud_env_options.dest_bucket.GetBucketName().c_str());
+  Header(info_log_, "     %s.dest_object_path: %s",
+         Name(), cloud_env_options.dest_bucket.GetObjectPath().c_str());
+  Header(info_log_, "     %s.dest_bucket_region: %s",
+         Name(), cloud_env_options.dest_bucket.GetRegion().c_str());
+
+  Status s;
+  if (cloud_env_options.src_bucket.GetBucketName().empty() !=
+      cloud_env_options.src_bucket.GetObjectPath().empty()) {
+    s = Status::InvalidArgument("Must specify both src bucket name and path");
+  } else if (cloud_env_options.dest_bucket.GetBucketName().empty() != 
+             cloud_env_options.dest_bucket.GetObjectPath().empty()) {
+    s = Status::InvalidArgument("Must specify both dest bucket name and path");
+  } else {
+    if (!cloud_env_options.storage_provider) {
+      s = Status::InvalidArgument("Cloud environment requires a storage provider");
+    } else {
+      Header(info_log_, "     %s.storage_provider: %s",
+             Name(), cloud_env_options.storage_provider->Name());
+      s = cloud_env_options.storage_provider->Prepare(this);
+    }
+    if (s.ok()) {
+      if (cloud_env_options.log_controller) {
+        Header(info_log_, "     %s.log controller: %s",
+               Name(), cloud_env_options.log_controller->Name());
+        s = cloud_env_options.log_controller->Prepare(this);
+      } else if (!cloud_env_options.keep_local_log_files) {
+        s = Status::InvalidArgument("Log controller required for remote log files");
+      }
+    }
+  }
+  return s;
+}
+
 
 Status CloudEnv::NewAwsEnv(
     Env* base_env, const std::string& src_cloud_bucket,
@@ -113,30 +177,18 @@ Status CloudEnv::NewAwsEnv(
 }
 
 #ifndef USE_AWS
-Status CloudEnv::NewAwsEnv(Env* /*base_env*/,
-                           const CloudEnvOptions& /*options*/,
-                           const std::shared_ptr<Logger>& /*logger*/,
-                           CloudEnv** /*cenv*/) {
+Status CloudEnv::NewAwsEnv(Env*, const CloudEnvOptions&,
+                           const std::shared_ptr<Logger>&, CloudEnv**) {
   return Status::NotSupported("RocksDB Cloud not compiled with AWS support");
 }
 #else
-Status CloudEnv::NewAwsEnv(Env* base_env,
-                           const CloudEnvOptions& options,
-                           const std::shared_ptr<Logger> & logger, CloudEnv** cenv) {
+Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
+                           const std::shared_ptr<Logger>& logger,
+                           CloudEnv** cenv) {
   // Dump out cloud env options
   options.Dump(logger.get());
 
   Status st = AwsEnv::NewAwsEnv(base_env, options, logger, cenv);
-  if (st.ok()) {
-    // store a copy of the logger
-    CloudEnvImpl* cloud = static_cast<CloudEnvImpl*>(*cenv);
-    cloud->info_log_ = logger;
-
-    // start the purge thread only if there is a destination bucket
-    if (options.dest_bucket.IsValid() && options.run_purger) {
-      cloud->purge_thread_ = std::thread([cloud] { cloud->Purger(); });
-    }
-  }
   return st;
 }
 #endif

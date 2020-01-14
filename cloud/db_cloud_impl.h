@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/cloud/db_cloud.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"

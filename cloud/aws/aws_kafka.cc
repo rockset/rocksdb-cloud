@@ -8,8 +8,8 @@
 #include <fstream>
 #include <iostream>
 
-#include "cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_env_options.h"
+#include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/status.h"
 #include "util/coding.h"
 #include "util/stderr_logger.h"
@@ -20,7 +20,7 @@
 namespace rocksdb {
 namespace cloud {
 namespace kafka {
-  
+
 /***************************************************/
 /*                KafkaWritableFile                */
 /***************************************************/
@@ -28,14 +28,15 @@ class KafkaWritableFile : public CloudLogWritableFile {
  public:
   static const std::chrono::microseconds kFlushTimeout;
 
-  KafkaWritableFile(CloudEnv* env, const std::string& fname, const EnvOptions& options,
+  KafkaWritableFile(CloudEnv* env, const std::string& fname,
+                    const EnvOptions& options,
                     std::shared_ptr<RdKafka::Producer> producer,
                     std::shared_ptr<RdKafka::Topic> topic)
-    : CloudLogWritableFile(env, fname, options),
-      producer_(producer),
-      topic_(topic),
-      current_offset_(0) {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+      : CloudLogWritableFile(env, fname, options),
+        producer_(producer),
+        topic_(topic),
+        current_offset_(0) {
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile opened file %s", fname_.c_str());
   }
 
@@ -58,7 +59,6 @@ class KafkaWritableFile : public CloudLogWritableFile {
 const std::chrono::microseconds KafkaWritableFile::kFlushTimeout =
     std::chrono::seconds(10);
 
-
 Status KafkaWritableFile::ProduceRaw(const std::string& operation_name,
                                      const Slice& message) {
   if (!status_.ok()){
@@ -72,20 +72,20 @@ Status KafkaWritableFile::ProduceRaw(const std::string& operation_name,
       message.size(), &fname_ /* Partitioning key */, nullptr);
 
   if (resp == RdKafka::ERR_NO_ERROR) {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile %s file %s %ld", fname_.c_str(),
         operation_name.c_str(), message.size());
     return Status::OK();
   } else if (resp == RdKafka::ERR__QUEUE_FULL) {
     const std::string formatted_err = RdKafka::err2str(resp);
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s %s error %s", fname_.c_str(),
         operation_name.c_str(), formatted_err.c_str());
 
     return Status::Busy(topic_->name().c_str(), RdKafka::err2str(resp).c_str());
   } else {
     const std::string formatted_err = RdKafka::err2str(resp);
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s %s error %s", fname_.c_str(),
         operation_name.c_str(), formatted_err.c_str());
 
@@ -106,7 +106,7 @@ Status KafkaWritableFile::Append(const Slice& data) {
 }
 
 Status KafkaWritableFile::Close() {
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
       "[kafka] S3WritableFile closing %s", fname_.c_str());
 
   std::string serialized_data;
@@ -132,7 +132,7 @@ Status KafkaWritableFile::Flush() {
   while (status_.ok() && !(done = (producer_->outq_len() == 0)) &&
          !(timeout = (std::chrono::microseconds(env_->NowMicros()) - start >
                       kFlushTimeout))) {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s "
         "Waiting on flush: Output queue length: %d",
         fname_.c_str(), producer_->outq_len());
@@ -141,15 +141,15 @@ Status KafkaWritableFile::Flush() {
   }
 
   if (done) {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s Flushed", fname_.c_str());
   } else if (timeout) {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s Flushing timed out after %" PRId64 "us",
         fname_.c_str(), kFlushTimeout.count());
     status_ = Status::TimedOut();
   } else {
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[kafka] WritableFile src %s Flush interrupted", fname_.c_str());
   }
 
@@ -157,7 +157,7 @@ Status KafkaWritableFile::Flush() {
 }
 
 Status KafkaWritableFile::LogDelete() {
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_, "[kafka] LogDelete %s",
+  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(), "[kafka] LogDelete %s",
       fname_.c_str());
 
   std::string serialized_data;
@@ -175,49 +175,18 @@ Status KafkaWritableFile::LogDelete() {
 //
 class KafkaController : public CloudLogController {
  public:
-  KafkaController(CloudEnv* env, 
-                  std::unique_ptr<RdKafka::Producer> producer,
-                  std::unique_ptr<RdKafka::Consumer> consumer)
-    : CloudLogController(env),
-      producer_(std::move(producer)),
-      consumer_(std::move(consumer)) {
-    const std::string topic_name = env_->GetSrcBucketName();
-    
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
-        "[%s] KafkaController opening stream %s using cachedir '%s'",
-        Name(), topic_name.c_str(), cache_dir_.c_str());
-    
-    std::string pt_errstr, ct_errstr;
-    
-    // Initialize stream name.
-    RdKafka::Topic* producer_topic =
-      RdKafka::Topic::create(producer_.get(), topic_name, NULL, pt_errstr);
-    
-    RdKafka::Topic* consumer_topic =
-      RdKafka::Topic::create(consumer_.get(), topic_name, NULL, ct_errstr);
-    
-    RdKafka::Queue* consuming_queue = RdKafka::Queue::create(consumer_.get());
-    
-    assert(producer_topic != nullptr);
-    assert(consumer_topic != nullptr);
-    assert(consuming_queue != nullptr);
-    
-    consuming_queue_.reset(consuming_queue);
-    
-    producer_topic_.reset(producer_topic);
-    consumer_topic_.reset(consumer_topic);
-  }
 
   ~KafkaController() {
-    for (size_t i = 0; i < partitions_.size(); i++) {
-      consumer_->stop(consumer_topic_.get(), partitions_[i]->partition());
+    if (consumer_) {
+      for (size_t i = 0; i < partitions_.size(); i++) {
+        consumer_->stop(consumer_topic_.get(), partitions_[i]->partition());
+      }
     }
-    
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[%s] KafkaController closed.", Name());
   }
-  
-  const char *Name() const override { return "kafka"; }
+
+  const char* Name() const override { return "kafka"; }
 
   virtual Status CreateStream(const std::string& /* bucket_prefix */) override {
     // Kafka client cannot create a topic. Topics are either manually created
@@ -225,16 +194,19 @@ class KafkaController : public CloudLogController {
     // true.
     return status_;
   }
-  virtual Status WaitForStreamReady(const std::string& /* bucket_prefix */) override {
+  virtual Status WaitForStreamReady(
+      const std::string& /* bucket_prefix */) override {
     // Kafka topics don't need to be waited on.
     return status_;
   }
 
   virtual Status TailStream() override;
 
-  virtual CloudLogWritableFile* CreateWritableFile(const std::string& fname,
-                                                   const EnvOptions& options) override;
-
+  virtual CloudLogWritableFile* CreateWritableFile(
+      const std::string& fname, const EnvOptions& options) override;
+  Status Verify() const override;
+protected:
+  Status Initialize(CloudEnv *env) override;
  private:
   Status InitializePartitions();
 
@@ -249,6 +221,87 @@ class KafkaController : public CloudLogController {
   std::vector<std::shared_ptr<RdKafka::TopicPartition>> partitions_;
 };
 
+Status KafkaController::Initialize(CloudEnv *env) {
+  Status status = CloudLogController::Initialize(env);
+  if (!status.ok()) {
+    return status;
+  }
+  std::string conf_errstr, producer_errstr, consumer_errstr;
+  const auto& kconf =
+    env->GetCloudEnvOptions().kafka_log_options.client_config_params;
+  if (kconf.empty()) {
+    return Status::InvalidArgument("No configs specified to kafka client");
+  }
+    
+  std::unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
+  
+  
+  for (auto const& item : kconf) {
+    if (conf->set(item.first, item.second, conf_errstr) !=
+        RdKafka::Conf::CONF_OK) {
+      status = Status::InvalidArgument("Failed adding specified conf to Kafka conf",
+                                       conf_errstr.c_str());
+      
+      Log(InfoLogLevel::ERROR_LEVEL, env->GetLogger(),
+          "[aws] NewAwsEnv Kafka conf set error: %s", status.ToString().c_str());
+      return status;
+    }
+  }
+  
+  producer_.reset(RdKafka::Producer::create(conf.get(), producer_errstr));
+  consumer_.reset(RdKafka::Consumer::create(conf.get(), consumer_errstr));
+  
+  if (!producer_) {
+    status = Status::InvalidArgument("Failed creating Kafka producer",
+                                     producer_errstr.c_str());
+    
+    Log(InfoLogLevel::ERROR_LEVEL, env->GetLogger(),
+        "[aws] NewAwsEnv Kafka producer error: %s", status.ToString().c_str());
+  } else if (!consumer_) {
+    status = Status::InvalidArgument("Failed creating Kafka consumer",
+                                     consumer_errstr.c_str());
+    
+    Log(InfoLogLevel::ERROR_LEVEL, env->GetLogger(),
+        "[aws] NewAwsEnv Kafka consumer error: %s", status.ToString().c_str());
+  } else {
+    const std::string topic_name = env->GetSrcBucketName();
+    
+    Log(InfoLogLevel::DEBUG_LEVEL, env->GetLogger(),
+        "[%s] KafkaController opening stream %s using cachedir '%s'", Name(),
+        topic_name.c_str(), cache_dir_.c_str());
+    
+    std::string pt_errstr, ct_errstr;
+    
+    // Initialize stream name.
+    consuming_queue_.reset(RdKafka::Queue::create(consumer_.get()));
+    producer_topic_.reset(RdKafka::Topic::create(producer_.get(), topic_name, NULL, pt_errstr));
+    consumer_topic_.reset(RdKafka::Topic::create(consumer_.get(), topic_name, NULL, ct_errstr));
+    
+    assert(producer_topic_ != nullptr);
+    assert(consumer_topic_ != nullptr);
+    assert(consuming_queue_ != nullptr);
+  }
+  return status;
+}
+  
+Status KafkaController::Verify() const {
+  Status s = CloudLogController::Verify();
+  if (s.ok()) {
+    if (!producer_) {
+      s = Status::InvalidArgument("Failed creating Kafka producer");
+    } else if (!consumer_) {
+      s = Status::InvalidArgument("Failed creating Kafka consumer");
+    } else if (producer_topic_ == nullptr) {
+      s = Status::InvalidArgument("Failed to initialize Kafa Producer Topic");
+    } else if (consumer_topic_ == nullptr) {
+      s = Status::InvalidArgument("Failed to initialize Kafa Consumer Topic");
+    } else if (consuming_queue_ == nullptr) {
+      s = Status::InvalidArgument("Failed to initialize Kafa Consuming Queue");
+    }
+  }
+  return s;
+}
+
 Status KafkaController::TailStream() {
   InitializePartitions();
 
@@ -256,9 +309,8 @@ Status KafkaController::TailStream() {
     return status_;
   }
 
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_, "[%s] TailStream topic %s %s",
-      Name(), consumer_topic_->name().c_str(),
-      status_.ToString().c_str());
+  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(), "[%s] TailStream topic %s %s",
+      Name(), consumer_topic_->name().c_str(), status_.ToString().c_str());
 
   Status lastErrorStatus;
   int retryAttempt = 0;
@@ -280,17 +332,17 @@ Status KafkaController::TailStream() {
         // Apply the payload to local filesystem
         status_ = Apply(sl);
         if (!status_.ok()) {
-          Log(InfoLogLevel::ERROR_LEVEL, env_->info_log_,
+          Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
               "[%s] error processing message size %ld "
               "extracted from stream %s %s",
-              Name(), message->len(),
-              consumer_topic_->name().c_str(), status_.ToString().c_str());
+              Name(), message->len(), consumer_topic_->name().c_str(),
+              status_.ToString().c_str());
         } else {
-          Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+          Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
               "[%s] successfully processed message size %ld "
               "extracted from stream %s %s",
-              Name(), message->len(),
-              consumer_topic_->name().c_str(), status_.ToString().c_str());
+              Name(), message->len(), consumer_topic_->name().c_str(),
+              status_.ToString().c_str());
         }
 
         // Remember last read offset from topic (currently unused).
@@ -307,9 +359,8 @@ Status KafkaController::TailStream() {
             Status::IOError(consumer_topic_->name().c_str(),
                             RdKafka::err2str(message->err()).c_str());
 
-        Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
-            "[%s] error reading %s %s", Name(),
-            consumer_topic_->name().c_str(),
+        Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+            "[%s] error reading %s %s", Name(), consumer_topic_->name().c_str(),
             RdKafka::err2str(message->err()).c_str());
 
         ++retryAttempt;
@@ -317,7 +368,7 @@ Status KafkaController::TailStream() {
       }
     }
   }
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
+  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
       "[%s] TailStream topic %s finished: %s", Name(),
       consumer_topic_->name().c_str(), status_.ToString().c_str());
 
@@ -339,10 +390,9 @@ Status KafkaController::InitializePartitions() {
     status_ = Status::IOError(consumer_topic_->name().c_str(),
                               RdKafka::err2str(err).c_str());
 
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->info_log_,
-        "[%s] S3ReadableFile file %s Unable to find shards %s",
-        Name(), consumer_topic_->name().c_str(),
-        status_.ToString().c_str());
+    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+        "[%s] S3ReadableFile file %s Unable to find shards %s", Name(),
+        consumer_topic_->name().c_str(), status_.ToString().c_str());
 
     return status_;
   }
@@ -392,71 +442,15 @@ CloudLogWritableFile* KafkaController::CreateWritableFile(
 #endif /* USE_KAFKA */
 
 namespace rocksdb {
+Status CloudLogController::CreateKafkaController(std::unique_ptr<CloudLogController>* output) {
 #ifndef USE_KAFKA
-Status CreateKafkaController(CloudEnv *,
-                             std::unique_ptr<CloudLogController> *) {
-  return Status::NotSupported("In order to use Kafka, make sure you're compiling with "
-                              "USE_KAFKA=1");
-}
+  output->reset();
+  return Status::NotSupported(
+      "In order to use Kafka, make sure you're compiling with "
+      "USE_KAFKA=1");
 #else
-Status CreateKafkaController(CloudEnv *env,
-                             std::unique_ptr<CloudLogController> *output) {
-  Status st = Status::OK();
-  std::string conf_errstr, producer_errstr, consumer_errstr;
-  const auto& kconf = env->GetCloudEnvOptions().kafka_log_options.client_config_params;
-
-  std::unique_ptr<RdKafka::Conf> conf(
-      RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
-
-  if (kconf.empty()) {
-    st = Status::InvalidArgument("No configs specified to kafka client");
-
-    return st;
-  }
-
-  for (auto const& item : kconf) {
-    if (conf->set(item.first,
-                  item.second,
-                  conf_errstr) != RdKafka::Conf::CONF_OK) {
-      st = Status::InvalidArgument("Failed adding specified conf to Kafka conf",
-                                   conf_errstr.c_str());
-
-      Log(InfoLogLevel::ERROR_LEVEL, env->info_log_,
-          "[aws] NewAwsEnv Kafka conf set error: %s", st.ToString().c_str());
-      return st;
-    }
-  }
-
-  {
-    std::unique_ptr<RdKafka::Producer> producer(
-        RdKafka::Producer::create(conf.get(), producer_errstr));
-    std::unique_ptr<RdKafka::Consumer> consumer(
-        RdKafka::Consumer::create(conf.get(), consumer_errstr));
-
-    if (!producer) {
-      st = Status::InvalidArgument("Failed creating Kafka producer",
-                                   producer_errstr.c_str());
-
-      Log(InfoLogLevel::ERROR_LEVEL, env->info_log_,
-          "[aws] NewAwsEnv Kafka producer error: %s", st.ToString().c_str());
-    } else if (!consumer) {
-      st = Status::InvalidArgument("Failed creating Kafka consumer",
-                                   consumer_errstr.c_str());
-
-      Log(InfoLogLevel::ERROR_LEVEL, env->info_log_,
-          "[aws] NewAwsEnv Kafka consumer error: %s", st.ToString().c_str());
-    } else {
-      output->reset(new rocksdb::cloud::kafka::KafkaController(env, 
-                                                               std::move(producer),
-                                                               std::move(consumer)));
-      
-      if (output->get() == nullptr) {
-        st = Status::IOError("Error in creating Kafka controller");
-      }
-    }
-  }
-  return st;
+  output->reset(new rocksdb::cloud::kafka::KafkaController());
+  return Status::OK();
+#endif  // USE_KAFKA
 }
-#endif // USE_KAFKA
 }  // namespace rocksdb
-

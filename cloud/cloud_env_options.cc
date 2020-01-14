@@ -1,17 +1,20 @@
 // Copyright (c) 2017 Rockset.
 #ifndef ROCKSDB_LITE
+#include "rocksdb/cloud/cloud_env_options.h"
 
 #include <cinttypes>
-#include "cloud/cloud_env_impl.h"
-#include "cloud/cloud_env_wrapper.h"
-#include "cloud/db_cloud_impl.h"
-#include "rocksdb/env.h"
+#include "rocksdb/cloud/cloud_log_controller.h"
+#include "rocksdb/cloud/cloud_storage_provider.h"
 
 namespace rocksdb {
 
 void CloudEnvOptions::Dump(Logger* log) const {
-  Header(log, "                         COptions.cloud_type: %u", cloud_type);
-  Header(log, "                           COptions.log_type: %u", log_type);
+  Header(log, "                         COptions.cloud_type: %s",
+         ((storage_provider != nullptr) ?
+          storage_provider->Name() : "None"));
+  Header(log, "                           COptions.log_type: %s", 
+         ((log_controller != nullptr) ?
+          log_controller->Name() : "None"));
   Header(log, "               COptions.keep_local_sst_files: %d",
          keep_local_sst_files);
   Header(log, "               COptions.keep_local_log_files: %d",

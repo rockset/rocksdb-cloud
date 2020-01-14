@@ -10,6 +10,7 @@
 #include "db/db_test_util.h"
 #include "db/forward_iterator.h"
 #include "util/stderr_logger.h"
+#include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/env_encryption.h"
 #ifdef USE_AWS
 #include "cloud/cloud_env_impl.h"
@@ -733,7 +734,7 @@ void DBTestBase::Destroy(const Options& options, bool delete_cf_paths) {
 #ifdef USE_AWS
   if (s3_env_) {
     AwsEnv* aenv = static_cast<AwsEnv *>(s3_env_);
-    Status st = aenv->EmptyBucket(aenv->GetSrcBucketName(), dbname_);
+    Status st = aenv->GetCloudEnvOptions().storage_provider->EmptyBucket(aenv->GetSrcBucketName(), dbname_);
     ASSERT_TRUE(st.ok() || st.IsNotFound());
     for (int r = 0; r < 10; ++r) {
       // The existance is not propagated atomically in S3, so wait until

@@ -11,6 +11,9 @@
 #include "rocksdb/status.h"
 
 namespace rocksdb {
+namespace detail {
+struct JobHandle;
+}  // namespace detail
 
 //
 // The Cloud environment
@@ -20,15 +23,16 @@ class CloudEnvImpl : public CloudEnv {
 
  public:
   // Constructor
-  CloudEnvImpl(const CloudEnvOptions & options, Env* base_env, const std::shared_ptr<Logger>& logger);
+  CloudEnvImpl(const CloudEnvOptions & options, Env* base_env, const std::shared_ptr<Logger> & logger);
 
   virtual ~CloudEnvImpl();
-
-  const CloudType& GetCloudType() const { return cloud_env_options.cloud_type; }
 
   Status SanitizeDirectory(const DBOptions& options,
                            const std::string& clone_name, bool read_only);
   Status LoadCloudManifest(const std::string& local_dbname, bool read_only);
+  // Deletes file from a destination bucket.
+  Status DeleteCloudFileFromDest(const std::string& fname) override;
+
   // The separator used to separate dbids while creating the dbid of a clone
   static constexpr const char* DBID_SEPARATOR = "rockset";
 
@@ -97,6 +101,14 @@ class CloudEnvImpl : public CloudEnv {
     return base_env_->GetThreadList(thread_list);
   }
 
+  void TEST_SetFileDeletionDelay(std::chrono::seconds delay) {
+    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
+    file_deletion_delay_ = delay;
+  }
+  Status CopyLocalFileToDest(const std::string& local_name,
+                             const std::string& cloud_name) override;
+  void RemoveFileFromDeletionQueue(const std::string& filename);
+  virtual Status Prepare() override;
  protected:
   // Does the dir need to be re-initialized?
   Status NeedsReinitialization(const std::string& clone_dir, bool* do_reinit);
@@ -130,6 +142,11 @@ class CloudEnvImpl : public CloudEnv {
   // A background thread that deletes orphaned objects in cloud storage
   void Purger();
   void StopPurger();
+
+  std::mutex files_to_delete_mutex_;
+  std::chrono::seconds file_deletion_delay_ = std::chrono::hours(1);
+  std::unordered_map<std::string, std::shared_ptr<detail::JobHandle>>
+      files_to_delete_;
 
  private:
   Status writeCloudManifest(CloudManifest* manifest, const std::string& fname);
