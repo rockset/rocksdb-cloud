@@ -865,8 +865,8 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
                                            uint64_t file_size) {
   if (s3client_->HasTransferManager()) {
     auto handle =
-        s3client_->UploadFile(ToAwsString(local_file), ToAwsString(bucket_name),
-                              ToAwsString(object_path), file_size);
+        s3client_->UploadFile(ToAwsString(bucket_name), ToAwsString(object_path),
+                              ToAwsString(local_file), file_size);
     if (handle->GetStatus() != Aws::Transfer::TransferStatus::COMPLETED) {
       auto error = handle->GetLastError();
       std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
