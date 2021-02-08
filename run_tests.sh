@@ -2,6 +2,53 @@
 
 set -eu
 
+args=$(getopt -o '+hj:' -l 'help,parallel_jobs:' -n "$0" -- "$@")
+eval set -- "$args"
+
+set +e
+read -r -d '' usage_str <<END
+Usage:
+  $0 [options...]
+
+Entry-point for the RocksDB-Cloud test script.
+
+Options:
+  -h, --help               Help
+  -j, --parallel_jobs      Quiet
+END
+set -e
+
+die_usage() {
+  echo "$@" >&2
+  echo >&2
+  echo "$usage_str" >&2
+  exit 1
+}
+
+while :; do
+  case "$1" in
+      -h|--help)
+          echo "$usage_str"
+          exit 0
+          ;;
+      -j|--parallel_jobs)
+          PARALLEL_JOBS="$2"
+          shift
+          ;;
+      --)
+          shift
+          break
+          ;;
+      *)
+          die "Internal error: unknown option $1"
+  esac
+  shift
+done
+
+echo "Running with $PARALLEL_JOBS parallel jobs"
+
+exit 0
+
 echo "Pulling base image..."
 docker pull rockset/rocksdb_cloud_runtime:test
 
