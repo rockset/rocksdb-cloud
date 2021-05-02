@@ -33,8 +33,10 @@ namespace ROCKSDB_NAMESPACE {
 class CloudTest : public testing::Test {
  public:
   CloudTest() {
+    auto test_name =
+        ::testing::UnitTest::GetInstance()->current_test_info()->name();
     Random64 rng(time(nullptr));
-    test_id_ = std::to_string(rng.Next());
+    test_id_ = std::to_string(rng.Next()) + test_name;
     fprintf(stderr, "Test ID: %s\n", test_id_.c_str());
 
     base_env_ = Env::Default();

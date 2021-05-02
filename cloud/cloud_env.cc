@@ -38,6 +38,7 @@ bool CloudEnvOptions::GetNameFromEnvironment(const char* name, const char* alt,
 void CloudEnvOptions::TEST_Initialize(const std::string& bucket,
                                       const std::string& object,
                                       const std::string& region) {
+  initialize_test_client = true;
   src_bucket.TEST_Initialize(bucket, object, region);
   dest_bucket = src_bucket;
   credentials.TEST_Initialize();

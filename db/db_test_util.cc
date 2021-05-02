@@ -141,7 +141,6 @@ DBTestBase::~DBTestBase() {
   } else {
     EXPECT_OK(DestroyDB(dbname_, options));
   }
-  delete env_;
 
 #ifndef ROCKSDB_LITE
 #ifdef USE_AWS
@@ -151,6 +150,7 @@ DBTestBase::~DBTestBase() {
 #endif
 #endif  // !ROCKSDB_LITE
   delete s3_env_;
+  delete env_;
 }
 
 bool DBTestBase::ShouldSkipOptions(int option_config, int skip_mask) {

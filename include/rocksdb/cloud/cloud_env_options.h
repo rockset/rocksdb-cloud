@@ -303,6 +303,12 @@ class CloudEnvOptions {
   // Default: false.
   bool skip_cloud_files_in_getchildren;
 
+  // Instead of creating actual client, create a test client instead. Used for
+  // test.
+  //
+  // Default: false.
+  bool initialize_test_client;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -317,7 +323,8 @@ class CloudEnvOptions {
       bool _use_aws_transfer_manager = false,
       int _number_objects_listed_in_one_iteration = 5000,
       int _constant_sst_file_size_in_sst_file_manager = -1,
-      bool _skip_cloud_files_in_getchildren = false)
+      bool _skip_cloud_files_in_getchildren = false,
+      bool _initialize_test_client = false)
       : cloud_type(_cloud_type),
         log_type(_log_type),
         keep_local_sst_files(_keep_local_sst_files),
@@ -337,7 +344,8 @@ class CloudEnvOptions {
             _number_objects_listed_in_one_iteration),
         constant_sst_file_size_in_sst_file_manager(
             _constant_sst_file_size_in_sst_file_manager),
-        skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren) {}
+        skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
+        initialize_test_client(_initialize_test_client) {}
 
   // print out all options to the log
   void Dump(Logger* log) const;
