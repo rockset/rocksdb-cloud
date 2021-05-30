@@ -369,11 +369,6 @@ class S3StorageProvider : public CloudStorageProviderImpl {
   virtual const char* Name() const override { return kS3(); }
   Status CreateBucket(const std::string& bucket) override;
   Status ExistsBucket(const std::string& bucket) override;
-  Status EmptyBucket(const std::string& bucket_name,
-                     const std::string& object_path) override;
-  // Empties all contents of the associated cloud storage bucket.
-  // Status EmptyBucket(const std::string& bucket_name,
-  //                   const std::string& object_path) override;
   // Delete the specified object from the specified cloud bucket
   Status DeleteCloudObject(const std::string& bucket_name,
                            const std::string& object_path) override;
@@ -531,38 +526,6 @@ Status S3StorageProvider::ExistsBucket(const std::string& bucket) {
   request.SetBucket(ToAwsString(bucket));
   Aws::S3::Model::HeadBucketOutcome outcome = s3client_->HeadBucket(request);
   return outcome.IsSuccess() ? Status::OK() : Status::NotFound();
-}
-
-//
-// Deletes all the objects with the specified path prefix in our bucket
-//
-Status S3StorageProvider::EmptyBucket(const std::string& bucket_name,
-                                      const std::string& object_path) {
-  std::vector<std::string> results;
-
-  // Get all the objects in the  bucket
-  Status st = ListCloudObjects(bucket_name, object_path, &results);
-  if (!st.ok()) {
-    Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
-        "[s3] EmptyBucket unable to find objects in bucket %s %s",
-        bucket_name.c_str(), st.ToString().c_str());
-    return st;
-  }
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
-      "[s3] EmptyBucket going to delete %" ROCKSDB_PRIszt
-      " objects in bucket %s",
-      results.size(), bucket_name.c_str());
-
-  // Delete all objects from bucket
-  for (auto path : results) {
-    st = DeleteCloudObject(bucket_name, path);
-    if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
-          "[s3] EmptyBucket Unable to delete %s in bucket %s %s", path.c_str(),
-          bucket_name.c_str(), st.ToString().c_str());
-    }
-  }
-  return st;
 }
 
 Status S3StorageProvider::DeleteCloudObject(const std::string& bucket_name,
@@ -912,7 +875,7 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
 }
 
 #endif /* USE_AWS */
-  
+
 Status CloudStorageProviderImpl::CreateS3Provider(
     std::unique_ptr<CloudStorageProvider>* provider) {
 #ifndef USE_AWS
@@ -925,4 +888,4 @@ Status CloudStorageProviderImpl::CreateS3Provider(
 #endif /* USE_AWS */
 }
 }  // namespace ROCKSDB_NAMESPACE
-#endif // ROCKSDB_LITE
+#endif  // ROCKSDB_LITE

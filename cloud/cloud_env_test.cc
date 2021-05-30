@@ -12,12 +12,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 class CloudEnvTest : public testing::Test {
-public:
+ public:
   std::unique_ptr<CloudEnv> cenv_;
 
-  virtual ~CloudEnvTest() {
-  }
-  
+  virtual ~CloudEnvTest() {}
 };
 
 TEST_F(CloudEnvTest, TestBucket) {
@@ -27,12 +25,12 @@ TEST_F(CloudEnvTest, TestBucket) {
   ASSERT_FALSE(copts.src_bucket.IsValid());
   copts.src_bucket.SetObjectPath("Here");
   ASSERT_TRUE(copts.src_bucket.IsValid());
-  
+
   copts.dest_bucket.SetRegion("South");
   copts.dest_bucket.SetObjectPath("There");
-  ASSERT_FALSE(copts.dest_bucket.IsValid());  
+  ASSERT_FALSE(copts.dest_bucket.IsValid());
   copts.dest_bucket.SetBucketName("Output", "dest.");
-  ASSERT_TRUE(copts.dest_bucket.IsValid());  
+  ASSERT_TRUE(copts.dest_bucket.IsValid());
 }
 
 TEST_F(CloudEnvTest, ConfigureOptions) {
@@ -48,7 +46,7 @@ TEST_F(CloudEnvTest, ConfigureOptions) {
   copts.constant_sst_file_size_in_sst_file_manager = 100;
   copts.run_purger = false;
   copts.purger_periodicity_millis = 101;
-  
+
   std::string str;
   ASSERT_OK(copts.Serialize(config_options, &str));
   ASSERT_OK(copy.Configure(config_options, str));
@@ -74,7 +72,7 @@ TEST_F(CloudEnvTest, ConfigureOptions) {
   copts.constant_sst_file_size_in_sst_file_manager = 200;
   copts.run_purger = true;
   copts.purger_periodicity_millis = 201;
-  
+
   ASSERT_OK(copts.Serialize(config_options, &str));
   ASSERT_OK(copy.Configure(config_options, str));
   ASSERT_TRUE(copy.keep_local_sst_files);
@@ -88,7 +86,7 @@ TEST_F(CloudEnvTest, ConfigureOptions) {
   ASSERT_EQ(copy.constant_sst_file_size_in_sst_file_manager, 200);
   ASSERT_EQ(copy.purger_periodicity_millis, 201);
 }
-  
+
 TEST_F(CloudEnvTest, ConfigureBucketOptions) {
   ConfigOptions config_options;
   CloudEnvOptions copts, copy;
@@ -99,23 +97,26 @@ TEST_F(CloudEnvTest, ConfigureBucketOptions) {
   copts.dest_bucket.SetBucketName("dest");
   copts.dest_bucket.SetObjectPath("bar");
   ASSERT_OK(copts.Serialize(config_options, &str));
-  
+
   ASSERT_OK(copy.Configure(config_options, str));
   ASSERT_EQ(copts.src_bucket.GetBucketName(), copy.src_bucket.GetBucketName());
   ASSERT_EQ(copts.src_bucket.GetObjectPath(), copy.src_bucket.GetObjectPath());
   ASSERT_EQ(copts.src_bucket.GetRegion(), copy.src_bucket.GetRegion());
 
-  ASSERT_EQ(copts.dest_bucket.GetBucketName(), copy.dest_bucket.GetBucketName());
-  ASSERT_EQ(copts.dest_bucket.GetObjectPath(), copy.dest_bucket.GetObjectPath());
+  ASSERT_EQ(copts.dest_bucket.GetBucketName(),
+            copy.dest_bucket.GetBucketName());
+  ASSERT_EQ(copts.dest_bucket.GetObjectPath(),
+            copy.dest_bucket.GetObjectPath());
   ASSERT_EQ(copts.dest_bucket.GetRegion(), copy.dest_bucket.GetRegion());
 }
-  
+
 TEST_F(CloudEnvTest, ConfigureEnv) {
   std::unique_ptr<CloudEnv> cenv;
-  
+
   ConfigOptions config_options;
   config_options.invoke_prepare_options = false;
-  ASSERT_OK(CloudEnv::CreateFromString(config_options, "keep_local_sst_files=true", &cenv));
+  ASSERT_OK(CloudEnv::CreateFromString(config_options,
+                                       "keep_local_sst_files=true", &cenv));
   ASSERT_NE(cenv, nullptr);
   ASSERT_STREQ(cenv->Name(), "cloud");
   auto copts = cenv->GetOptions<CloudEnvOptions>();
@@ -164,9 +165,10 @@ TEST_F(CloudEnvTest, TestInitialize) {
 
 TEST_F(CloudEnvTest, ConfigureAwsEnv) {
   std::unique_ptr<CloudEnv> cenv;
-  
+
   ConfigOptions config_options;
-  Status s = CloudEnv::CreateFromString(config_options, "id=aws; keep_local_sst_files=true", &cenv);
+  Status s = CloudEnv::CreateFromString(
+      config_options, "id=aws; keep_local_sst_files=true", &cenv);
 #ifdef USE_AWS
   ASSERT_OK(s);
   ASSERT_NE(cenv, nullptr);
@@ -182,17 +184,18 @@ TEST_F(CloudEnvTest, ConfigureAwsEnv) {
   ASSERT_EQ(cenv, nullptr);
 #endif
 }
-  
+
 TEST_F(CloudEnvTest, ConfigureS3Provider) {
   std::unique_ptr<CloudEnv> cenv;
-  
+
   ConfigOptions config_options;
   Status s = CloudEnv::CreateFromString(config_options, "provider=s3", &cenv);
   ASSERT_NOK(s);
   ASSERT_EQ(cenv, nullptr);
-  
+
 #ifdef USE_AWS
-  ASSERT_OK(CloudEnv::CreateFromString(config_options, "id=aws; provider=s3", &cenv));
+  ASSERT_OK(
+      CloudEnv::CreateFromString(config_options, "id=aws; provider=s3", &cenv));
   ASSERT_STREQ(cenv->Name(), "aws");
   ASSERT_NE(cenv->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cenv->GetStorageProvider()->Name(),
@@ -204,12 +207,13 @@ TEST_F(CloudEnvTest, ConfigureS3Provider) {
 // resolved
 TEST_F(CloudEnvTest, DISABLED_ConfigureKinesisController) {
   std::unique_ptr<CloudEnv> cenv;
-  
+
   ConfigOptions config_options;
-  Status s = CloudEnv::CreateFromString(config_options, "provider=mock; controller=kinesis", &cenv);
+  Status s = CloudEnv::CreateFromString(
+      config_options, "provider=mock; controller=kinesis", &cenv);
   ASSERT_NOK(s);
   ASSERT_EQ(cenv, nullptr);
-  
+
 #ifdef USE_AWS
   ASSERT_OK(CloudEnv::CreateFromString(
       config_options, "id=aws; controller=kinesis; TEST=dbcloud:/test", &cenv));
@@ -222,9 +226,10 @@ TEST_F(CloudEnvTest, DISABLED_ConfigureKinesisController) {
 
 TEST_F(CloudEnvTest, ConfigureKafkaController) {
   std::unique_ptr<CloudEnv> cenv;
-  
+
   ConfigOptions config_options;
-  Status s = CloudEnv::CreateFromString(config_options, "provider=mock; controller=kafka", &cenv);
+  Status s = CloudEnv::CreateFromString(
+      config_options, "provider=mock; controller=kafka", &cenv);
 #ifdef USE_KAFKA
   ASSERT_OK(s);
   ASSERT_NE(cenv, nullptr);
@@ -237,11 +242,9 @@ TEST_F(CloudEnvTest, ConfigureKafkaController) {
 #endif
 }
 
-  
 }  // namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-  

@@ -113,8 +113,8 @@ Status AwsCloudAccessCredentials::GetCredentialsProvider(
   result->reset();
 
   if (provider) {
-      *result = provider;
-      return Status::OK();
+    *result = provider;
+    return Status::OK();
   }
 
   AwsAccessType aws_type = GetAccessType();
@@ -210,7 +210,6 @@ Status AwsEnv::PrepareOptions(const ConfigOptions& options) {
 
 void AwsEnv::Shutdown() { Aws::ShutdownAPI(Aws::SDKOptions()); }
 
-
 // The factory method for creating an S3 Env
 Status AwsEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& cloud_options,
                          const std::shared_ptr<Logger>& info_log,
@@ -239,10 +238,10 @@ Status AwsEnv::NewAwsEnv(Env* env, std::unique_ptr<CloudEnv>* cenv) {
   cenv->reset(new AwsEnv(env, CloudEnvOptions()));
   return Status::OK();
 #else
-  (void) env;
+  (void)env;
   cenv->reset();
   return Status::NotSupported("AWS not supported");
-#endif // USE_AWS
+#endif  // USE_AWS
 }
 
 int CloudEnvImpl::RegisterAwsObjects(ObjectLibrary& library,
@@ -288,4 +287,4 @@ int CloudEnvImpl::RegisterAwsObjects(ObjectLibrary& library,
 }
 
 }  // namespace ROCKSDB_NAMESPACE
-#endif // ROCKSDB_LITE
+#endif  // ROCKSDB_LITE

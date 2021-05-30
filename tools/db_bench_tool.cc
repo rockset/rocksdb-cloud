@@ -1352,8 +1352,8 @@ static const auto& s3_reg __attribute__((__unused__)) =
               CreateAwsEnv(uri, guard);
               return guard->get();
             });
-#endif /* USE_AWS */
-#endif // ROCKSDB_LITE
+#endif  /* USE_AWS */
+#endif  // ROCKSDB_LITE
 
 static enum RepFactory StringToRepFactory(const char* ctype) {
   assert(ctype);

@@ -245,7 +245,8 @@ Status CloudStorageProvider::CreateFromString(
     provider->reset();
     return Status::OK();
   } else {
-    return ObjectRegistry::NewInstance()->NewSharedObject<CloudStorageProvider>(id, provider);
+    return ObjectRegistry::NewInstance()->NewSharedObject<CloudStorageProvider>(
+        id, provider);
   }
 }
 
@@ -282,6 +283,37 @@ CloudStorageProviderImpl::CloudStorageProviderImpl() : rng_(time(nullptr)) {}
 
 CloudStorageProviderImpl::~CloudStorageProviderImpl() {}
 
+//
+// Deletes all the objects with the specified path prefix in our bucket
+//
+Status CloudStorageProviderImpl::EmptyBucket(const std::string& bucket_name,
+                                             const std::string& object_path) {
+  std::vector<std::string> results;
+
+  // Get all the objects in the  bucket
+  Status st = ListCloudObjects(bucket_name, object_path, &results);
+  if (!st.ok()) {
+    Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+        "[%s] EmptyBucket unable to find objects in bucket %s %s", Name(),
+        bucket_name.c_str(), st.ToString().c_str());
+    return st;
+  }
+  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+      "[%s] EmptyBucket going to delete %" ROCKSDB_PRIszt
+      " objects in bucket %s",
+      Name(), results.size(), bucket_name.c_str());
+
+  // Delete all objects from bucket
+  for (auto path : results) {
+    st = DeleteCloudObject(bucket_name, path);
+    if (!st.ok()) {
+      Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+          "[%s] EmptyBucket Unable to delete %s in bucket %s %s", Name(),
+          path.c_str(), bucket_name.c_str(), st.ToString().c_str());
+    }
+  }
+  return st;
+}
 
 Status CloudStorageProviderImpl::NewCloudReadableFile(
     const std::string& bucket, const std::string& fname,
@@ -360,5 +392,5 @@ Status CloudStorageProviderImpl::PutCloudObject(
   return DoPutCloudObject(local_file, bucket_name, object_path, fsize);
 }
 
-#endif //ROCKSDB_LITE
+#endif  // ROCKSDB_LITE
 }  // namespace ROCKSDB_NAMESPACE

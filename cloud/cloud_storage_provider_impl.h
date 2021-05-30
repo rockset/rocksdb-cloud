@@ -104,6 +104,9 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
 
   CloudStorageProviderImpl();
   virtual ~CloudStorageProviderImpl();
+
+  Status EmptyBucket(const std::string& bucket_name,
+                     const std::string& object_path) override;
   Status GetCloudObject(const std::string& bucket_name,
                         const std::string& object_path,
                         const std::string& local_destination) override;

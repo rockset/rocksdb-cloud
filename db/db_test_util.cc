@@ -672,8 +672,8 @@ Env* DBTestBase::CreateNewAwsEnv(const std::string& prefix, Env* parent) {
   assert(st.ok() && cenv);
   return cenv;
 }
-#endif // USE_AWS
-#endif // ROCKSDB_LITE
+#endif  // USE_AWS
+#endif  // ROCKSDB_LITE
 
 void DBTestBase::CreateColumnFamilies(const std::vector<std::string>& cfs,
                                       const Options& options) {

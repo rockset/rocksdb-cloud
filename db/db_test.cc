@@ -5512,7 +5512,7 @@ TEST_F(DBTest, MergeTestTime) {
   ASSERT_GT(TestGetTickerCount(options, FLUSH_WRITE_BYTES), 0);
 #endif  // ROCKSDB_USING_THREAD_STATUS
 }
-#endif // OS_WIN
+#endif  // OS_WIN
 
 #ifndef ROCKSDB_LITE
 TEST_P(DBTestWithParam, MergeCompactionTimeTest) {

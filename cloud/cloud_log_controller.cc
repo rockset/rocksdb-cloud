@@ -40,7 +40,8 @@ Status CloudLogController::CreateFromString(
     controller->reset();
     return Status::OK();
   } else {
-    return ObjectRegistry::NewInstance()->NewSharedObject<CloudLogController>(id, controller);
+    return ObjectRegistry::NewInstance()->NewSharedObject<CloudLogController>(
+        id, controller);
   }
 }
 

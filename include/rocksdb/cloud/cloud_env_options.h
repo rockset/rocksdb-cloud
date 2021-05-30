@@ -189,7 +189,7 @@ class CloudEnvOptions {
 
   // Specifies the class responsible for accessing objects in the cloud.
   // A null value indicates that the default storage provider based on
-  // the cloud env be used. 
+  // the cloud env be used.
   // Default:  null
   std::shared_ptr<CloudStorageProvider> storage_provider;
 
@@ -350,7 +350,7 @@ class CloudEnvOptions {
         constant_sst_file_size_in_sst_file_manager(
             _constant_sst_file_size_in_sst_file_manager),
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren) {
-    (void) _cloud_type;
+    (void)_cloud_type;
   }
 
   // print out all options to the log
@@ -364,8 +364,10 @@ class CloudEnvOptions {
                        const std::string& object_path,
                        const std::string& region = "");
 
-  Status Configure(const ConfigOptions& config_options, const std::string& opts_str);
-  Status Serialize(const ConfigOptions& config_options, std::string* result) const;
+  Status Configure(const ConfigOptions& config_options,
+                   const std::string& opts_str);
+  Status Serialize(const ConfigOptions& config_options,
+                   std::string* result) const;
 };
 
 struct CheckpointToCloudOptions {
@@ -390,9 +392,11 @@ class CloudEnv : public Env, public Configurable {
   virtual ~CloudEnv();
 
   static void RegisterCloudObjects(const std::string& mode = "");
-  static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,
+  static Status CreateFromString(const ConfigOptions& config_options,
+                                 const std::string& id,
                                  std::unique_ptr<CloudEnv>* env);
-  static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,
+  static Status CreateFromString(const ConfigOptions& config_options,
+                                 const std::string& id,
                                  const CloudEnvOptions& cloud_options,
                                  std::unique_ptr<CloudEnv>* env);
   static const char* kCloud() { return "cloud"; }
@@ -421,14 +425,14 @@ class CloudEnv : public Env, public Configurable {
                             const std::string& dbid) = 0;
 
   Logger* GetLogger() const { return cloud_env_options.info_log.get(); }
-  const std::shared_ptr<CloudStorageProvider>&  GetStorageProvider() const {
+  const std::shared_ptr<CloudStorageProvider>& GetStorageProvider() const {
     return cloud_env_options.storage_provider;
   }
-  
+
   const std::shared_ptr<CloudLogController>& GetLogController() const {
     return cloud_env_options.cloud_log_controller;
   }
-  
+
   // The SrcBucketName identifies the cloud storage bucket and
   // GetSrcObjectPath specifies the path inside that bucket
   // where data files reside. The specified bucket is used in

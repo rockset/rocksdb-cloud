@@ -15,8 +15,10 @@ namespace ROCKSDB_NAMESPACE {
 void CloudEnvOptions::Dump(Logger* log) const {
   auto provider = storage_provider.get();
   auto controller = cloud_log_controller.get();
-  Header(log, "                         COptions.cloud_type: %s", (provider != nullptr) ? provider->Name() : "Unknown");
-  Header(log, "                           COptions.log_type: %s", (controller != nullptr) ? controller->Name() : "None");
+  Header(log, "                         COptions.cloud_type: %s",
+         (provider != nullptr) ? provider->Name() : "Unknown");
+  Header(log, "                           COptions.log_type: %s",
+         (controller != nullptr) ? controller->Name() : "None");
   Header(log, "               COptions.keep_local_sst_files: %d",
          keep_local_sst_files);
   Header(log, "               COptions.keep_local_log_files: %d",
