@@ -173,7 +173,7 @@ endif()
 
 if(WITH_AWS)
   find_package(AWSSDK REQUIRED COMPONENTS s3 transfer kinesis)
-  add_definitions(-DUSE_AWS)
+  add_definitions(-DUSE_AWS -DUSE_CLOUD)
   include_directories(${AWS_INCLUDE_DIR})
   list(APPEND THIRDPARTY_LIBS ${AWSSDK_LINK_LIBRARIES})
 endif()

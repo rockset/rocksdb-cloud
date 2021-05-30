@@ -172,9 +172,8 @@ Status AwsCloudAccessCredentials::GetCredentialsProvider(
 // The AWS credentials are specified to the constructor via
 // access_key_id and secret_key.
 //
-AwsEnv::AwsEnv(Env* underlying_env, const CloudEnvOptions& _cloud_env_options,
-               const std::shared_ptr<Logger>& info_log)
-    : CloudEnvImpl(_cloud_env_options, underlying_env, info_log) {
+AwsEnv::AwsEnv(Env* underlying_env, const CloudEnvOptions& _cloud_env_options)
+    : CloudEnvImpl(_cloud_env_options, underlying_env) {
   Aws::InitAPI(Aws::SDKOptions());
 }
 
@@ -222,7 +221,9 @@ Status AwsEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& cloud_options,
   if (!base_env) {
     base_env = Env::Default();
   }
-  std::unique_ptr<AwsEnv> aenv(new AwsEnv(base_env, cloud_options, info_log));
+  CloudEnvOptions copts = cloud_options;
+  copts.info_log = info_log;
+  std::unique_ptr<AwsEnv> aenv(new AwsEnv(base_env, copts));
   ConfigOptions config_options;
   config_options.env = aenv.get();
   status = aenv->PrepareOptions(config_options);

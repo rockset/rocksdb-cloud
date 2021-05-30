@@ -25,9 +25,8 @@ class CloudEnvImpl : public CloudEnv {
  public:
   static int RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
   // Constructor
-  CloudEnvImpl(const CloudEnvOptions& options, Env* base_env,
-               const std::shared_ptr<Logger>& logger);
-  
+  CloudEnvImpl(const CloudEnvOptions& options, Env* base_env);
+
   virtual ~CloudEnvImpl();
   static const char *kClassName() { return kCloud(); }
   virtual const char* Name() const override { return kClassName(); }

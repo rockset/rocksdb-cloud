@@ -634,7 +634,9 @@ if [ "${USE_AWS}XXX" = "1XXX" ]; then
   S3_LDFLAGS="$S3_LDFLAGS -laws-cpp-sdk-s3 -laws-cpp-sdk-kinesis -laws-cpp-sdk-core -laws-cpp-sdk-transfer"
   COMMON_FLAGS="$COMMON_FLAGS $S3_CCFLAGS"
   PLATFORM_LDFLAGS="$S3_LDFLAGS $PLATFORM_LDFLAGS"
+  USE_CLOUD=1
 fi
+
 #
 # Support the Kafka WAL storing if the env variable named USE_KAFKA
 # is set to 1. Setting it to any other value or not setting it at all means
@@ -643,6 +645,11 @@ fi
 if [ "${USE_KAFKA}XXX" = "1XXX" ]; then
   COMMON_FLAGS="$COMMON_FLAGS -DUSE_KAFKA"
   PLATFORM_LDFLAGS="-lrdkafka++ $PLATFORM_LDFLAGS"
+  USE_CLOUD=1
+fi
+
+if [ "${USE_CLOUD}XXX" = "1XXX" ]; then
+    COMMON_FLAGS="$COMMON_FLAGS -DUSE_CLOUD"
 fi
 
 if test "0$PORTABLE" -eq 0; then

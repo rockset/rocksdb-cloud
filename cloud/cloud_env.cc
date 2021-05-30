@@ -353,9 +353,8 @@ Status CloudEnvOptions::Serialize(const ConfigOptions& config_options, std::stri
                                          CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
 }
 
-CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base,
-                   const std::shared_ptr<Logger>& logger)
-    : cloud_env_options(options), base_env_(base), info_log_(logger) {
+CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base)
+    : cloud_env_options(options), base_env_(base) {
   ConfigurableHelper::RegisterOptions(*this, &cloud_env_options,
                                       &cloud_env_option_type_info);
 }
@@ -390,12 +389,12 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   int count = 0;
   // Register the Env types
   library.Register<Env>(
-        CloudEnvImpl::kClassName(),
-        [](const std::string& /*uri*/, std::unique_ptr<Env>* guard,
-           std::string* /*errmsg*/) {
-          guard->reset(new CloudEnvImpl(CloudEnvOptions(), Env::Default(), nullptr));
-          return guard->get();
-        });
+      CloudEnvImpl::kClassName(),
+      [](const std::string& /*uri*/, std::unique_ptr<Env>* guard,
+         std::string* /*errmsg*/) {
+        guard->reset(new CloudEnvImpl(CloudEnvOptions(), Env::Default()));
+        return guard->get();
+      });
   count++;
 
   count += CloudEnvImpl::RegisterAwsObjects(library, arg);
@@ -547,7 +546,6 @@ Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
   if (st.ok()) {
     // store a copy of the logger
     CloudEnvImpl* cloud = static_cast<CloudEnvImpl*>(*cenv);
-    cloud->info_log_ = logger;
 
     // start the purge thread only if there is a destination bucket
     if (options.dest_bucket.IsValid() && options.run_purger) {

@@ -71,8 +71,7 @@ class AwsEnv : public CloudEnvImpl {
   // The AWS credentials are specified to the constructor via
   // access_key_id and secret_key.
   //
-  explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options,
-                  const std::shared_ptr<Logger>& info_log = nullptr);
+  explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options);
 };
 
 }  // namespace ROCKSDB_NAMESPACE

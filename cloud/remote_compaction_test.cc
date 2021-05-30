@@ -2,7 +2,7 @@
 
 #ifndef ROCKSDB_LITE
 
-#ifdef USE_AWS
+#ifdef USE_CLOUD
 
 #include <algorithm>
 #include <chrono>
@@ -16,6 +16,7 @@
 #include "logging/logging.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/cloud/db_cloud.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/table.h"
@@ -27,14 +28,16 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class RemoteCompactionTest : public testing::Test {
+class RemoteCompactionTest : public testing::Test,
+                             public ::testing::WithParamInterface<std::string> {
  public:
   RemoteCompactionTest() {
-    base_env_ = Env::Default();
     dbname_ = test::TmpDir() + "/db_cloud";
     clone_dir_ = test::TmpDir() + "/ctest";
     cloud_env_options_.TEST_Initialize("dbcloud.", dbname_);
     cloud_env_options_.keep_local_sst_files = true;
+
+    cloud_opts_str_ = GetParam();
 
     options_.create_if_missing = true;
     options_.create_missing_column_families = true;
@@ -42,35 +45,30 @@ class RemoteCompactionTest : public testing::Test {
     persistent_cache_size_gb_ = 0;
     db_ = nullptr;
 
+    Env* base = Env::Default();
     DestroyDir(dbname_);
-    base_env_->CreateDirIfMissing(dbname_);
-    base_env_->NewLogger(test::TmpDir(base_env_) + "/rocksdb-cloud.log",
-                         &options_.info_log);
+    base->CreateDirIfMissing(dbname_);
+    base->NewLogger(test::TmpDir(base) + "/rocksdb-cloud.log",
+                    &options_.info_log);
     options_.info_log->SetInfoLogLevel(InfoLogLevel::DEBUG_LEVEL);
-
+    cloud_env_options_.info_log = options_.info_log;
     Cleanup();
   }
 
   void Cleanup() {
-    ASSERT_TRUE(!aenv_);
+    EXPECT_TRUE(!aenv_);
 
-    // check cloud credentials
-    ASSERT_TRUE(cloud_env_options_.credentials.HasValid().ok());
-
-    CloudEnv* aenv;
-    // create a dummy aws env
-    ASSERT_OK(CloudEnv::NewAwsEnv(base_env_, cloud_env_options_,
-                                  options_.info_log, &aenv));
-    aenv_.reset(aenv);
+    EXPECT_OK(CloudEnv::CreateFromString(config_options_, cloud_opts_str_,
+                                         cloud_env_options_, &aenv_));
     // delete all pre-existing contents from the bucket
     Status st =
         aenv_->GetStorageProvider()->EmptyBucket(aenv_->GetSrcBucketName(), "");
-    ASSERT_TRUE(st.ok() || st.IsNotFound());
-    aenv_.reset();
+    EXPECT_TRUE(st.ok() || st.IsNotFound());
 
     // delete and create directory where clones reside
     DestroyDir(clone_dir_);
-    ASSERT_OK(base_env_->CreateDir(clone_dir_));
+    ASSERT_OK(aenv_->GetBaseEnv()->CreateDir(clone_dir_));
+    aenv_.reset();
   }
 
   std::set<std::string> GetSSTFiles(std::string name) {
@@ -94,14 +92,12 @@ class RemoteCompactionTest : public testing::Test {
   virtual ~RemoteCompactionTest() { CloseDB(); }
 
   void CreateCloudEnv() {
-    CloudEnv* cenv;
-    ASSERT_OK(CloudEnv::NewAwsEnv(base_env_, cloud_env_options_,
-                                  options_.info_log, &cenv));
+    ASSERT_OK(CloudEnv::CreateFromString(config_options_, cloud_opts_str_,
+                                         cloud_env_options_, &aenv_));
     // To catch any possible file deletion bugs, we set file deletion delay to
     // smallest possible
-    CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(cenv);
+    CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(aenv_.get());
     cimpl->TEST_SetFileDeletionDelay(std::chrono::seconds(0));
-    aenv_.reset(cenv);
   }
 
   // Open database via the cloud interface
@@ -143,7 +139,6 @@ class RemoteCompactionTest : public testing::Test {
                const std::string& dest_object_path,
                std::unique_ptr<DBCloud>* cloud_db,
                std::unique_ptr<CloudEnv>* cloud_env) {
-    CloudEnv* cenv;
     DBCloud* clone_db;
 
     // If there is no destination bucket, then the clone needs to copy
@@ -158,17 +153,15 @@ class RemoteCompactionTest : public testing::Test {
     if (!copt.dest_bucket.IsValid()) {
       copt.keep_local_sst_files = true;
     }
-    // Create new AWS env
-    ASSERT_OK(CloudEnv::NewAwsEnv(base_env_, copt, options_.info_log, &cenv));
+    // Create new cloud env
+    ASSERT_OK(CloudEnv::CreateFromString(config_options_, cloud_opts_str_, copt,
+                                         cloud_env));
     // To catch any possible file deletion bugs, we set file deletion delay to
     // smallest possible
-    CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(cenv);
+    CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(cloud_env->get());
     cimpl->TEST_SetFileDeletionDelay(std::chrono::seconds(0));
     // sets the cloud env to be used by the env wrapper
-    options_.env = cenv;
-
-    // Returns the cloud env that was created
-    cloud_env->reset(cenv);
+    options_.env = cimpl;
 
     // default column family
     ColumnFamilyOptions cfopt = options_;
@@ -208,8 +201,8 @@ class RemoteCompactionTest : public testing::Test {
   }
 
   Status GetCloudLiveFilesSrc(std::set<uint64_t>* list) {
-    std::unique_ptr<ManifestReader> manifest(new ManifestReader(
-        options_.info_log, aenv_.get(), aenv_->GetSrcBucketName()));
+    std::unique_ptr<ManifestReader> manifest(
+        new ManifestReader(aenv_.get(), aenv_->GetSrcBucketName()));
     return manifest->GetLiveFiles(aenv_->GetSrcObjectPath(), list);
   }
 
@@ -318,11 +311,12 @@ class RemoteCompactionTest : public testing::Test {
   }
 
  protected:
-  Env* base_env_;
   Options options_;
   std::string dbname_;
   std::string clone_dir_;
   CloudEnvOptions cloud_env_options_;
+  ConfigOptions config_options_;
+  std::string cloud_opts_str_;
   std::string dbid_;
   std::string persistent_cache_path_;
   uint64_t persistent_cache_size_gb_;
@@ -336,7 +330,7 @@ class RemoteCompactionTest : public testing::Test {
 // Create a clone and setup a compaction service so that compactions
 // on the DB translates into a compaction request on the clone.
 //
-TEST_F(RemoteCompactionTest, BasicTest) {
+TEST_P(RemoteCompactionTest, BasicTest) {
   OpenDB();
 
   std::string value;
@@ -409,7 +403,7 @@ TEST_F(RemoteCompactionTest, BasicTest) {
   CloseDB();
 }
 
-TEST_F(RemoteCompactionTest, ColumnFamilyTest) {
+TEST_P(RemoteCompactionTest, ColumnFamilyTest) {
   OpenDB();
 
   std::string value;
@@ -494,6 +488,11 @@ TEST_F(RemoteCompactionTest, ColumnFamilyTest) {
   CloseDB();
 }
 
+#ifdef USE_AWS
+INSTANTIATE_TEST_CASE_P(AWS, RemoteCompactionTest,
+                        ::testing::Values("id=aws;"));
+#endif  // USE_AWS
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // Run all pluggable compaction tests
@@ -502,13 +501,13 @@ int main(int argc, char** argv) {
   return RUN_ALL_TESTS();
 }
 
-#else  // USE_AWS
+#else  // USE_CLOUD
 
 #include <stdio.h>
 
 int main(int, char**) {
   fprintf(stderr,
-          "SKIPPED as DBCloud is supported only when USE_AWS is defined.\n");
+          "SKIPPED as DBCloud is supported only when USE_CLOUD is defined.\n");
   return 0;
 }
 #endif

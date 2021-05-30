@@ -314,6 +314,8 @@ class CloudEnvOptions {
   // Default: false.
   bool skip_cloud_files_in_getchildren;
 
+  std::shared_ptr<Logger> info_log;  // informational messages
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -382,11 +384,9 @@ class CloudEnv : public Env, public Configurable {
   CloudEnvOptions cloud_env_options;
   Env* base_env_;  // The underlying env
 
-  CloudEnv(const CloudEnvOptions& options, Env* base,
-           const std::shared_ptr<Logger>& logger);
- public:
-  mutable std::shared_ptr<Logger> info_log_;  // informational messages
+  CloudEnv(const CloudEnvOptions& options, Env* base);
 
+ public:
   virtual ~CloudEnv();
 
   static void RegisterCloudObjects(const std::string& mode = "");
@@ -420,7 +420,7 @@ class CloudEnv : public Env, public Configurable {
   virtual Status DeleteDbid(const std::string& bucket_prefix,
                             const std::string& dbid) = 0;
 
-  Logger* GetLogger() const { return info_log_.get(); }
+  Logger* GetLogger() const { return cloud_env_options.info_log.get(); }
   const std::shared_ptr<CloudStorageProvider>&  GetStorageProvider() const {
     return cloud_env_options.storage_provider;
   }

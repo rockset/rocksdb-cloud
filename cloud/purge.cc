@@ -48,7 +48,7 @@ void CloudEnvImpl::Purger() {
     for (const auto& p : to_be_deleted_dbids) {
       // TODO more unit tests before we delete data
       // st = DeleteDbid(GetDestBucketName(), p);
-      Log(InfoLogLevel::WARN_LEVEL, info_log_,
+      Log(InfoLogLevel::WARN_LEVEL, GetLogger(),
           "[pg] dbid %s non-existent dbpath %s deleted. %s",
           GetDestBucketName().c_str(), p.c_str(), st.ToString().c_str());
     }
@@ -57,7 +57,7 @@ void CloudEnvImpl::Purger() {
     for (const auto& p : to_be_deleted_paths) {
       // TODO more unit tests before we delete data
       // st = DeleteCloudObject(GetDestBucketName(), p);
-      Log(InfoLogLevel::WARN_LEVEL, info_log_,
+      Log(InfoLogLevel::WARN_LEVEL, GetLogger(),
           "[pg] bucket prefix %s obsolete dbpath %s deleted. %s",
           GetDestBucketName().c_str(), p.c_str(), st.ToString().c_str());
     }
@@ -77,7 +77,7 @@ Status CloudEnvImpl::FindObsoleteFiles(const std::string& bucket_name_prefix,
   DbidList dbid_list;
   Status st = GetDbidList(bucket_name_prefix, &dbid_list);
   if (!st.ok()) {
-    Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+    Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
         "[pg] GetDbidList on bucket prefix %s. %s", bucket_name_prefix.c_str(),
         st.ToString().c_str());
     return st;
@@ -87,14 +87,14 @@ Status CloudEnvImpl::FindObsoleteFiles(const std::string& bucket_name_prefix,
   DbidParents parents;
   st = extractParents(bucket_name_prefix, dbid_list, &parents);
   if (!st.ok()) {
-    Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+    Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
         "[pg] extractParents on bucket prefix %s. %s",
         bucket_name_prefix.c_str(), st.ToString().c_str());
     return st;
   }
 
   std::unique_ptr<ManifestReader> extractor(
-      new ManifestReader(info_log_, this, bucket_name_prefix));
+      new ManifestReader(this, bucket_name_prefix));
 
   // Step2: from all MANIFEST files in Step 1, compile a list of all live files
   for (auto iter = dbid_list.begin(); iter != dbid_list.end(); ++iter) {
@@ -102,7 +102,7 @@ Status CloudEnvImpl::FindObsoleteFiles(const std::string& bucket_name_prefix,
     std::set<uint64_t> file_nums;
     st = extractor->GetLiveFiles(iter->second, &file_nums);
     if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
           "[pg] dbid %s extracted files from path %s %s", iter->first.c_str(),
           iter->second.c_str(), st.ToString().c_str());
     } else {
@@ -135,7 +135,7 @@ Status CloudEnvImpl::FindObsoleteFiles(const std::string& bucket_name_prefix,
     st = GetStorageProvider()->ListCloudObjects(bucket_name_prefix, mpath,
                                                 &objects);
     if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
           "[pg] Unable to list objects in bucketprefix %s path_prefix %s. %s",
           bucket_name_prefix.c_str(), mpath.c_str(), st.ToString().c_str());
     }
@@ -148,7 +148,7 @@ Status CloudEnvImpl::FindObsoleteFiles(const std::string& bucket_name_prefix,
   for (const auto& candidate : all_files) {
     if (live_files.find(candidate) == live_files.end() &&
         ends_with(candidate, ".sst")) {
-      Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
+      Log(InfoLogLevel::DEBUG_LEVEL, GetLogger(),
           "[pg] bucket prefix %s path %s marked for deletion",
           bucket_name_prefix.c_str(), candidate.c_str());
       pathnames->push_back(candidate);
@@ -175,7 +175,7 @@ Status CloudEnvImpl::FindObsoleteDbid(
       if (st.IsNotFound()) {
         to_delete_list->push_back(iter->first);
 
-        Log(InfoLogLevel::WARN_LEVEL, info_log_,
+        Log(InfoLogLevel::WARN_LEVEL, GetLogger(),
             "[pg] dbid %s non-existent dbpath %s scheduled for deletion",
             iter->first.c_str(), iter->second.c_str());
         // We don't want to fail the final call
@@ -205,13 +205,13 @@ Status CloudEnvImpl::extractParents(const std::string& bucket_name_prefix,
     st = GetStorageProvider()->GetCloudObject(bucket_name_prefix, cloudfile,
                                               localfile);
     if (!st.ok() && !st.IsNotFound()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
           "[pg] Unable to download IDENTITY file from "
           "bucket %s. %s. Aborting...",
           bucket_name_prefix.c_str(), st.ToString().c_str());
       return st;
     } else if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
           "[pg] Unable to download IDENTITY file from "
           "bucket %s. %s. Skipping...",
           bucket_name_prefix.c_str(), st.ToString().c_str());
@@ -222,13 +222,13 @@ Status CloudEnvImpl::extractParents(const std::string& bucket_name_prefix,
     std::string all_dbid;
     st = ReadFileToString(base_env_, localfile, &all_dbid);
     if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_, "[pg] Unable to read %s %s",
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(), "[pg] Unable to read %s %s",
           localfile.c_str(), st.ToString().c_str());
       return st;
     }
     st = base_env_->DeleteFile(localfile);
     if (!st.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, info_log_, "[pg] Unable to delete %s %s",
+      Log(InfoLogLevel::ERROR_LEVEL, GetLogger(), "[pg] Unable to delete %s %s",
           localfile.c_str(), st.ToString().c_str());
       return st;
     }
@@ -256,7 +256,7 @@ Status CloudEnvImpl::extractParents(const std::string& bucket_name_prefix,
       // Verify that the leaf dbid matches the one that we retrived from
       // CloudEnv
       if (leaf_dbid != iter->first) {
-        Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+        Log(InfoLogLevel::ERROR_LEVEL, GetLogger(),
             "[pg] The IDENTITY file for dbid '%s' contains leaf dbid as '%s'",
             iter->first.c_str(), leaf_dbid.c_str());
         return st;

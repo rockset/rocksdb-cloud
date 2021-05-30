@@ -18,8 +18,7 @@ namespace ROCKSDB_NAMESPACE {
 //
 class ManifestReader {
  public:
-  ManifestReader(std::shared_ptr<Logger> info_log, CloudEnv* cenv,
-                 const std::string& bucket_prefix);
+  ManifestReader(CloudEnv* cenv, const std::string& bucket_prefix);
 
   virtual ~ManifestReader();
 
@@ -30,7 +29,6 @@ class ManifestReader {
                                              uint64_t* maxFileNumber);
 
  private:
-  std::shared_ptr<Logger> info_log_;
   CloudEnv* cenv_;
   std::string bucket_prefix_;
 };

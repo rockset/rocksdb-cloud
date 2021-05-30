@@ -93,8 +93,9 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
   }
 
   CloudEnvImpl* cenv = static_cast<CloudEnvImpl*>(options.env);
-  if (!cenv->info_log_) {
-    cenv->info_log_ = options.info_log;
+  if (!cenv->GetLogger()) {
+    auto copts = cenv->GetOptions<CloudEnvOptions>();
+    copts->info_log = options.info_log;
   }
   // Use a constant sized SST File Manager if necesary.
   // NOTE: if user already passes in an SST File Manager, we will respect user's

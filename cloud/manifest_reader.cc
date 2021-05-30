@@ -15,9 +15,8 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-ManifestReader::ManifestReader(std::shared_ptr<Logger> info_log, CloudEnv* cenv,
-                               const std::string& bucket_prefix)
-    : info_log_(info_log), cenv_(cenv), bucket_prefix_(bucket_prefix) {}
+ManifestReader::ManifestReader(CloudEnv* cenv, const std::string& bucket_prefix)
+    : cenv_(cenv), bucket_prefix_(bucket_prefix) {}
 
 ManifestReader::~ManifestReader() {}
 
@@ -90,7 +89,7 @@ Status ManifestReader::GetLiveFiles(const std::string bucket_path,
     }
   }
   file_reader.reset();
-  Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
+  Log(InfoLogLevel::DEBUG_LEVEL, cenv_->GetLogger(),
       "[mn] manifest for db %s has %d entries %s", bucket_path.c_str(), count,
       s.ToString().c_str());
   return s;
