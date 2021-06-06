@@ -35,7 +35,7 @@ class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
 class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
  protected:
   CloudEnv* env_;
-  const char* class_;
+  Logger* logger_;
   std::string fname_;
   std::string tmp_file_;
   Status status_;
@@ -117,7 +117,10 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
                               const std::string& fname,
                               std::unique_ptr<CloudStorageReadableFile>* result,
                               const EnvOptions& options) override;
-  virtual Status PrepareOptions(const ConfigOptions& options) override;
+  Status ListCloudObjects(const std::string& bucket_name,
+                          const std::string& object_path,
+                          std::vector<std::string>* results) override;
+  Status PrepareOptions(const ConfigOptions& options) override;
 
  protected:
   Random64 rng_;
@@ -136,6 +139,11 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
                                   const std::string& object_path,
                                   const std::string& bucket_name,
                                   uint64_t file_size) = 0;
+  virtual Status DoListCloudObjects(const std::string& bucket_name,
+                                    const std::string& object_path,
+                                    int max_objects,
+                                    std::string* marker,
+                                    std::vector<std::string>* results) = 0;
 
   CloudEnv* env_;
   Status status_;

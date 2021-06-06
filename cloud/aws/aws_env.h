@@ -49,6 +49,8 @@ class AwsEnv : public CloudEnvImpl {
                           const std::shared_ptr<Logger>& info_log,
                           CloudEnv** cenv);
   static Status NewAwsEnv(Env* env, std::unique_ptr<CloudEnv>* cenv);
+  explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options);
+
   virtual ~AwsEnv() {}
 
   static const char* kName() { return kAws(); }
@@ -65,13 +67,6 @@ class AwsEnv : public CloudEnvImpl {
   // standard-region which might not satisfy read-your-own-writes. So,
   // explicitly make the default region be us-west-2.
   static constexpr const char* default_region = "us-west-2";
-
- private:
-  //
-  // The AWS credentials are specified to the constructor via
-  // access_key_id and secret_key.
-  //
-  explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options);
 };
 
 }  // namespace ROCKSDB_NAMESPACE

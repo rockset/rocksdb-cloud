@@ -78,6 +78,13 @@ void BucketOptions::SetBucketName(const std::string& bucket,
     name_.clear();
   } else {
     name_ = prefix_ + bucket_;
+    for (std::string::size_type i=0; i < name_.length(); ++i) {
+      if (name_[i] == '.') {
+        name_[i] = '-';
+      } else {
+        name_[i] = std::tolower(name_[i]);    
+      }
+    }
   }
 }
 
@@ -400,6 +407,7 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   count++;
 
   count += CloudEnvImpl::RegisterAwsObjects(library, arg);
+  count += CloudEnvImpl::RegisterAzureObjects(library, arg);
 
   // Register the Cloud Log Controllers
 
@@ -456,12 +464,12 @@ Status CloudEnv::CreateFromString(const ConfigOptions& config_options,
   s = ObjectRegistry::NewInstance()->NewUniqueObject<Env>(id, &env);
   if (s.ok()) {
     CloudEnv* cenv = static_cast<CloudEnv*>(env.get());
+    copy.env = cenv;
     if (!options.empty()) {
       s = cenv->ConfigureFromMap(copy, options);
     }
     if (s.ok() && config_options.invoke_prepare_options) {
       copy.invoke_prepare_options = config_options.invoke_prepare_options;
-      copy.env = cenv;
       s = cenv->PrepareOptions(copy);
       if (s.ok()) {
         Options tmp;

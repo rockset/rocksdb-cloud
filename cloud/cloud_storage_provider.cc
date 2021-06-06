@@ -106,6 +106,7 @@ CloudStorageWritableFileImpl::CloudStorageWritableFileImpl(
     CloudEnv* env, const std::string& local_fname, const std::string& bucket,
     const std::string& cloud_fname, const EnvOptions& options)
     : env_(env),
+      logger_(env_->GetLogger()),
       fname_(local_fname),
       bucket_(bucket),
       cloud_fname_(cloud_fname) {
@@ -114,7 +115,7 @@ CloudStorageWritableFileImpl::CloudStorageWritableFileImpl(
   is_manifest_ = IsManifestFile(fname_no_epoch);
   assert(IsSstFile(fname_no_epoch) || is_manifest_);
 
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+  Log(InfoLogLevel::DEBUG_LEVEL, logger_,
       "[%s] CloudWritableFile bucket %s opened local file %s "
       "cloud file %s manifest %d",
       Name(), bucket.c_str(), fname_.c_str(), cloud_fname.c_str(),
@@ -141,9 +142,8 @@ CloudStorageWritableFileImpl::CloudStorageWritableFileImpl(
 
   s = local_env->NewWritableFile(*file_to_open, &local_file_, options);
   if (!s.ok()) {
-    Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
-        "[%s] CloudWritableFile src %s %s", Name(), fname_.c_str(),
-        s.ToString().c_str());
+    Log(InfoLogLevel::ERROR_LEVEL, logger_, "[%s] CloudWritableFile src %s %s",
+        Name(), fname_.c_str(), s.ToString().c_str());
     status_ = s;
   }
 }
@@ -153,19 +153,18 @@ CloudStorageWritableFileImpl::~CloudStorageWritableFileImpl() {
     Close();
   }
 }
-
 Status CloudStorageWritableFileImpl::Close() {
   if (local_file_ == nullptr) {  // already closed
     return status_;
   }
-  Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
-      "[%s] CloudWritableFile closing %s", Name(), fname_.c_str());
+  Log(InfoLogLevel::DEBUG_LEVEL, logger_, "[%s] CloudWritableFile closing %s",
+      Name(), fname_.c_str());
   assert(status_.ok());
 
   // close local file
   Status st = local_file_->Close();
   if (!st.ok()) {
-    Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+    Log(InfoLogLevel::ERROR_LEVEL, logger_,
         "[%s] CloudWritableFile closing error on local %s\n", Name(),
         fname_.c_str());
     return st;
@@ -175,7 +174,7 @@ Status CloudStorageWritableFileImpl::Close() {
   if (!is_manifest_) {
     status_ = env_->CopyLocalFileToDest(fname_, cloud_fname_);
     if (!status_.ok()) {
-      Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+      Log(InfoLogLevel::ERROR_LEVEL, logger_,
           "[%s] CloudWritableFile closing PutObject failed on local file %s",
           Name(), fname_.c_str());
       return status_;
@@ -185,13 +184,13 @@ Status CloudStorageWritableFileImpl::Close() {
     if (!env_->GetCloudEnvOptions().keep_local_sst_files) {
       status_ = env_->GetBaseEnv()->DeleteFile(fname_);
       if (!status_.ok()) {
-        Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+        Log(InfoLogLevel::ERROR_LEVEL, logger_,
             "[%s] CloudWritableFile closing delete failed on local file %s",
             Name(), fname_.c_str());
         return status_;
       }
     }
-    Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+    Log(InfoLogLevel::DEBUG_LEVEL, logger_,
         "[%s] CloudWritableFile closed file %s", Name(), fname_.c_str());
   }
   return Status::OK();
@@ -221,12 +220,12 @@ Status CloudStorageWritableFileImpl::Sync() {
   if (is_manifest_ && stat.ok()) {
     stat = env_->CopyLocalFileToDest(fname_, cloud_fname_);
     if (stat.ok()) {
-      Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
+      Log(InfoLogLevel::DEBUG_LEVEL, logger_,
           "[%s] CloudWritableFile made manifest %s durable to "
           "bucket %s bucketpath %s.",
           Name(), fname_.c_str(), bucket_.c_str(), cloud_fname_.c_str());
     } else {
-      Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+      Log(InfoLogLevel::ERROR_LEVEL, logger_,
           "[%s] CloudWritableFile failed to make manifest %s durable to "
           "bucket %s bucketpath %s: %s",
           Name(), fname_.c_str(), bucket_.c_str(), cloud_fname_.c_str(),
@@ -305,7 +304,7 @@ Status CloudStorageProviderImpl::EmptyBucket(const std::string& bucket_name,
 
   // Delete all objects from bucket
   for (auto path : results) {
-    st = DeleteCloudObject(bucket_name, path);
+    st = DeleteCloudObject(bucket_name, object_path + "/" + path);
     if (!st.ok()) {
       Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
           "[%s] EmptyBucket Unable to delete %s in bucket %s %s", Name(),
@@ -392,5 +391,29 @@ Status CloudStorageProviderImpl::PutCloudObject(
   return DoPutCloudObject(local_file, bucket_name, object_path, fsize);
 }
 
+Status CloudStorageProviderImpl::ListCloudObjects(const std::string& bucket_name,
+                                                  const std::string& object_path,
+                                                  std::vector<std::string>* results) {
+  // Paths don't start with '/'
+  auto prefix = object_path; // ltrim_if(object_path, '/');
+  // Paths better end with '/', otherwise we might also get a list of files
+  // in a directory for which our path is a prefix
+  // prefix = ensure_ends_with_pathsep(std::move(prefix));
+  std::string marker;
+  bool loop = true;
+  int max_objects = env_->GetCloudEnvOptions().number_objects_listed_in_one_iteration;
+  Status s;
+  // get info of bucket+object
+  while (loop) {
+    s = DoListCloudObjects(bucket_name, prefix, max_objects, &marker, results);
+    if (!s.ok()) {
+      return s;
+    } else if (marker.empty()) {
+      loop = false;
+      break;
+    }
+  }
+  return s;
+}
 #endif  // ROCKSDB_LITE
 }  // namespace ROCKSDB_NAMESPACE

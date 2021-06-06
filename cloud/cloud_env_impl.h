@@ -24,6 +24,8 @@ class CloudEnvImpl : public CloudEnv {
 
  public:
   static int RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
+  static int RegisterAzureObjects(ObjectLibrary& library,
+                                  const std::string& arg);
   // Constructor
   CloudEnvImpl(const CloudEnvOptions& options, Env* base_env);
 

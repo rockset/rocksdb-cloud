@@ -314,7 +314,7 @@ class CloudEnvOptions {
   // Default: false.
   bool skip_cloud_files_in_getchildren;
 
-  std::shared_ptr<Logger> info_log;  // informational messages
+  std::shared_ptr<Logger> info_log = nullptr;  // informational messages
 
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,

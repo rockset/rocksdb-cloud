@@ -231,18 +231,12 @@ Status AwsEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& cloud_options,
   }
   return status;
 }
-#endif  // USE_AWS
 
 Status AwsEnv::NewAwsEnv(Env* env, std::unique_ptr<CloudEnv>* cenv) {
-#ifdef USE_AWS
   cenv->reset(new AwsEnv(env, CloudEnvOptions()));
   return Status::OK();
-#else
-  (void)env;
-  cenv->reset();
-  return Status::NotSupported("AWS not supported");
-#endif  // USE_AWS
 }
+#endif  // USE_AWS
 
 int CloudEnvImpl::RegisterAwsObjects(ObjectLibrary& library,
                                      const std::string& /*arg*/) {
@@ -250,15 +244,14 @@ int CloudEnvImpl::RegisterAwsObjects(ObjectLibrary& library,
   library.Register<Env>(CloudEnvImpl::kAws(),
                         [](const std::string& /*uri*/,
                            std::unique_ptr<Env>* guard, std::string* errmsg) {
-                          std::unique_ptr<CloudEnv> cguard;
-                          Status s = AwsEnv::NewAwsEnv(Env::Default(), &cguard);
-                          if (s.ok()) {
-                            guard->reset(cguard.release());
-                            return guard->get();
-                          } else {
-                            *errmsg = s.ToString();
-                            return static_cast<Env*>(nullptr);
-                          }
+#ifdef USE_AWS
+                          *errmsg = "";
+                          guard->reset(new AwsEnv(Env::Default(), CloudEnvOptions()));
+#else
+                          *errmsg = "AWS not supported";
+                          guard->reset();
+#endif  // USE_AWS
+                          return guard->get();
                         });
   count++;
   library.Register<CloudLogController>(

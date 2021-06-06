@@ -11,6 +11,10 @@ namespace ROCKSDB_NAMESPACE {
 inline Aws::String ToAwsString(const std::string& s) {
   return Aws::String(s.data(), s.size());
 }
+  
+inline std::string ToStdString(const Aws::String& s) {
+  return std::string(s.data(), s.size());
+}
 
 }  // namespace ROCKSDB_NAMESPACE
 

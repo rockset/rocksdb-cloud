@@ -312,7 +312,7 @@ class S3ReadableFile : public CloudStorageReadableFileImpl {
     if (!isSuccess) {
       const Aws::Client::AWSError<Aws::S3::S3Errors>& error =
           outcome.GetError();
-      std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+      std::string errmsg = ToStdString(error.GetMessage());
       if (IsNotFound(error.GetErrorType()) ||
           errmsg.find("Response code: 404") != std::string::npos) {
         Log(InfoLogLevel::ERROR_LEVEL, info_log_,
@@ -322,7 +322,7 @@ class S3ReadableFile : public CloudStorageReadableFileImpl {
       }
       Log(InfoLogLevel::ERROR_LEVEL, info_log_,
           "[s3] S3ReadableFile error in reading %s %" PRIu64 " %s %s",
-          fname_.c_str(), offset, buffer, error.GetMessage().c_str());
+          fname_.c_str(), offset, buffer, errmsg.c_str());
       return Status::IOError(fname_, errmsg.c_str());
     }
     std::stringstream ss;
@@ -372,9 +372,6 @@ class S3StorageProvider : public CloudStorageProviderImpl {
   // Delete the specified object from the specified cloud bucket
   Status DeleteCloudObject(const std::string& bucket_name,
                            const std::string& object_path) override;
-  Status ListCloudObjects(const std::string& bucket_name,
-                          const std::string& object_path,
-                          std::vector<std::string>* result) override;
   Status ExistsCloudObject(const std::string& bucket_name,
                            const std::string& object_path) override;
   Status GetCloudObjectSize(const std::string& bucket_name,
@@ -418,6 +415,11 @@ class S3StorageProvider : public CloudStorageProviderImpl {
                           const std::string& bucket_name,
                           const std::string& object_path,
                           uint64_t file_size) override;
+  Status DoListCloudObjects(const std::string& bucket_name,
+                            const std::string& object_path,
+                            int max_objects,
+                            std::string* marker,
+                            std::vector<std::string>* result) override;
 
  private:
   // If metadata, size modtime or etag is non-nullptr, returns requested data
@@ -511,7 +513,7 @@ Status S3StorageProvider::CreateBucket(const std::string& bucket) {
   bool isSuccess = outcome.IsSuccess();
   if (!isSuccess) {
     const Aws::Client::AWSError<Aws::S3::S3Errors>& error = outcome.GetError();
-    std::string errmsg(error.GetMessage().c_str());
+    std::string errmsg = ToStdString(error.GetMessage());
     Aws::S3::S3Errors s3err = error.GetErrorType();
     if (s3err != Aws::S3::S3Errors::BUCKET_ALREADY_EXISTS &&
         s3err != Aws::S3::S3Errors::BUCKET_ALREADY_OWNED_BY_YOU) {
@@ -543,7 +545,7 @@ Status S3StorageProvider::DeleteCloudObject(const std::string& bucket_name,
   bool isSuccess = outcome.IsSuccess();
   if (!isSuccess) {
     const Aws::Client::AWSError<Aws::S3::S3Errors>& error = outcome.GetError();
-    std::string errmsg(error.GetMessage().c_str());
+    std::string errmsg = ToStdString(error.GetMessage());
     if (IsNotFound(error.GetErrorType())) {
       st = Status::NotFound(object_path, errmsg.c_str());
     } else {
@@ -562,73 +564,61 @@ Status S3StorageProvider::DeleteCloudObject(const std::string& bucket_name,
 // Appends the names of all children of the specified path from S3
 // into the result set.
 //
-Status S3StorageProvider::ListCloudObjects(const std::string& bucket_name,
-                                           const std::string& object_path,
-                                           std::vector<std::string>* result) {
-  // S3 paths don't start with '/'
-  auto prefix = ltrim_if(object_path, '/');
-  // S3 paths better end with '/', otherwise we might also get a list of files
-  // in a directory for which our path is a prefix
-  prefix = ensure_ends_with_pathsep(std::move(prefix));
-  // the starting object marker
-  Aws::String marker;
-  bool loop = true;
+Status S3StorageProvider::DoListCloudObjects(const std::string& bucket_name,
+                                             const std::string& object_path,
+                                             int max_objects,
+                                             std::string* marker,
+                                             std::vector<std::string>* result) {
+  Aws::S3::Model::ListObjectsRequest request;
+  request.SetBucket(ToAwsString(bucket_name));
+  request.SetMaxKeys(max_objects);
+  request.SetPrefix(ToAwsString(object_path));
+  request.SetMarker(ToAwsString(*marker));
 
-  // get info of bucket+object
-  while (loop) {
-    Aws::S3::Model::ListObjectsRequest request;
-    request.SetBucket(ToAwsString(bucket_name));
-    request.SetMaxKeys(
-        env_->GetCloudEnvOptions().number_objects_listed_in_one_iteration);
-
-    request.SetPrefix(ToAwsString(prefix));
-    request.SetMarker(marker);
-
-    Aws::S3::Model::ListObjectsOutcome outcome =
-        s3client_->ListCloudObjects(request);
-    bool isSuccess = outcome.IsSuccess();
-    if (!isSuccess) {
-      const Aws::Client::AWSError<Aws::S3::S3Errors>& error =
-          outcome.GetError();
-      std::string errmsg(error.GetMessage().c_str());
-      if (IsNotFound(error.GetErrorType())) {
-        Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
-            "[s3] GetChildren dir %s does not exist: %s", object_path.c_str(),
-            errmsg.c_str());
-        return Status::NotFound(object_path, errmsg.c_str());
-      }
-      return Status::IOError(object_path, errmsg.c_str());
+  auto outcome = s3client_->ListCloudObjects(request);
+  bool isSuccess = outcome.IsSuccess();
+  if (!isSuccess) {
+    const auto & error = outcome.GetError();
+    std::string errmsg = ToStdString(error.GetMessage());
+    if (IsNotFound(error.GetErrorType())) {
+      Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
+          "[s3] GetChildren dir %s does not exist: %s", object_path.c_str(),
+          errmsg.c_str());
+      return Status::NotFound(object_path, errmsg.c_str());
     }
-    const Aws::S3::Model::ListObjectsResult& res = outcome.GetResult();
-    const Aws::Vector<Aws::S3::Model::Object>& objs = res.GetContents();
-    for (auto o : objs) {
-      const Aws::String& key = o.GetKey();
-      // Our path should be a prefix of the fetched value
-      std::string keystr(key.c_str(), key.size());
-      assert(keystr.find(prefix) == 0);
-      if (keystr.find(prefix) != 0) {
-        return Status::IOError("Unexpected result from AWS S3: " + keystr);
-      }
-      auto fname = keystr.substr(prefix.size());
-      result->push_back(fname);
+    return Status::IOError(object_path, errmsg.c_str());
+  }
+  const Aws::S3::Model::ListObjectsResult& res = outcome.GetResult();
+  const Aws::Vector<Aws::S3::Model::Object>& objs = res.GetContents();
+  for (auto o : objs) {
+    const Aws::String& key = o.GetKey();
+    // Our path should be a prefix of the fetched value
+    std::string keystr = ToStdString(key);
+    assert(keystr.find(object_path) == 0);
+    if (keystr.find(object_path) != 0) {
+      return Status::IOError("Unexpected result from AWS S3: " + keystr);
     }
+    auto fname = keystr.substr(object_path.size());
+    result->push_back(fname);
+  }
 
-    // If there are no more entries, then we are done.
-    if (!res.GetIsTruncated()) {
-      break;
-    }
+  // If there are no more entries, then we are done.
+  if (!res.GetIsTruncated()) {
+    marker->clear();
+  } else {
     // The new starting point
-    marker = res.GetNextMarker();
-    if (marker.empty()) {
-      // If response does not include the NextMaker and it is
+    *marker = ToStdString(res.GetNextMarker());
+    if (marker->empty()) {
+      // If response does not include the NextMarker and it is
       // truncated, you can use the value of the last Key in the response
       // as the marker in the subsequent request because all objects
       // are returned in alphabetical order
-      marker = objs.back().GetKey();
+      *marker = objs.back().GetKey();
     }
   }
   return Status::OK();
 }
+  
 // Delete the specified object from the specified cloud bucket
 Status S3StorageProvider::ExistsCloudObject(const std::string& bucket_name,
                                             const std::string& object_path) {
@@ -675,7 +665,7 @@ Status S3StorageProvider::PutCloudObjectMetadata(
   bool isSuccess = outcome.IsSuccess();
   if (!isSuccess) {
     const auto& error = outcome.GetError();
-    std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+    std::string errmsg = ToStdString(error.GetMessage());
     Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
         "[s3] Bucket %s error in saving metadata %s", bucket_name.c_str(),
         errmsg.c_str());
@@ -769,7 +759,7 @@ Status S3StorageProvider::CopyCloudObject(const std::string& bucket_name_src,
   bool isSuccess = outcome.IsSuccess();
   if (!isSuccess) {
     const Aws::Client::AWSError<Aws::S3::S3Errors>& error = outcome.GetError();
-    std::string errmsg(error.GetMessage().c_str());
+    std::string errmsg = ToStdString(error.GetMessage());
     Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
         "[s3] S3WritableFile src path %s error in copying to %s %s",
         src_url.c_str(), dest_object.c_str(), errmsg.c_str());
@@ -795,7 +785,7 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
       *remote_size = handle->GetBytesTotalSize();
     } else {
       const auto& error = handle->GetLastError();
-      std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+      std::string errmsg = ToStdString(error.GetMessage());
       Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
           "[s3] DownloadFile %s/%s error %s.", bucket_name.c_str(),
           object_path.c_str(), errmsg.c_str());
@@ -818,7 +808,7 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
       *remote_size = outcome.GetResult().GetContentLength();
     } else {
       const auto& error = outcome.GetError();
-      std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+      std::string errmsg = ToStdString(error.GetMessage());
       Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
           "[s3] GetObject %s/%s error %s.", bucket_name.c_str(),
           object_path.c_str(), errmsg.c_str());
@@ -841,7 +831,7 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
                                         ToAwsString(local_file), file_size);
     if (handle->GetStatus() != Aws::Transfer::TransferStatus::COMPLETED) {
       auto error = handle->GetLastError();
-      std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+      std::string errmsg = ToStdString(error.GetMessage());
       Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
           "[s3] UploadFile %s/%s, size %" PRIu64 ", ERROR %s",
           bucket_name.c_str(), object_path.c_str(), file_size, errmsg.c_str());
@@ -861,7 +851,7 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
     auto outcome = s3client_->PutCloudObject(putRequest, file_size);
     if (!outcome.IsSuccess()) {
       auto error = outcome.GetError();
-      std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+      std::string errmsg = ToStdString(error.GetMessage());
       Log(InfoLogLevel::ERROR_LEVEL, env_->GetLogger(),
           "[s3] PutCloudObject %s/%s, size %" PRIu64 ", ERROR %s",
           bucket_name.c_str(), object_path.c_str(), file_size, errmsg.c_str());

@@ -15,6 +15,7 @@
 #include "cloud/manifest_reader.h"
 #include "file/filename.h"
 #include "logging/logging.h"
+#include "port/stack_trace.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/options.h"
@@ -22,6 +23,7 @@
 #include "rocksdb/table.h"
 #include "test_util/testharness.h"
 #include "util/random.h"
+#include "util/stderr_logger.h"
 #include "util/string_util.h"
 #ifndef OS_WIN
 #include <unistd.h>
@@ -54,6 +56,7 @@ class CloudTest : public testing::Test,
     base->CreateDirIfMissing(dbname_);
     base->NewLogger(test::TmpDir(base) + "/rocksdb-cloud.log",
                     &options_.info_log);
+    //options_.info_log = std::make_shared<StderrLogger>(InfoLogLevel::DEBUG_LEVEL);
     options_.info_log->SetInfoLogLevel(InfoLogLevel::DEBUG_LEVEL);
     cloud_env_options_.info_log = options_.info_log;
 
@@ -143,8 +146,6 @@ class CloudTest : public testing::Test,
 
   void OpenWithColumnFamilies(const std::vector<std::string>& cfs,
                               std::vector<ColumnFamilyHandle*>* handles) {
-    ASSERT_TRUE(cloud_env_options_.credentials.HasValid().ok());
-
     // Create new cloud env
     CreateCloudEnv();
     options_.env = aenv_.get();
@@ -1607,14 +1608,34 @@ TEST_P(CloudTest, SharedBlockCache) {
       cloud_env_options_.src_bucket.GetBucketName(),
       cloud_env_options_.src_bucket.GetObjectPath() + "-clone");
 }
+TEST_P(CloudTest, ListCloudObjects) {
+  CreateCloudEnv();
+  std::vector<std::string> objects;
+  uint64_t size;
+  
+  Status s;
+  s = aenv_->GetStorageProvider()->ListCloudObjects(cloud_env_options_.src_bucket.GetBucketName(),
+                                                    "/tmp/rocksdbtest-501/db_cloud-6153079286242930017",
+                                                    &objects);
+  printf("MJR /tmp returned %d objects = %s\n", (int) objects.size(), s.ToString().c_str());
 
+  s = aenv_->GetStorageProvider()->GetCloudObjectSize(cloud_env_options_.src_bucket.GetBucketName(),
+                                                      "/tmp/rocksdbtest-501/db_cloud-6153079286242930017/000010.sst",
+                                                    &size);
+  printf("MJR /tmp size %d objects = %s\n", (int) size, s.ToString().c_str());
+}
+ 
 #ifdef USE_AWS
 INSTANTIATE_TEST_CASE_P(AWS, CloudTest, ::testing::Values("id=aws;"));
 #endif  // USE_AWS
+#ifdef USE_AZURE
+INSTANTIATE_TEST_CASE_P(Azure, CloudTest, ::testing::Values("provider=azure;"));
+#endif  // USE_AZURE
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb
 int main(int argc, char** argv) {
+  ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

@@ -638,6 +638,17 @@ if [ "${USE_AWS}XXX" = "1XXX" ]; then
 fi
 
 #
+# Support the AWS cloud environment only if the env variable named USE_AWS
+# is set to 1. Setting it to any other value or not setting it at all means
+# that the AWS build is not triggered.
+#
+if [ "${USE_AZURE}XXX" = "1XXX" ]; then
+  COMMON_FLAGS="$COMMON_FLAGS -DUSE_AZURE"
+  PLATFORM_LDFLAGS="-lazure-storage-lite -lcurl -lssl -lcrypto $PLATFORM_LDFLAGS"
+  USE_CLOUD=1
+fi
+
+#
 # Support the Kafka WAL storing if the env variable named USE_KAFKA
 # is set to 1. Setting it to any other value or not setting it at all means
 # that the Kafka WAL build is not triggered.
