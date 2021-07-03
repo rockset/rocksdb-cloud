@@ -2,8 +2,6 @@
 
 #ifndef ROCKSDB_LITE
 
-#ifdef USE_CLOUD
-
 #include "rocksdb/cloud/db_cloud.h"
 
 #include <algorithm>
@@ -1631,6 +1629,7 @@ INSTANTIATE_TEST_CASE_P(AWS, CloudTest, ::testing::Values("id=aws;"));
 #ifdef USE_AZURE
 INSTANTIATE_TEST_CASE_P(Azure, CloudTest, ::testing::Values("provider=azure;"));
 #endif  // USE_AZURE
+INSTANTIATE_TEST_CASE_P(Mock, CloudTest, ::testing::Values("provider=mock;"));
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb
@@ -1639,17 +1638,6 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
-#else  // USE_AWS
-
-#include <stdio.h>
-
-int main(int, char**) {
-  fprintf(stderr,
-          "SKIPPED as DBCloud is supported only when USE_CLOUD is defined.\n");
-  return 0;
-}
-#endif
 
 #else  // ROCKSDB_LITE
 

@@ -274,12 +274,9 @@ protected:
 TEST_P(CloudProviderTest, BasicTest) {
   std::vector<std::string> objects;
   std::string object = object_path_ + "/test.sst";
-  printf("MJR: Object[%s]\n", object.c_str());
   ASSERT_OK(provider_->ListCloudObjects(bucket_name_, object_path_, &objects));
-  printf("MJR: ListObject[%d]\n",(int)  objects.size());
   ASSERT_EQ(objects.size(), 0);
   ASSERT_EQ(provider_->ExistsCloudObject(bucket_name_, object), Status::NotFound());
-  printf("MJR: ExistsObject[%s]\n",object.c_str());
 
   std::unique_ptr<WritableFile> wfile;
   std::string fname = test_path_ + "/test.sst";
@@ -289,9 +286,10 @@ TEST_P(CloudProviderTest, BasicTest) {
   ASSERT_OK(provider_->ExistsCloudObject(bucket_name_, object));
   ASSERT_OK(provider_->ListCloudObjects(bucket_name_, object_path_, &objects));
   ASSERT_EQ(objects.size(), 1);
-  printf("MJR: Passed all tests [%s]\n", objects[0].c_str());
 }
-  
+
+INSTANTIATE_TEST_CASE_P(Mock, CloudProviderTest,
+                        ::testing::Values("provider=mock;"));
 #ifdef USE_AWS
 INSTANTIATE_TEST_CASE_P(AWS, CloudProviderTest, ::testing::Values("id=aws;"));
 #endif  // USE_AWS

@@ -15,6 +15,7 @@
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/mock_cloud_storage_provider.h"
 #include "options/configurable_helper.h"
 #include "options/options_helper.h"
 #include "port/likely.h"
@@ -402,6 +403,14 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
       [](const std::string& /*uri*/, std::unique_ptr<Env>* guard,
          std::string* /*errmsg*/) {
         guard->reset(new CloudEnvImpl(CloudEnvOptions(), Env::Default()));
+        return guard->get();
+      });
+  library.Register<CloudStorageProvider>(
+      MockCloudStorageProvider::kClassName(),
+      [](const std::string& /*uri*/,
+         std::unique_ptr<CloudStorageProvider>* guard,
+         std::string* /*errmsg*/) {
+        guard->reset(new MockCloudStorageProvider());
         return guard->get();
       });
   count++;

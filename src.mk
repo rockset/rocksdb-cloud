@@ -20,6 +20,7 @@ LIB_SOURCES =                                                   \
   cloud/cloud_manifest.cc                                       \
   cloud/cloud_scheduler.cc                                      \
   cloud/cloud_storage_provider.cc                               \
+  cloud/mock_cloud_storage_provider.cc                          \
   db/arena_wrapped_db_iter.cc                                   \
   db/blob/blob_file_addition.cc                                 \
   db/blob/blob_file_builder.cc                                  \
