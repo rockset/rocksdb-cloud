@@ -3235,7 +3235,7 @@ bool DBImpl::GetAggregatedIntProperty(const Slice& property,
     InstrumentedMutexLock l(&mutex_);
     uint64_t value;
     for (auto* cfd : *versions_->GetColumnFamilySet()) {
-      if (!cfd->initialized()) {
+      if (!cfd->initialized() || cfd->IsDropped()) {
         continue;
       }
       cfd->Ref();
@@ -3963,6 +3963,10 @@ Status DestroyDB(const std::string& dbname, const Options& options,
 Status DBImpl::WriteOptionsFile(bool need_mutex_lock,
                                 bool need_enter_write_thread) {
 #ifndef ROCKSDB_LITE
+  if (!immutable_db_options_.use_options_file) {
+      return Status::OK();
+  }
+
   WriteThread::Writer w;
   if (need_mutex_lock) {
     mutex_.Lock();
