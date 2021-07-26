@@ -249,9 +249,16 @@ class CloudEnvImpl : public CloudEnv {
     file_deletion_delay_ = delay;
   }
 
+
   Status PrepareOptions(const ConfigOptions& config_options) override;
   Status ValidateOptions(const DBOptions& /*db_opts*/,
                          const ColumnFamilyOptions& /*cf_opts*/) const override;
+
+  void FileCacheDeleter(const std::string& fname);
+  void FileCacheErase(const std::string& fname);
+  void FileCachePurge();
+  uint64_t FileCacheGetCharge();
+  uint64_t FileCacheGetNumItems();
 
  protected:
   Status CheckValidity() const;
@@ -314,6 +321,11 @@ class CloudEnvImpl : public CloudEnv {
   Status FetchCloudManifest(const std::string& local_dbname, bool force);
 
   Status RollNewEpoch(const std::string& local_dbname);
+
+  // helper methods to access the file cache
+  void FileCacheAccess(const std::string& fname);
+  void FileCacheInsert(const std::string& fname, uint64_t filesize);
+
   // The dbid of the source database that is cloned
   std::string src_dbid_;
 
@@ -335,6 +347,8 @@ class CloudEnvImpl : public CloudEnv {
   void StopPurger();
 
  private:
+  void log(InfoLogLevel level, const std::string& fname,
+           const std::string& msg);
   Status writeCloudManifest(CloudManifest* manifest, const std::string& fname);
   std::string generateNewEpochId();
   std::unique_ptr<CloudManifest> cloud_manifest_;

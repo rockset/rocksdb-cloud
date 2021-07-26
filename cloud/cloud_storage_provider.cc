@@ -266,6 +266,8 @@ Status CloudStorageProviderImpl::PrepareOptions(const ConfigOptions& options) {
           env_->GetDestBucketName().c_str());
       st = CreateBucket(env_->GetDestBucketName());
     } else {
+      Log(InfoLogLevel::INFO_LEVEL, env_->GetLogger(),
+          "[%s] Bucket not found %s", Name(), env_->GetDestBucketName().c_str());
       st = Status::NotFound(
           "Bucket not found and create_bucket_if_missing is false");
     }
@@ -360,5 +362,5 @@ Status CloudStorageProviderImpl::PutCloudObject(
   return DoPutCloudObject(local_file, bucket_name, object_path, fsize);
 }
 
-#endif //ROCKSDB_LITE
+#endif  // ROCKSDB_LITE
 }  // namespace ROCKSDB_NAMESPACE

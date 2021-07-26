@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "rocksdb/configurable.h"
+#include "rocksdb/cache.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
@@ -193,19 +194,33 @@ class CloudEnvOptions {
   // Default:  null
   std::shared_ptr<CloudStorageProvider> storage_provider;
 
+  // Specifies the amount of sst files to be cached in local storage.
+  // If non-null, then the local storage would be used as a file cache.
+  // The Get or a Scan request on the database generates a random read
+  // request on the sst file and such a request causes the sst file to
+  // be inserted into the local file cache.
+  // A compaction request generates a sequential read request on the sst
+  // file and it does not cause the sst file to be inserted into the
+  // local file cache.
+  // A memtable flush generates a write requst to a new sst file and this
+  // sst file is not inserted into the local file cache.
+  // Cannot be set if keep_local_log_files is true.
+  // Default: null (disabled)
+  std::shared_ptr<Cache> sst_file_cache;
+
   // Access credentials
   AwsCloudAccessCredentials credentials;
 
   // Only used if keep_local_log_files is true and log_type is kKafka.
   KafkaLogOptions kafka_log_options;
 
-  //
   // If true,  then sst files are stored locally and uploaded to the cloud in
   // the background. On restart, all files from the cloud that are not present
   // locally are downloaded.
   // If false, then local sst files are created, uploaded to cloud immediately,
   //           and local file is deleted. All reads are satisfied by fetching
   //           data from the cloud.
+  // Cannot be set if sst_file_cache is enabled.
   // Default:  false
   bool keep_local_sst_files;
 
@@ -328,8 +343,10 @@ class CloudEnvOptions {
       bool _use_aws_transfer_manager = false,
       int _number_objects_listed_in_one_iteration = 5000,
       int _constant_sst_file_size_in_sst_file_manager = -1,
-      bool _skip_cloud_files_in_getchildren = false)
+      bool _skip_cloud_files_in_getchildren = false,
+      std::shared_ptr<Cache> _sst_file_cache = nullptr)
       : log_type(_log_type),
+        sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
         keep_local_log_files(_keep_local_log_files),
         purger_periodicity_millis(_purger_periodicity_millis),
@@ -364,6 +381,11 @@ class CloudEnvOptions {
 
   Status Configure(const ConfigOptions& config_options, const std::string& opts_str);
   Status Serialize(const ConfigOptions& config_options, std::string* result) const;
+
+  // Is the sst file cache configured?
+  bool hasSstFileCache() {
+    return sst_file_cache != nullptr && sst_file_cache->GetCapacity() > 0;
+  }
 };
 
 struct CheckpointToCloudOptions {
