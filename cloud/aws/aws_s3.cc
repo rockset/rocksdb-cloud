@@ -45,6 +45,8 @@
 #include "cloud/aws/aws_file.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/filename.h"
+#include "file/read_write_util.h"
+#include "file/writable_file_writer.h"
 #include "port/port.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
@@ -185,13 +187,12 @@ class AwsS3ClientWrapper {
     }
     return outcome;
   }
-  std::shared_ptr<Aws::Transfer::TransferHandle> DownloadFile(
-      const Aws::String& bucket_name, const Aws::String& object_path,
-      const Aws::String& destination) {
+
+  template <class... Args>
+  std::shared_ptr<Aws::Transfer::TransferHandle> DownloadFile(Args... args) {
     CloudRequestCallbackGuard guard(cloud_request_callback_.get(),
                                     CloudRequestOpType::kReadOp);
-    auto handle =
-        transfer_manager_->DownloadFile(bucket_name, object_path, destination);
+    auto handle = transfer_manager_->DownloadFile(std::forward<Args>(args)...);
 
     handle->WaitUntilFinished();
     bool success =
@@ -818,14 +819,90 @@ Status S3StorageProvider::CopyCloudObject(const std::string& bucket_name_src,
   return st;
 }
 
+namespace {
+// AWS SDK allows us to provide our own std::iostream implementation to which it
+// then streams the HTTP response. The easiest way to customize std::iostream is
+// by building our own std::streambuf.
+class WritableFileStreamBuf : public std::streambuf {
+ public:
+  WritableFileStreamBuf(std::unique_ptr<WritableFileWriter>&& fileWriter)
+      : fileWriter_(std::move(fileWriter)) {}
+
+  ~WritableFileStreamBuf() {
+    fileWriter_->Flush();
+    fileWriter_->Close();
+  }
+
+ protected:
+  std::streamsize xsputn(const char* s, std::streamsize n) override {
+    auto st = fileWriter_->Append(rocksdb::Slice(s, n));
+    if (!st.ok()) {
+      return EOF;
+    }
+    return n;
+  }
+
+  int_type overflow(int_type ch) override {
+    if (traits_type::eq_int_type(ch, traits_type::eof())) {
+      return ch;
+    }
+    auto c = traits_type::to_char_type(ch);
+    auto r = xsputn(&c, 1);
+    if (r == EOF) {
+      return traits_type::eof();
+    }
+    // In case of success, the character put is returned
+    return ch;
+  }
+
+  int sync() override {
+    auto st = fileWriter_->Flush();
+    return st.ok() ? 0 : -1;
+  }
+
+ private:
+  std::unique_ptr<WritableFileWriter> fileWriter_;
+};
+
+// std::iostream takes a raw pointer to std::streambuf. We use
+// IOStreamWithUniquePtr to tie the std::streambuf's memory ownership to the
+// iostream's.
+template <class T>
+class IOStreamWithUniquePtr : public std::iostream {
+ public:
+  IOStreamWithUniquePtr(std::unique_ptr<T>&& s)
+      : std::iostream(s.get()), s_(std::move(s)) {}
+
+ private:
+  std::unique_ptr<T> s_;
+};
+
+}  // namespace
+
 Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
                                            const std::string& object_path,
                                            const std::string& destination,
                                            uint64_t* remote_size) {
+  FileOptions foptions;
+  foptions.use_direct_writes =
+      env_->GetCloudEnvOptions().use_direct_io_for_cloud_download;
+
   if (s3client_->HasTransferManager()) {
+    // AWS Transfer manager does not work if we provide our stream
+    // implementation because of https://github.com/aws/aws-sdk-cpp/issues/1732.
+    // The stream is not flushed when WaitUntilFinished() returns.
+    // TODO(igor) Fix this once the AWS SDK's bug is fixed.
+    auto ioStreamFactory = [=]() -> Aws::IOStream* {
+        // fallback to FStream
+        return Aws::New<Aws::FStream>(
+            Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
+            std::ios_base::out | std::ios_base::trunc);
+
+    };
+
     auto handle = s3client_->DownloadFile(ToAwsString(bucket_name),
                                           ToAwsString(object_path),
-                                          ToAwsString(destination));
+                                          std::move(ioStreamFactory));
     bool success =
         handle->GetStatus() == Aws::Transfer::TransferStatus::COMPLETED;
     if (success) {
@@ -842,14 +919,27 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
       return Status::IOError(std::move(errmsg));
     }
   } else {
+    auto ioStreamFactory = [=]() -> Aws::IOStream* {
+      std::unique_ptr<FSWritableFile> file;
+      auto st = NewWritableFile(env_->GetBaseEnv()->GetFileSystem().get(),
+                                destination, &file, foptions);
+      if (!st.ok()) {
+        // fallback to FStream
+        return Aws::New<Aws::FStream>(
+            Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
+            std::ios_base::out | std::ios_base::trunc);
+      }
+      return new IOStreamWithUniquePtr<WritableFileStreamBuf>(
+          std::unique_ptr<WritableFileStreamBuf>(new WritableFileStreamBuf(
+              std::unique_ptr<WritableFileWriter>(new WritableFileWriter(
+                  std::move(file), destination, foptions)))));
+    };
+
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(ToAwsString(bucket_name));
     request.SetKey(ToAwsString(object_path));
+    request.SetResponseStreamFactory(std::move(ioStreamFactory));
 
-    request.SetResponseStreamFactory([destination]() {
-      return Aws::New<Aws::FStream>(Aws::Utils::ARRAY_ALLOCATION_TAG,
-                                    destination, std::ios_base::out);
-    });
     auto outcome = s3client_->GetCloudObject(request);
     if (outcome.IsSuccess()) {
       *remote_size = outcome.GetResult().GetContentLength();
@@ -912,7 +1002,7 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
 }
 
 #endif /* USE_AWS */
-  
+
 Status CloudStorageProviderImpl::CreateS3Provider(
     std::unique_ptr<CloudStorageProvider>* provider) {
 #ifndef USE_AWS
@@ -925,4 +1015,4 @@ Status CloudStorageProviderImpl::CreateS3Provider(
 #endif /* USE_AWS */
 }
 }  // namespace ROCKSDB_NAMESPACE
-#endif // ROCKSDB_LITE
+#endif  // ROCKSDB_LITE
