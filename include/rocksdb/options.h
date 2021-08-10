@@ -1171,6 +1171,14 @@ struct DBOptions {
   //
   // Default: false
   bool allow_data_in_errors = false;
+
+  // If disable_manifest_sync is set to true the MANIFEST file will not be
+  // synced (using fsync or fdatasync) after every write. Use this only in
+  // situations where you don't care about database integrity after a power
+  // cycle.
+  //
+  // Default: false
+  bool disable_manifest_sync = false;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -1633,6 +1641,10 @@ struct IngestExternalFileOptions {
   // ingestion. However, if no checksum information is provided with the
   // ingested files, DB will generate the checksum and store in the Manifest.
   bool verify_file_checksum = true;
+  // Only set unsafe_disable_sync to true if you know what you're doing. If set
+  // to true no file sync operations will be performed when ingesting the
+  // external file.
+  bool unsafe_disable_sync = false;
 };
 
 enum TraceFilterType : uint64_t {
