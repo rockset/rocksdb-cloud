@@ -5,6 +5,7 @@
 
 #pragma once
 #include <string>
+#include "cloud/cloud_env_impl.h"
 #include "db/dbformat.h"
 #include "db/merge_context.h"
 #include "db/read_callback.h"
@@ -159,6 +160,10 @@ class GetContext {
       return callback_->IsVisible(seq);
     }
     return true;
+  }
+
+  CloudEnvImpl* GetCloudEnv() {
+    return static_cast<CloudEnvImpl*>(env_);
   }
 
   void ReportCounters();

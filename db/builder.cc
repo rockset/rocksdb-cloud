@@ -23,6 +23,7 @@
 #include "db/range_del_aggregator.h"
 #include "db/table_cache.h"
 #include "db/version_edit.h"
+#include "env/composite_env_wrapper.h"
 #include "file/filename.h"
 #include "file/read_write_util.h"
 #include "file/writable_file_writer.h"
@@ -30,6 +31,7 @@
 #include "monitoring/thread_status_util.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
+#include "rocksdb/file_system.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/options.h"
 #include "rocksdb/table.h"
@@ -135,12 +137,22 @@ Status BuildTable(
       bool use_direct_writes = file_options.use_direct_writes;
       TEST_SYNC_POINT_CALLBACK("BuildTable:create_file", &use_direct_writes);
 #endif  // !NDEBUG
-      IOStatus io_s = NewWritableFile(fs, fname, &file, file_options);
-      assert(s.ok());
-      s = io_s;
-      if (io_status->ok()) {
-        *io_status = io_s;
+      
+      CloudEnvImpl* cenv = static_cast<CloudEnvImpl*>(ioptions.env);
+      if (cenv->GetCloudEnvOptions().read_write_through_cloud_storage) {
+        std::unique_ptr<WritableFile> result;
+        s = cenv->NewWritableFile(fname, &result, EnvOptions());
+        file = NewLegacyWritableFileWrapper(std::move(result));
+      } else {
+        IOStatus io_s = NewWritableFile(fs, fname, &file, file_options);
+
+        assert(s.ok());
+        s = io_s;
+        if (io_status->ok()) {
+          *io_status = io_s;
+        }
       }
+      
       if (!s.ok()) {
         EventHelpers::LogAndNotifyTableFileCreationFinished(
             event_logger, ioptions.listeners, dbname, column_family_name, fname,

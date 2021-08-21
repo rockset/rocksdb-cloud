@@ -336,6 +336,12 @@ class CloudEnvOptions {
   // Default: false
   bool use_direct_io_for_cloud_download;
 
+  // When set to true, Rocks-cloud will no longer does any local file read-write, but 
+  // instead going through the cloud storage provider specified in the options
+  // to open files backed up by cloud storage.
+  // Default: false
+  bool read_write_through_cloud_storage;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -352,6 +358,7 @@ class CloudEnvOptions {
       int _constant_sst_file_size_in_sst_file_manager = -1,
       bool _skip_cloud_files_in_getchildren = false,
       bool _use_direct_io_for_cloud_download = false,
+      bool _read_write_through_cloud_storage = false,
       std::shared_ptr<Cache> _sst_file_cache = nullptr)
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
@@ -373,7 +380,8 @@ class CloudEnvOptions {
         constant_sst_file_size_in_sst_file_manager(
             _constant_sst_file_size_in_sst_file_manager),
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
-        use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download) {
+        use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
+        read_write_through_cloud_storage(_read_write_through_cloud_storage) {
     (void) _cloud_type;
   }
 

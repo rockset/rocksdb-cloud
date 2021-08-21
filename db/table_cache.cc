@@ -8,15 +8,19 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/table_cache.h"
+#include <memory>
 
+#include "cloud/cloud_storage_provider_impl.h"
 #include "db/dbformat.h"
 #include "db/range_tombstone_fragmenter.h"
 #include "db/snapshot_impl.h"
 #include "db/version_edit.h"
+#include "env/composite_env_wrapper.h"
 #include "file/file_util.h"
 #include "file/filename.h"
 #include "file/random_access_file_reader.h"
 #include "monitoring/perf_context_imp.h"
+#include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/statistics.h"
 #include "table/block_based/block_based_table_reader.h"
 #include "table/get_context.h"
@@ -101,24 +105,35 @@ Status TableCache::GetTableReader(
     std::unique_ptr<TableReader>* table_reader,
     const SliceTransform* prefix_extractor, bool skip_filters, int level,
     bool prefetch_index_and_filter_in_cache,
-    size_t max_file_size_for_l0_meta_pin) {
+    size_t max_file_size_for_l0_meta_pin,
+    GetContext* get_context) {
   std::string fname =
       TableFileName(ioptions_.cf_paths, fd.GetNumber(), fd.GetPathId());
   std::unique_ptr<FSRandomAccessFile> file;
-  FileOptions fopts = file_options;
-  Status s = PrepareIOFromReadOptions(ro, ioptions_.env, fopts.io_options);
-  if (s.ok()) {
-    s = ioptions_.fs->NewRandomAccessFile(fname, fopts, &file, nullptr);
-  }
-  RecordTick(ioptions_.statistics, NO_FILE_OPENS);
-  if (s.IsPathNotFound()) {
-    fname = Rocks2LevelTableFileName(fname);
+
+  Status s;
+
+  auto cenv = get_context->GetCloudEnv();
+  if (cenv->GetCloudEnvOptions().read_write_through_cloud_storage) {
+    std::unique_ptr<RandomAccessFile> result;
+    s = cenv->NewRandomAccessFile(fname, &result, EnvOptions());
+    file = NewLegacyRandomAccessFileWrapper(result);
+  } else {
+    FileOptions fopts = file_options;
     s = PrepareIOFromReadOptions(ro, ioptions_.env, fopts.io_options);
     if (s.ok()) {
-      s = ioptions_.fs->NewRandomAccessFile(fname, file_options, &file,
-                                            nullptr);
+      s = ioptions_.fs->NewRandomAccessFile(fname, fopts, &file, nullptr);
     }
     RecordTick(ioptions_.statistics, NO_FILE_OPENS);
+    if (s.IsPathNotFound()) {
+      fname = Rocks2LevelTableFileName(fname);
+      s = PrepareIOFromReadOptions(ro, ioptions_.env, fopts.io_options);
+      if (s.ok()) {
+        s = ioptions_.fs->NewRandomAccessFile(fname, file_options, &file,
+                                              nullptr);
+      }
+      RecordTick(ioptions_.statistics, NO_FILE_OPENS);
+    }
   }
 
   if (s.ok()) {
@@ -160,7 +175,8 @@ Status TableCache::FindTable(const ReadOptions& ro,
                              const bool no_io, bool record_read_stats,
                              HistogramImpl* file_read_hist, bool skip_filters,
                              int level, bool prefetch_index_and_filter_in_cache,
-                             size_t max_file_size_for_l0_meta_pin) {
+                             size_t max_file_size_for_l0_meta_pin,
+                             GetContext* get_context) {
   PERF_TIMER_GUARD_WITH_ENV(find_table_nanos, ioptions_.env);
   uint64_t number = fd.GetNumber();
   Slice key = GetSliceForFileNumber(&number);
@@ -184,7 +200,7 @@ Status TableCache::FindTable(const ReadOptions& ro,
         ro, file_options, internal_comparator, fd, false /* sequential mode */,
         record_read_stats, file_read_hist, &table_reader, prefix_extractor,
         skip_filters, level, prefetch_index_and_filter_in_cache,
-        max_file_size_for_l0_meta_pin);
+        max_file_size_for_l0_meta_pin, get_context);
     if (!s.ok()) {
       assert(table_reader == nullptr);
       RecordTick(ioptions_.statistics, NO_FILE_ERRORS);
