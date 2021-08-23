@@ -137,7 +137,7 @@ Status BuildTable(
       bool use_direct_writes = file_options.use_direct_writes;
       TEST_SYNC_POINT_CALLBACK("BuildTable:create_file", &use_direct_writes);
 #endif  // !NDEBUG
-      
+
       CloudEnvImpl* cenv = static_cast<CloudEnvImpl*>(ioptions.env);
       if (cenv->GetCloudEnvOptions().read_write_through_cloud_storage) {
         std::unique_ptr<WritableFile> result;
@@ -152,7 +152,7 @@ Status BuildTable(
           *io_status = io_s;
         }
       }
-      
+
       if (!s.ok()) {
         EventHelpers::LogAndNotifyTableFileCreationFinished(
             event_logger, ioptions.listeners, dbname, column_family_name, fname,
@@ -256,7 +256,8 @@ Status BuildTable(
       meta->fd.file_size = file_size;
       meta->marked_for_compaction = builder->NeedCompact();
       assert(meta->fd.GetFileSize() > 0);
-      tp = builder->GetTableProperties(); // refresh now that builder is finished
+      tp = builder
+               ->GetTableProperties();  // refresh now that builder is finished
       if (table_properties) {
         *table_properties = tp;
       }

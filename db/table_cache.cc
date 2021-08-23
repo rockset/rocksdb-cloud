@@ -8,6 +8,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/table_cache.h"
+
 #include <memory>
 
 #include "cloud/cloud_storage_provider_impl.h"
@@ -87,8 +88,7 @@ TableCache::TableCache(const ImmutableCFOptions& ioptions,
   }
 }
 
-TableCache::~TableCache() {
-}
+TableCache::~TableCache() {}
 
 TableReader* TableCache::GetTableReaderFromHandle(Cache::Handle* handle) {
   return reinterpret_cast<TableReader*>(cache_->Value(handle));
@@ -105,8 +105,7 @@ Status TableCache::GetTableReader(
     std::unique_ptr<TableReader>* table_reader,
     const SliceTransform* prefix_extractor, bool skip_filters, int level,
     bool prefetch_index_and_filter_in_cache,
-    size_t max_file_size_for_l0_meta_pin,
-    GetContext* get_context) {
+    size_t max_file_size_for_l0_meta_pin, GetContext* get_context) {
   std::string fname =
       TableFileName(ioptions_.cf_paths, fd.GetNumber(), fd.GetPathId());
   std::unique_ptr<FSRandomAccessFile> file;
@@ -167,16 +166,13 @@ void TableCache::EraseHandle(const FileDescriptor& fd, Cache::Handle* handle) {
   cache_->Erase(key);
 }
 
-Status TableCache::FindTable(const ReadOptions& ro,
-                             const FileOptions& file_options,
-                             const InternalKeyComparator& internal_comparator,
-                             const FileDescriptor& fd, Cache::Handle** handle,
-                             const SliceTransform* prefix_extractor,
-                             const bool no_io, bool record_read_stats,
-                             HistogramImpl* file_read_hist, bool skip_filters,
-                             int level, bool prefetch_index_and_filter_in_cache,
-                             size_t max_file_size_for_l0_meta_pin,
-                             GetContext* get_context) {
+Status TableCache::FindTable(
+    const ReadOptions& ro, const FileOptions& file_options,
+    const InternalKeyComparator& internal_comparator, const FileDescriptor& fd,
+    Cache::Handle** handle, const SliceTransform* prefix_extractor,
+    const bool no_io, bool record_read_stats, HistogramImpl* file_read_hist,
+    bool skip_filters, int level, bool prefetch_index_and_filter_in_cache,
+    size_t max_file_size_for_l0_meta_pin, GetContext* get_context) {
   PERF_TIMER_GUARD_WITH_ENV(find_table_nanos, ioptions_.env);
   uint64_t number = fd.GetNumber();
   Slice key = GetSliceForFileNumber(&number);
@@ -256,10 +252,9 @@ InternalIterator* TableCache::NewIterator(
         !options.table_filter(*table_reader->GetTableProperties())) {
       result = NewEmptyInternalIterator<Slice>(arena);
     } else {
-      result = table_reader->NewIterator(options, prefix_extractor, arena,
-                                   skip_filters, caller,
-                                   file_options.compaction_readahead_size,
-                                   allow_unprepared_value);
+      result = table_reader->NewIterator(
+          options, prefix_extractor, arena, skip_filters, caller,
+          file_options.compaction_readahead_size, allow_unprepared_value);
     }
     if (handle != nullptr) {
       result->RegisterCleanup(&UnrefEntry, cache_, handle);

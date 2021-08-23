@@ -5,6 +5,7 @@
 
 #pragma once
 #include <string>
+
 #include "cloud/cloud_env_impl.h"
 #include "db/dbformat.h"
 #include "db/merge_context.h"
@@ -98,8 +99,8 @@ class GetContext {
   // merge_context and they are never merged. The value pointer is untouched.
   GetContext(const Comparator* ucmp, const MergeOperator* merge_operator,
              Logger* logger, Statistics* statistics, GetState init_state,
-             const Slice& user_key, PinnableSlice* value,
-             bool* value_found, MergeContext* merge_context, bool do_merge,
+             const Slice& user_key, PinnableSlice* value, bool* value_found,
+             MergeContext* merge_context, bool do_merge,
              SequenceNumber* max_covering_tombstone_seq, Env* env,
              SequenceNumber* seq = nullptr,
              PinnedIteratorsManager* _pinned_iters_mgr = nullptr,
@@ -162,9 +163,7 @@ class GetContext {
     return true;
   }
 
-  CloudEnvImpl* GetCloudEnv() {
-    return static_cast<CloudEnvImpl*>(env_);
-  }
+  CloudEnvImpl* GetCloudEnv() { return static_cast<CloudEnvImpl*>(env_); }
 
   void ReportCounters();
 

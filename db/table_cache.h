@@ -10,9 +10,10 @@
 // Thread-safe (provides internal synchronization)
 
 #pragma once
+#include <stdint.h>
+
 #include <string>
 #include <vector>
-#include <stdint.h>
 
 #include "cloud/cloud_storage_provider_impl.h"
 #include "db/dbformat.h"
