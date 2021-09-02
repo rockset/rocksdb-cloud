@@ -5,6 +5,7 @@
 
 namespace rocksdb {
 class RemoteFileSystem : public FileSystemWrapper {
+ public:
   RemoteFileSystem(std::shared_ptr<FileSystem> default_fs,
                    const CloudEnvOptions& cloud_options)
       : FileSystemWrapper(default_fs),
