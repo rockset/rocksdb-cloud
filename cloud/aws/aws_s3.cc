@@ -900,11 +900,10 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
     // The stream is not flushed when WaitUntilFinished() returns.
     // TODO(igor) Fix this once the AWS SDK's bug is fixed.
     auto ioStreamFactory = [=]() -> Aws::IOStream* {
-        // fallback to FStream
-        return Aws::New<Aws::FStream>(
-            Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
-            std::ios_base::out | std::ios_base::trunc);
-
+      // fallback to FStream
+      return Aws::New<Aws::FStream>(
+          Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
+          std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
     };
 
     auto handle = s3client_->DownloadFile(ToAwsString(bucket_name),
@@ -934,7 +933,7 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
         // fallback to FStream
         return Aws::New<Aws::FStream>(
             Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
-            std::ios_base::out | std::ios_base::trunc);
+            std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
       }
       return new IOStreamWithOwnedBuf<WritableFileStreamBuf>(
           std::unique_ptr<WritableFileStreamBuf>(new WritableFileStreamBuf(
@@ -982,9 +981,9 @@ Status S3StorageProvider::DoPutCloudObject(const std::string& local_file,
       return Status::IOError(local_file, errmsg);
     }
   } else {
-    auto inputData =
-        Aws::MakeShared<Aws::FStream>(object_path.c_str(), local_file.c_str(),
-                                      std::ios_base::in | std::ios_base::out);
+    auto inputData = Aws::MakeShared<Aws::FStream>(
+        object_path.c_str(), local_file.c_str(),
+        std::ios_base::in | std::ios_base::binary);
 
     Aws::S3::Model::PutObjectRequest putRequest;
     putRequest.SetBucket(ToAwsString(bucket_name));

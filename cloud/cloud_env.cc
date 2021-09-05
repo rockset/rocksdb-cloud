@@ -1,10 +1,10 @@
 // Copyright (c) 2017 Rockset.
 #ifndef ROCKSDB_LITE
 
-#ifndef _WIN32_WINNT
-#include <unistd.h>
-#else
+#ifdef WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 #include <unordered_map>
 
@@ -200,7 +200,8 @@ static std::unordered_map<std::string, OptionTypeInfo>
              const char* addr1, const char* addr2, std::string* /*mismatch*/) {
             auto bucket1 = reinterpret_cast<const BucketOptions*>(addr1);
             auto bucket2 = reinterpret_cast<const BucketOptions*>(addr2);
-            return bucket1->GetBucketName(false) == bucket2->GetBucketName(false);
+            return bucket1->GetBucketName(false) ==
+                   bucket2->GetBucketName(false);
           }}},
         {"TEST",
          {0, OptionType::kUnknown, OptionVerificationType::kAlias,
@@ -338,22 +339,23 @@ Status CloudEnvOptions::Configure(const ConfigOptions& config_options,
     }
   }
   if (s.ok()) {
-    s = OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
-                                    &cloud_env_option_type_info,
-                                    CloudEnvOptions::kName(), opts_str, reinterpret_cast<char*>(this));
-    if (!s.ok()) { // Something went wrong.  Attempt to reset
-      OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
-                                  &cloud_env_option_type_info,
-                                  CloudEnvOptions::kName(), current, reinterpret_cast<char*>(this));
+    s = OptionTypeInfo::ParseStruct(
+        config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+        CloudEnvOptions::kName(), opts_str, reinterpret_cast<char*>(this));
+    if (!s.ok()) {  // Something went wrong.  Attempt to reset
+      OptionTypeInfo::ParseStruct(
+          config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+          CloudEnvOptions::kName(), current, reinterpret_cast<char*>(this));
     }
   }
   return s;
 }
-  
-Status CloudEnvOptions::Serialize(const ConfigOptions& config_options, std::string* value) const {
-  return OptionTypeInfo::SerializeStruct(config_options, CloudEnvOptions::kName(),
-                                         &cloud_env_option_type_info,
-                                         CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
+
+Status CloudEnvOptions::Serialize(const ConfigOptions& config_options,
+                                  std::string* value) const {
+  return OptionTypeInfo::SerializeStruct(
+      config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+      CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
 }
 
 CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base,
@@ -393,12 +395,13 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   int count = 0;
   // Register the Env types
   library.Register<Env>(
-        CloudEnvImpl::kClassName(),
-        [](const std::string& /*uri*/, std::unique_ptr<Env>* guard,
-           std::string* /*errmsg*/) {
-          guard->reset(new CloudEnvImpl(CloudEnvOptions(), Env::Default(), nullptr));
-          return guard->get();
-        });
+      CloudEnvImpl::kClassName(),
+      [](const std::string& /*uri*/, std::unique_ptr<Env>* guard,
+         std::string* /*errmsg*/) {
+        guard->reset(
+            new CloudEnvImpl(CloudEnvOptions(), Env::Default(), nullptr));
+        return guard->get();
+      });
   count++;
 
   count += CloudEnvImpl::RegisterAwsObjects(library, arg);
@@ -416,24 +419,24 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
         return guard->get();
       });
   count++;
-  
+
   return count;
 }
 
 void CloudEnv::RegisterCloudObjects(const std::string& arg) {
   static std::once_flag do_once;
-  std::call_once(do_once,
-    [&]() {
-      auto library = ObjectLibrary::Default();
-      DoRegisterCloudObjects(*library, arg);
-    });
-}     
+  std::call_once(do_once, [&]() {
+    auto library = ObjectLibrary::Default();
+    DoRegisterCloudObjects(*library, arg);
+  });
+}
 
-Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value,
+Status CloudEnv::CreateFromString(const ConfigOptions& config_options,
+                                  const std::string& value,
                                   std::unique_ptr<CloudEnv>* result) {
   RegisterCloudObjects();
   std::string id;
-  std::unordered_map<std::string, std::string> options;  
+  std::unordered_map<std::string, std::string> options;
   Status s;
   if (value.find("=") == std::string::npos) {
     id = value;
@@ -471,19 +474,20 @@ Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std
       }
     }
   }
-  
+
   if (s.ok()) {
     result->reset(static_cast<CloudEnv*>(env.release()));
   }
-  
-  return s;  
+
+  return s;
 }
-Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value,
+Status CloudEnv::CreateFromString(const ConfigOptions& config_options,
+                                  const std::string& value,
                                   const CloudEnvOptions& cloud_options,
                                   std::unique_ptr<CloudEnv>* result) {
   RegisterCloudObjects();
   std::string id;
-  std::unordered_map<std::string, std::string> options;  
+  std::unordered_map<std::string, std::string> options;
   Status s;
   if (value.find("=") == std::string::npos) {
     id = value;
@@ -523,14 +527,14 @@ Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std
       }
     }
   }
-  
+
   if (s.ok()) {
     result->reset(static_cast<CloudEnv*>(env.release()));
   }
-  
-  return s;  
+
+  return s;
 }
-  
+
 #ifndef USE_AWS
 Status CloudEnv::NewAwsEnv(Env* /*base_env*/,
                            const CloudEnvOptions& /*options*/,
