@@ -13,7 +13,7 @@
 #include "rocksdb/convenience.h"
 #include "rocksdb/env_encryption.h"
 #include "util/stderr_logger.h"
-#ifdef USE_AWS
+#ifdef USE_CLOUD
 #include "cloud/cloud_env_impl.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #endif
@@ -64,11 +64,10 @@ SpecialEnv::SpecialEnv(Env* base, bool time_elapse_only_sleep)
   table_write_callback_ = nullptr;
 }
 DBTestBase::DBTestBase(const std::string path, bool env_do_fsync)
-    : option_env_(kDefaultEnv),
+    : is_cloud_env_(false),
       mem_env_(nullptr),
       encrypted_env_(nullptr),
-      option_config_(kDefault),
-      s3_env_(nullptr) {
+      option_config_(kDefault) {
   Env* base_env = Env::Default();
 #ifndef ROCKSDB_LITE
   const char* test_env_uri = getenv("TEST_ENV_URI");
@@ -78,6 +77,16 @@ DBTestBase::DBTestBase(const std::string path, bool env_do_fsync)
     base_env = test_env;
     EXPECT_OK(s);
     EXPECT_NE(Env::Default(), base_env);
+    if (env_guard_ != nullptr) {
+      ///**TODO: This should change/become simpler when Env inherits
+      /// Customizable
+      const char* start = strstr(test_env_uri, "id=");
+      if (start != nullptr) {
+        is_cloud_env_ = strncmp(start + 3, "aws", 3) == 0;
+      } else if (strstr(test_env_uri, "provider=") != NULL) {
+        is_cloud_env_ = true;
+      }
+    }
   }
 #endif  // !ROCKSDB_LITE
   EXPECT_NE(nullptr, base_env);
@@ -95,17 +104,6 @@ DBTestBase::DBTestBase(const std::string path, bool env_do_fsync)
 #endif  // !ROCKSDB_LITE
   env_ = new SpecialEnv(encrypted_env_ ? encrypted_env_
                                        : (mem_env_ ? mem_env_ : base_env));
-#ifndef ROCKSDB_LITE
-#ifdef USE_AWS
-  // Randomize the test path so that multiple tests can run in parallel
-  srand(static_cast<unsigned int>(time(nullptr)));
-  std::string mypath = path + "_" + std::to_string(rand());
-
-  env_->NewLogger(test::TmpDir(env_) + "/rocksdb-cloud.log", &info_log_);
-  info_log_->SetInfoLogLevel(InfoLogLevel::DEBUG_LEVEL);
-  s3_env_ = CreateNewAwsEnv(mypath, env_);
-#endif
-#endif  // !ROCKSDB_LITE
   env_->SetBackgroundThreads(1, Env::LOW);
   env_->SetBackgroundThreads(1, Env::HIGH);
   env_->skip_fsync_ = !env_do_fsync;
@@ -144,13 +142,14 @@ DBTestBase::~DBTestBase() {
   delete env_;
 
 #ifndef ROCKSDB_LITE
-#ifdef USE_AWS
-  auto cenv = static_cast<CloudEnv*>(s3_env_);
-  cenv->GetStorageProvider()->EmptyBucket(cenv->GetSrcBucketName(),
-                                          cenv->GetSrcObjectPath());
+#ifdef USE_CLOUD
+  if (is_cloud_env_) {
+    auto cenv = static_cast<CloudEnv*>(env_guard_.get());
+    cenv->GetStorageProvider()->EmptyBucket(cenv->GetSrcBucketName(),
+                                            cenv->GetSrcObjectPath());
+  }
 #endif
 #endif  // !ROCKSDB_LITE
-  delete s3_env_;
 }
 
 bool DBTestBase::ShouldSkipOptions(int option_config, int skip_mask) {
@@ -218,26 +217,14 @@ bool DBTestBase::ChangeOptions(int skip_mask) {
       if (ShouldSkipOptions(option_config_, skip_mask)) {
         continue;
       }
-      if (option_env_ == kAwsEnv && ShouldSkipAwsOptions(option_config_)) {
+      if (is_cloud_env_ && ShouldSkipAwsOptions(option_config_)) {
         continue;
       }
       break;
     }
     if (option_config_ >= kEnd) {
-#ifndef USE_AWS
-      // If not built for AWS, skip it
-      if (option_env_ + 1 == kAwsEnv) {
-        option_env_++;
-      }
-#endif
-      if (option_env_ + 1 >= kEndEnv) {
-        Destroy(last_options_);
-        return false;
-      } else {
-        option_env_++;
-        option_config_ = kDefault;
-        continue;
-      }
+      Destroy(last_options_);
+      return false;
     } else {
       auto options = CurrentOptions();
       options.create_if_missing = true;
@@ -617,25 +604,6 @@ Options DBTestBase::GetOptions(
       break;
   }
 
-  switch (option_env_) {
-    case kDefaultEnv: {
-      options.env = env_;
-      break;
-    }
-#ifdef USE_AWS
-    case kAwsEnv: {
-      assert(s3_env_);
-      options.env = s3_env_;
-      options.recycle_log_file_num = 0;  // do not reuse log files
-      options.allow_mmap_reads = false;  // mmap is incompatible with S3
-      break;
-    }
-#endif /* USE_AWS */
-
-    default:
-      break;
-  }
-
   if (options_override.filter_policy) {
     table_options.filter_policy = options_override.filter_policy;
     table_options.partition_filters = options_override.partition_filters;
@@ -644,36 +612,12 @@ Options DBTestBase::GetOptions(
   if (set_block_based_table_factory) {
     options.table_factory.reset(NewBlockBasedTableFactory(table_options));
   }
+  options.env = env_;
   options.create_if_missing = true;
   options.fail_if_options_file_error = true;
   return options;
 }
 
-#ifndef ROCKSDB_LITE
-#ifdef USE_AWS
-Env* DBTestBase::CreateNewAwsEnv(const std::string& prefix, Env* parent) {
-  if (!prefix.empty()) {
-    fprintf(stderr, "Creating new cloud env with prefix %s\n", prefix.c_str());
-  }
-
-  // get credentials
-  CloudEnvOptions coptions;
-  CloudEnv* cenv = nullptr;
-  std::string region;
-  coptions.TEST_Initialize("dbtest.", prefix, region);
-  Status st = CloudEnv::NewAwsEnv(parent, coptions, info_log_, &cenv);
-  CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(cenv);
-  cimpl->TEST_DisableCloudManifest();
-  cimpl->TEST_SetFileDeletionDelay(std::chrono::seconds(0));
-  ROCKS_LOG_INFO(info_log_, "Created new aws env with path %s", prefix.c_str());
-  if (!st.ok()) {
-    Log(InfoLogLevel::DEBUG_LEVEL, info_log_, "%s", st.ToString().c_str());
-  }
-  assert(st.ok() && cenv);
-  return cenv;
-}
-#endif // USE_AWS
-#endif // ROCKSDB_LITE
 
 void DBTestBase::CreateColumnFamilies(const std::vector<std::string>& cfs,
                                       const Options& options) {
@@ -789,9 +733,9 @@ void DBTestBase::Destroy(const Options& options, bool delete_cf_paths) {
   }
   Close();
   ASSERT_OK(DestroyDB(dbname_, options, column_families));
-#ifdef USE_AWS
-  if (s3_env_) {
-    CloudEnv* cenv = static_cast<CloudEnv*>(s3_env_);
+#ifdef USE_CLOUD
+  if (is_cloud_env_) {
+    CloudEnv* cenv = static_cast<CloudEnv*>(env_guard_.get());
     Status st = cenv->GetStorageProvider()->EmptyBucket(
         cenv->GetSrcBucketName(), dbname_);
     ASSERT_TRUE(st.ok() || st.IsNotFound());
@@ -833,7 +777,11 @@ bool DBTestBase::IsDirectIOSupported() {
 }
 
 bool DBTestBase::IsMemoryMappedAccessSupported() const {
-  return (!encrypted_env_);
+  if (is_cloud_env_) {
+    return false;
+  } else {
+    return (!encrypted_env_);
+  }
 }
 
 Status DBTestBase::Flush(int cf) {

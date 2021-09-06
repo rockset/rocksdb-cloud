@@ -420,7 +420,6 @@ class CloudEnv : public Env, public Configurable {
 
   virtual ~CloudEnv();
 
-  static void RegisterCloudObjects(const std::string& mode = "");
   static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,
                                  std::unique_ptr<CloudEnv>* env);
   static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,

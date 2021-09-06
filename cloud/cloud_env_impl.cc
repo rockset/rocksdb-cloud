@@ -16,6 +16,7 @@
 #include "file/writable_file_writer.h"
 #include "port/likely.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/options.h"
@@ -46,6 +47,9 @@ CloudEnvImpl::~CloudEnvImpl() {
     files_to_delete_.clear();
   }
   StopPurger();
+  // Since scheduled jobs may use CloudEnv members, shutdown the scheduler
+  // before destruction is complete.
+  scheduler_.reset();
 }
 
 Status CloudEnvImpl::ExistsCloudObject(const std::string& fname) {
@@ -1954,16 +1958,18 @@ Status CloudEnvImpl::PrepareOptions(const ConfigOptions& options) {
   if (!base_env_) {
     base_env_ = Env::Default();
   }
+  ConfigOptions copy = options;
+  copy.env = this;
   Status status;
   if (!cloud_env_options.cloud_log_controller &&
       !cloud_env_options.keep_local_log_files) {
     if (cloud_env_options.log_type == LogType::kLogKinesis) {
       status = CloudLogController::CreateFromString(
-          options, CloudLogControllerImpl::kKinesis(),
+          copy, CloudLogControllerImpl::kKinesis(),
           &cloud_env_options.cloud_log_controller);
     } else if (cloud_env_options.log_type == LogType::kLogKafka) {
       status = CloudLogController::CreateFromString(
-          options, CloudLogControllerImpl::kKafka(),
+          copy, CloudLogControllerImpl::kKafka(),
           &cloud_env_options.cloud_log_controller);
     } else {
       status = Status::NotSupported("Unsupported log controller type");

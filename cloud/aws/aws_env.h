@@ -10,8 +10,6 @@
 
 #include "cloud/cloud_env_impl.h"
 
-#ifdef USE_AWS
-
 #include <string.h>
 
 #include <chrono>
@@ -49,6 +47,7 @@ class AwsEnv : public CloudEnvImpl {
                           const std::shared_ptr<Logger>& info_log,
                           CloudEnv** cenv);
   static Status NewAwsEnv(Env* env, std::unique_ptr<CloudEnv>* cenv);
+#ifdef USE_AWS
   virtual ~AwsEnv() {}
 
   static const char* kName() { return kAws(); }
@@ -73,8 +72,7 @@ class AwsEnv : public CloudEnvImpl {
   //
   explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options,
                   const std::shared_ptr<Logger>& info_log = nullptr);
+#endif  // USE_AWS
 };
 
 }  // namespace ROCKSDB_NAMESPACE
-
-#endif  // USE_AWS

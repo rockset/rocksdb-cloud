@@ -15,6 +15,7 @@
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/mock_cloud_storage_provider.h"
 #include "options/configurable_helper.h"
 #include "options/options_helper.h"
 #include "port/likely.h"
@@ -116,6 +117,21 @@ void BucketOptions::TEST_Initialize(const std::string& bucket,
   }
 }
 
+static void ParseTestBucket(const std::string& value, std::string* name,
+                            std::string* path, std::string* region) {
+  *name = value;
+  auto pos = name->find(":");
+  if (pos != std::string::npos) {
+    *path = name->substr(pos + 1);
+    *name = name->substr(0, pos);
+  }
+  pos = path->find("?");
+  if (pos != std::string::npos) {
+    *region = path->substr(pos + 1);
+    *path = path->substr(0, pos);
+  }
+}
+
 static std::unordered_map<std::string, OptionTypeInfo>
     bucket_options_type_info = {
         {"object",
@@ -208,19 +224,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
              const std::string& value, char* addr) {
             auto bucket = reinterpret_cast<BucketOptions*>(addr);
-            std::string name = value;
+            std::string name;
             std::string path;
             std::string region;
-            auto pos = name.find(":");
-            if (pos != std::string::npos) {
-              path = name.substr(pos + 1);
-              name = name.substr(0, pos);
-            }
-            pos = path.find("?");
-            if (pos != std::string::npos) {
-              region = path.substr(pos + 1);
-              path = path.substr(0, pos);
-            }
+            ParseTestBucket(value, &name, &path, &region);
             bucket->TEST_Initialize(name, path, region);
             return Status::OK();
           }}},
@@ -311,16 +318,7 @@ static std::unordered_map<std::string, OptionTypeInfo>
             std::string name;
             std::string path;
             std::string region;
-            auto pos = value.find(":");
-            if (pos != std::string::npos) {
-              name = value.substr(0, pos);
-              path = value.substr(pos + 1);
-            }
-            pos = path.find("?");
-            if (pos != std::string::npos) {
-              region = path.substr(pos + 1);
-              path = path.substr(0, pos);
-            }
+            ParseTestBucket(value, &name, &path, &region);
             copts->src_bucket.TEST_Initialize(name, path, region);
             copts->dest_bucket.TEST_Initialize(name, path, region);
             return Status::OK();
@@ -389,6 +387,7 @@ Status CloudEnv::NewAwsEnv(
   return NewAwsEnv(base_env, options, logger, cenv);
 }
 
+namespace {
 int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   int count = 0;
   // Register the Env types
@@ -399,6 +398,15 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
           guard->reset(new CloudEnvImpl(CloudEnvOptions(), Env::Default(), nullptr));
           return guard->get();
         });
+  count++;
+  library.Register<CloudStorageProvider>(
+      MockCloudStorageProvider::kClassName(),
+      [](const std::string& /*uri*/,
+         std::unique_ptr<CloudStorageProvider>* guard,
+         std::string* /*errmsg*/) {
+        guard->reset(new MockCloudStorageProvider());
+        return guard->get();
+      });
   count++;
 
   count += CloudEnvImpl::RegisterAwsObjects(library, arg);
@@ -420,14 +428,15 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   return count;
 }
 
-void CloudEnv::RegisterCloudObjects(const std::string& arg) {
+static void RegisterCloudObjects(const std::string& arg = "") {
   static std::once_flag do_once;
   std::call_once(do_once,
     [&]() {
       auto library = ObjectLibrary::Default();
       DoRegisterCloudObjects(*library, arg);
     });
-}     
+}
+}  // namespace
 
 Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value,
                                   std::unique_ptr<CloudEnv>* result) {
@@ -462,7 +471,6 @@ Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std
       s = cenv->ConfigureFromMap(copy, options);
     }
     if (s.ok() && config_options.invoke_prepare_options) {
-      copy.invoke_prepare_options = config_options.invoke_prepare_options;
       copy.env = cenv;
       s = cenv->PrepareOptions(copy);
       if (s.ok()) {
@@ -542,7 +550,7 @@ Status CloudEnv::NewAwsEnv(Env* /*base_env*/,
 Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
                            const std::shared_ptr<Logger>& logger,
                            CloudEnv** cenv) {
-  CloudEnv::RegisterCloudObjects();
+  RegisterCloudObjects();
   // Dump out cloud env options
   options.Dump(logger.get());
 
@@ -562,4 +570,90 @@ Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
 #endif
 
 }  // namespace ROCKSDB_NAMESPACE
+#ifdef USE_CLOUD
+#ifdef ROCKSDB_UNITTESTS_WITH_CUSTOM_OBJECTS_FROM_STATIC_LIBS
+static std::string ToTestBucket(const std::string& name,
+                                const std::string& path,
+                                const std::string& region = "") {
+  std::string result = name;
+  for (auto pos = result.find("_"); pos != std::string::npos;
+       pos = result.find("_", pos)) {
+    result[pos] = '.';
+  }
+  if (!path.empty()) {
+    result.append(":");
+    result.append(path);
+  }
+  if (!region.empty()) {
+    result.append("?");
+    result.append(region);
+  }
+  return result;
+}
+
+static std::string ToTestBucket(const std::string& name) {
+  // Randomize the test path so that multiple tests can run in parallel
+  srand(static_cast<unsigned int>(time(nullptr)));
+  std::string path = name + "_" + std::to_string(rand());
+  return ToTestBucket(name, "/" + path);
+}
+extern "C" {
+void RegisterCustomObjects(int argc, char** argv) {
+  std::string test_id = (argc > 0) ? argv[0] : "db_test";
+  auto slash = test_id.find_last_of("/\\");
+  if (slash != std::string::npos) {
+    test_id = test_id.substr(slash + 1);
+  }
+
+  //**TODO: When the Env is a Customizable object and can use options/map, this
+  //code can go away...
+  // ... in which case, the RegisterCloudObjects should take in the test_id to
+  // register for initialize
+  auto library = ROCKSDB_NAMESPACE::ObjectLibrary::Default();
+  library->Register<ROCKSDB_NAMESPACE::Env>(
+      "id=.*", [test_id](const std::string& uri,
+                         std::unique_ptr<ROCKSDB_NAMESPACE::Env>* guard,
+                         std::string* errmsg) {
+        ROCKSDB_NAMESPACE::ConfigOptions config_options;
+        std::unique_ptr<ROCKSDB_NAMESPACE::CloudEnv> cguard;
+        auto s = ROCKSDB_NAMESPACE::CloudEnv::CreateFromString(
+            config_options, "TEST=" + ToTestBucket(test_id) + "; " + uri,
+            &cguard);
+        if (s.ok()) {
+          auto* cimpl =
+              static_cast<ROCKSDB_NAMESPACE::CloudEnvImpl*>(cguard.get());
+          cimpl->TEST_DisableCloudManifest();
+          cimpl->TEST_SetFileDeletionDelay(std::chrono::seconds(0));
+          guard->reset(cguard.release());
+        } else {
+          *errmsg = s.ToString();
+        }
+        return guard->get();
+      });
+  library->Register<ROCKSDB_NAMESPACE::Env>(
+      "provider=.*", [test_id](const std::string& uri,
+                               std::unique_ptr<ROCKSDB_NAMESPACE::Env>* guard,
+                               std::string* errmsg) {
+        ROCKSDB_NAMESPACE::ConfigOptions config_options;
+        std::unique_ptr<ROCKSDB_NAMESPACE::CloudEnv> cguard;
+        auto s = ROCKSDB_NAMESPACE::CloudEnv::CreateFromString(
+            config_options, "TEST=" + ToTestBucket(test_id) + "; " + uri,
+            &cguard);
+        if (s.ok()) {
+          auto* cimpl =
+              static_cast<ROCKSDB_NAMESPACE::CloudEnvImpl*>(cguard.get());
+          cimpl->TEST_DisableCloudManifest();
+          cimpl->TEST_SetFileDeletionDelay(std::chrono::seconds(0));
+          guard->reset(cguard.release());
+        } else {
+          *errmsg = s.ToString();
+        }
+        return guard->get();
+      });
+
+  ROCKSDB_NAMESPACE::RegisterCloudObjects(test_id);
+}
+}
+#endif  // !ROCKSDB_UNITTESTS_WITH_CUSTOM_OBJECTS_FROM_STATIC_LIBS
+#endif  // USE_CLOUD
 #endif  // ROCKSDB_LITE
