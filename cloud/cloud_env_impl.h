@@ -27,11 +27,11 @@ class CloudEnvImpl : public CloudEnv {
   // Constructor
   CloudEnvImpl(const CloudEnvOptions& options, Env* base_env,
                const std::shared_ptr<Logger>& logger);
-  
+
   virtual ~CloudEnvImpl();
-  static const char *kClassName() { return kCloud(); }
+  static const char* kClassName() { return kCloud(); }
   virtual const char* Name() const override { return kClassName(); }
-  
+
   Status NewSequentialFile(const std::string& fname,
                            std::unique_ptr<SequentialFile>* result,
                            const EnvOptions& options) override;
@@ -226,6 +226,11 @@ class CloudEnvImpl : public CloudEnv {
       const ImmutableDBOptions& db_options) const override {
     return base_env_->OptimizeForCompactionTableRead(env_options, db_options);
   }
+
+#ifdef _WIN32_WINNT
+#undef GetFreeSpace
+#endif
+
   Status GetFreeSpace(const std::string& path, uint64_t* diskfree) override {
     return base_env_->GetFreeSpace(path, diskfree);
   }
@@ -248,7 +253,6 @@ class CloudEnvImpl : public CloudEnv {
     std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
     file_deletion_delay_ = delay;
   }
-
 
   Status PrepareOptions(const ConfigOptions& config_options) override;
   Status ValidateOptions(const DBOptions& /*db_opts*/,

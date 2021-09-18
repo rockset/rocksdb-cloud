@@ -877,7 +877,7 @@ std::string CloudEnvImpl::RemapFilename(const std::string& logical_path) const {
     return logical_path;
   }
   auto file_name = basename(logical_path);
-  uint64_t fileNumber;
+  uint64_t fileNumber = 0;
   FileType type;
   WalFileType walType;
   if (file_name == "MANIFEST") {
@@ -1497,14 +1497,14 @@ Status CloudEnvImpl::LoadCloudManifest(const std::string& local_dbname,
   if (!st.ok()) {
     return st;
   }
-  
+
   // Do the cleanup, but don't fail if the cleanup fails.
   if (!read_only) {
     st = DeleteInvisibleFiles(local_dbname);
     if (!st.ok()) {
       Log(InfoLogLevel::INFO_LEVEL, info_log_,
           "Failed to delete invisible files: %s", st.ToString().c_str());
-        // Ignore the fail
+      // Ignore the fail
       st = Status::OK();
     }
   }

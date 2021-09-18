@@ -11,7 +11,6 @@
 #include "cloud/cloud_env_impl.h"
 
 #ifdef USE_AWS
-
 #include <string.h>
 
 #include <chrono>
@@ -76,5 +75,11 @@ class AwsEnv : public CloudEnvImpl {
 };
 
 }  // namespace ROCKSDB_NAMESPACE
-
+#else
+namespace ROCKSDB_NAMESPACE {
+class AwsEnv : public CloudEnvImpl {
+ public:
+  static Status NewAwsEnv(Env* env, std::unique_ptr<CloudEnv>* cenv);
+};
+}  // namespace ROCKSDB_NAMESPACE
 #endif  // USE_AWS
