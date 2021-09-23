@@ -10,8 +10,6 @@
 
 #include "cloud/cloud_env_impl.h"
 
-#ifdef USE_AWS
-
 #include <string.h>
 
 #include <chrono>
@@ -19,6 +17,8 @@
 #include <unordered_map>
 
 namespace ROCKSDB_NAMESPACE {
+class ObjectLibrary;
+
 //
 // The S3 environment for rocksdb. This class overrides all the
 // file/dir access methods and delegates all other methods to the
@@ -65,7 +65,6 @@ class AwsEnv : public CloudEnvImpl {
   // standard-region which might not satisfy read-your-own-writes. So,
   // explicitly make the default region be us-west-2.
   static constexpr const char* default_region = "us-west-2";
-
  private:
   //
   // The AWS credentials are specified to the constructor via
@@ -74,7 +73,4 @@ class AwsEnv : public CloudEnvImpl {
   explicit AwsEnv(Env* underlying_env, const CloudEnvOptions& cloud_options,
                   const std::shared_ptr<Logger>& info_log = nullptr);
 };
-
 }  // namespace ROCKSDB_NAMESPACE
-
-#endif  // USE_AWS

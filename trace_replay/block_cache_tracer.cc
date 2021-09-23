@@ -131,7 +131,7 @@ Status BlockCacheTraceWriter::WriteBlockAccess(
     std::string rkStorage;
     if ((trace_options_.filter & kTraceFilterReferencedKey) != 0) {
       ParsedInternalKey pk;
-      Status st = ParseInternalKey(rk, &pk);
+      Status st = ParseInternalKey(rk, &pk, false);
       if (!st.ok()) {
         return st;
       }

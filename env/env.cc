@@ -1086,4 +1086,11 @@ const std::shared_ptr<FileSystem>& Env::GetFileSystem() const {
 const std::shared_ptr<SystemClock>& Env::GetSystemClock() const {
   return system_clock_;
 }
+
+std::unique_ptr<FSSequentialFile> NewLegacySequentialFileWrapper(
+    std::unique_ptr<SequentialFile>& file) {
+  return std::unique_ptr<FSSequentialFile>(
+      new LegacySequentialFileWrapper(std::move(file)));
+}
+
 }  // namespace ROCKSDB_NAMESPACE

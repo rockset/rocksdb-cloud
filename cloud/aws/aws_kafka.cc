@@ -41,12 +41,13 @@ class KafkaWritableFile : public CloudLogWritableFile {
   }
 
   ~KafkaWritableFile() {}
-  virtual Status Append(const Slice& data);
-  virtual Status Close();
-  virtual bool IsSyncThreadSafe() const;
-  virtual Status Sync();
-  virtual Status Flush();
-  virtual Status LogDelete();
+  using WritableFile::Append;
+  virtual Status Append(const Slice& data) override;
+  virtual Status Close() override;
+  virtual bool IsSyncThreadSafe() const override;
+  virtual Status Sync() override;
+  virtual Status Flush() override;
+  virtual Status LogDelete() override;
 
  private:
   Status ProduceRaw(const std::string& operation_name, const Slice& message);
@@ -181,7 +182,7 @@ class KafkaController : public CloudLogControllerImpl {
     }
   }
 
-  const char* Name() const override { return "kafka"; }
+  const char* Name() const override { return kKafkaControllerName(); }
 
   virtual Status CreateStream(const std::string& /* bucket_prefix */) override {
     // Kafka client cannot create a topic. Topics are either manually created

@@ -122,92 +122,92 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {0, OptionType::kString, OptionVerificationType::kNormal,
           OptionTypeFlags::kCompareNever,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto bucket = reinterpret_cast<BucketOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto bucket = static_cast<BucketOptions*>(addr);
             bucket->SetObjectPath(value);
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr, std::string* value) {
-            auto bucket = reinterpret_cast<const BucketOptions*>(addr);
+             const void* addr, std::string* value) {
+            auto bucket = static_cast<const BucketOptions*>(addr);
             *value = bucket->GetObjectPath();
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr1, const char* addr2, std::string* /*mismatch*/) {
-            auto bucket1 = reinterpret_cast<const BucketOptions*>(addr1);
-            auto bucket2 = reinterpret_cast<const BucketOptions*>(addr2);
+             const void* addr1, const void* addr2, std::string* /*mismatch*/) {
+            auto bucket1 = static_cast<const BucketOptions*>(addr1);
+            auto bucket2 = static_cast<const BucketOptions*>(addr2);
             return bucket1->GetObjectPath() == bucket2->GetObjectPath();
           }}},
         {"region",
          {0, OptionType::kString, OptionVerificationType::kNormal,
           OptionTypeFlags::kCompareNever,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto bucket = reinterpret_cast<BucketOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto bucket = static_cast<BucketOptions*>(addr);
             bucket->SetRegion(value);
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr, std::string* value) {
-            auto bucket = reinterpret_cast<const BucketOptions*>(addr);
+             const void* addr, std::string* value) {
+            auto bucket = static_cast<const BucketOptions*>(addr);
             *value = bucket->GetRegion();
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr1, const char* addr2, std::string* /*mismatch*/) {
-            auto bucket1 = reinterpret_cast<const BucketOptions*>(addr1);
-            auto bucket2 = reinterpret_cast<const BucketOptions*>(addr2);
+             const void* addr1, const void* addr2, std::string* /*mismatch*/) {
+            auto bucket1 = static_cast<const BucketOptions*>(addr1);
+            auto bucket2 = static_cast<const BucketOptions*>(addr2);
             return bucket1->GetRegion() == bucket2->GetRegion();
           }}},
         {"prefix",
          {0, OptionType::kString, OptionVerificationType::kNormal,
           OptionTypeFlags::kNone,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto bucket = reinterpret_cast<BucketOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto bucket = static_cast<BucketOptions*>(addr);
             bucket->SetBucketName(bucket->GetBucketName(false), value);
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr, std::string* value) {
-            auto bucket = reinterpret_cast<const BucketOptions*>(addr);
+             const void* addr, std::string* value) {
+            auto bucket = static_cast<const BucketOptions*>(addr);
             *value = bucket->GetBucketPrefix();
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr1, const char* addr2, std::string* /*mismatch*/) {
-            auto bucket1 = reinterpret_cast<const BucketOptions*>(addr1);
-            auto bucket2 = reinterpret_cast<const BucketOptions*>(addr2);
+             const void* addr1, const void* addr2, std::string* /*mismatch*/) {
+            auto bucket1 = static_cast<const BucketOptions*>(addr1);
+            auto bucket2 = static_cast<const BucketOptions*>(addr2);
             return bucket1->GetBucketPrefix() == bucket2->GetBucketPrefix();
           }}},
         {"bucket",
          {0, OptionType::kString, OptionVerificationType::kNormal,
           OptionTypeFlags::kNone,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto bucket = reinterpret_cast<BucketOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto bucket = static_cast<BucketOptions*>(addr);
             bucket->SetBucketName(value);
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr, std::string* value) {
-            auto bucket = reinterpret_cast<const BucketOptions*>(addr);
+             const void* addr, std::string* value) {
+            auto bucket = static_cast<const BucketOptions*>(addr);
             *value = bucket->GetBucketName(false);
             return Status::OK();
           },
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const char* addr1, const char* addr2, std::string* /*mismatch*/) {
-            auto bucket1 = reinterpret_cast<const BucketOptions*>(addr1);
-            auto bucket2 = reinterpret_cast<const BucketOptions*>(addr2);
+             const void* addr1, const void* addr2, std::string* /*mismatch*/) {
+            auto bucket1 = static_cast<const BucketOptions*>(addr1);
+            auto bucket2 = static_cast<const BucketOptions*>(addr2);
             return bucket1->GetBucketName(false) == bucket2->GetBucketName(false);
           }}},
         {"TEST",
          {0, OptionType::kUnknown, OptionVerificationType::kAlias,
           OptionTypeFlags::kNone,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto bucket = reinterpret_cast<BucketOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto bucket = static_cast<BucketOptions*>(addr);
             std::string name = value;
             std::string path;
             std::string region;
@@ -225,6 +225,7 @@ static std::unordered_map<std::string, OptionTypeInfo>
             return Status::OK();
           }}},
 };
+
 
 static CloudEnvOptions dummy_ceo_options;
 template <typename T1>
@@ -271,9 +272,9 @@ static std::unordered_map<std::string, OptionTypeInfo>
           (OptionTypeFlags::kShared | OptionTypeFlags::kCompareLoose |
            OptionTypeFlags::kCompareNever | OptionTypeFlags::kAllowNull),
           [](const ConfigOptions& opts, const std::string& /*name*/,
-             const std::string& value, char* addr) {
+             const std::string& value, void* addr) {
             auto provider =
-                reinterpret_cast<std::shared_ptr<CloudStorageProvider>*>(addr);
+                static_cast<std::shared_ptr<CloudStorageProvider>*>(addr);
             return CloudStorageProvider::CreateFromString(opts, value,
                                                           provider);
           }}},
@@ -284,9 +285,9 @@ static std::unordered_map<std::string, OptionTypeInfo>
            OptionTypeFlags::kCompareNever | OptionTypeFlags::kAllowNull),
           // Creates a new TableFactory based on value
           [](const ConfigOptions& opts, const std::string& /*name*/,
-             const std::string& value, char* addr) {
+             const std::string& value, void* addr) {
             auto controller =
-                reinterpret_cast<std::shared_ptr<CloudLogController>*>(addr);
+                static_cast<std::shared_ptr<CloudLogController>*>(addr);
             Status s =
                 CloudLogController::CreateFromString(opts, value, controller);
             return s;
@@ -303,8 +304,8 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {0, OptionType::kUnknown, OptionVerificationType::kAlias,
           OptionTypeFlags::kNone,
           [](const ConfigOptions& /*opts*/, const std::string& /*name*/,
-             const std::string& value, char* addr) {
-            auto copts = reinterpret_cast<CloudEnvOptions*>(addr);
+             const std::string& value, void* addr) {
+            auto copts = static_cast<CloudEnvOptions*>(addr);
             std::string name;
             std::string path;
             std::string region;
@@ -337,27 +338,26 @@ Status CloudEnvOptions::Configure(const ConfigOptions& config_options,
   if (s.ok()) {
     s = OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
                                     &cloud_env_option_type_info,
-                                    CloudEnvOptions::kName(), opts_str, reinterpret_cast<char*>(this));
+                                    CloudEnvOptions::kName(), opts_str, this);
     if (!s.ok()) { // Something went wrong.  Attempt to reset
       OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
                                   &cloud_env_option_type_info,
-                                  CloudEnvOptions::kName(), current, reinterpret_cast<char*>(this));
+                                  CloudEnvOptions::kName(), current, this);
     }
   }
   return s;
 }
   
 Status CloudEnvOptions::Serialize(const ConfigOptions& config_options, std::string* value) const {
-  return OptionTypeInfo::SerializeStruct(config_options, CloudEnvOptions::kName(),
-                                         &cloud_env_option_type_info,
-                                         CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
+  return OptionTypeInfo::SerializeStruct(
+      config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+      CloudEnvOptions::kName(), this, value);
 }
 
 CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base,
                    const std::shared_ptr<Logger>& logger)
     : cloud_env_options(options), base_env_(base), info_log_(logger) {
-  ConfigurableHelper::RegisterOptions(*this, &cloud_env_options,
-                                      &cloud_env_option_type_info);
+  RegisterOptions(&cloud_env_options, &cloud_env_option_type_info);
 }
 
 CloudEnv::~CloudEnv() {
@@ -365,6 +365,80 @@ CloudEnv::~CloudEnv() {
   cloud_env_options.storage_provider.reset();
 }
 
+//**TODO: This method will eventually go away and be replaced by the Env::CreateFromString
+Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value, std::unique_ptr<CloudEnv>* result) {
+  std::string id;
+  std::unordered_map<std::string, std::string> options;  
+  Status s;
+
+  RegisterCloudObjects();
+  if (value.find("=") == std::string::npos) {
+    id = value;
+  } else {
+    s = StringToMap(value, &options);
+    if (s.ok()) {
+      auto iter = options.find("id");
+      if (iter != options.end()) {
+        id = iter->second;
+        options.erase(iter);
+      } else {
+        s = Status::InvalidArgument("Name property is missing");
+      }
+    }
+  }
+  std::unique_ptr<Env> env;
+  ConfigOptions copy = config_options;
+  copy.invoke_prepare_options = false; // Prepare here, not there
+  s = ObjectRegistry::NewInstance()->NewUniqueObject(id, &env);
+
+  if (s.ok()) {
+    CloudEnv* cenv = static_cast<CloudEnv*>(env.get());
+    if (!options.empty()) {
+      s = cenv->ConfigureFromMap(copy, options);
+    }
+    if (s.ok() && config_options.invoke_prepare_options) {
+      copy.invoke_prepare_options = config_options.invoke_prepare_options;
+      copy.env = cenv;
+      s = cenv->PrepareOptions(copy);
+    }
+  }
+  if (s.ok()) {
+    result->reset(static_cast<CloudEnv*>(env.release()));
+  }
+
+  return s;
+}
+
+Status CloudEnv::TEST_Initialize(const std::string & test) {
+  std::string bucket = "dbtest.";
+  std::string object = test;
+  std::string region;
+  auto dot = bucket.find(".");
+  if (dot != std::string::npos) {
+    bucket = object.substr(0, dot);
+    object = object.substr(dot+1);
+  }
+  if (object.empty()) {
+    object = "cloud_test_";
+  } else {
+    object.append("_");
+  }
+  // Randomize the test path so that multiple tests can run in parallel
+  srand(static_cast<unsigned int>(time(nullptr)));
+  object += std::to_string(rand());
+  cloud_env_options.TEST_Initialize(bucket, object, region); 
+  std::string test_dir;
+  Status s = base_env_->GetTestDirectory(&test_dir);
+  if (s.ok()) {
+    s = base_env_->NewLogger(test_dir + "/rocksdb-cloud.log", &info_log_);
+  }
+  if (!s.ok()) {
+    return s;
+  }
+  info_log_->SetInfoLogLevel(InfoLogLevel::DEBUG_LEVEL);
+  return s;
+}
+  
 Status CloudEnv::NewAwsEnv(
     Env* base_env, const std::string& src_cloud_bucket,
     const std::string& src_cloud_object, const std::string& src_cloud_region,
@@ -427,55 +501,6 @@ void CloudEnv::RegisterCloudObjects(const std::string& arg) {
 }     
 
 Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value,
-                                  std::unique_ptr<CloudEnv>* result) {
-  RegisterCloudObjects();
-  std::string id;
-  std::unordered_map<std::string, std::string> options;  
-  Status s;
-  if (value.find("=") == std::string::npos) {
-    id = value;
-  } else {
-    s = StringToMap(value, &options);
-    if (s.ok()) {
-      auto iter = options.find("id");
-      if (iter != options.end()) {
-        id = iter->second;
-        options.erase(iter);
-      } else {
-        id = CloudEnvImpl::kClassName();
-      }
-    }
-  }
-  if (!s.ok()) {
-    return s;
-  }
-  ConfigOptions copy = config_options;
-  std::unique_ptr<Env> env;
-  copy.invoke_prepare_options = false;  // Prepare here, not there
-  s = ObjectRegistry::NewInstance()->NewUniqueObject<Env>(id, &env);
-  if (s.ok()) {
-    CloudEnv* cenv = static_cast<CloudEnv*>(env.get());
-    if (!options.empty()) {
-      s = cenv->ConfigureFromMap(copy, options);
-    }
-    if (s.ok() && config_options.invoke_prepare_options) {
-      copy.invoke_prepare_options = config_options.invoke_prepare_options;
-      copy.env = cenv;
-      s = cenv->PrepareOptions(copy);
-      if (s.ok()) {
-        Options tmp;
-        s = cenv->ValidateOptions(tmp, tmp);
-      }
-    }
-  }
-  
-  if (s.ok()) {
-    result->reset(static_cast<CloudEnv*>(env.release()));
-  }
-  
-  return s;  
-}
-Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std::string& value,
                                   const CloudEnvOptions& cloud_options,
                                   std::unique_ptr<CloudEnv>* result) {
   RegisterCloudObjects();
@@ -528,14 +553,6 @@ Status CloudEnv::CreateFromString(const ConfigOptions& config_options, const std
   return s;  
 }
   
-#ifndef USE_AWS
-Status CloudEnv::NewAwsEnv(Env* /*base_env*/,
-                           const CloudEnvOptions& /*options*/,
-                           const std::shared_ptr<Logger>& /*logger*/,
-                           CloudEnv** /*cenv*/) {
-  return Status::NotSupported("RocksDB Cloud not compiled with AWS support");
-}
-#else
 Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
                            const std::shared_ptr<Logger>& logger,
                            CloudEnv** cenv) {
@@ -543,20 +560,14 @@ Status CloudEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& options,
   // Dump out cloud env options
   options.Dump(logger.get());
 
-  Status st = AwsEnv::NewAwsEnv(base_env, options, logger, cenv);
-  if (st.ok()) {
-    // store a copy of the logger
-    CloudEnvImpl* cloud = static_cast<CloudEnvImpl*>(*cenv);
-    cloud->info_log_ = logger;
-
-    // start the purge thread only if there is a destination bucket
-    if (options.dest_bucket.IsValid() && options.run_purger) {
-      cloud->purge_thread_ = std::thread([cloud] { cloud->Purger(); });
-    }
-  }
-  return st;
+  return AwsEnv::NewAwsEnv(base_env, options, logger, cenv);
 }
-#endif
-
 }  // namespace ROCKSDB_NAMESPACE
 #endif  // ROCKSDB_LITE
+#ifdef ROCKSDB_UNITTESTS_WITH_CUSTOM_OBJECTS_FROM_STATIC_LIBS
+extern "C" {
+void RegisterCustomObjects(int argc, char** argv);
+  auto library = ObjectLibrary::Default();
+  DoRegisterCloudObjects(*(library.get()), "test");
+}
+#endif  // !ROCKSDB_UNITTESTS_WITH_CUSTOM_OBJECTS_FROM_STATIC_LIBS

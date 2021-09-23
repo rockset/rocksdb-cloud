@@ -17,6 +17,7 @@
 #include "port/port.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"
@@ -166,18 +167,18 @@ Status AwsCloudAccessCredentials::GetCredentialsProvider(
   return status;
 }
 
-#ifdef USE_AWS
-
 //
 // The AWS credentials are specified to the constructor via
 // access_key_id and secret_key.
 //
 AwsEnv::AwsEnv(Env* underlying_env, const CloudEnvOptions& _cloud_env_options,
                const std::shared_ptr<Logger>& info_log)
-    : CloudEnvImpl(_cloud_env_options, underlying_env, info_log) {
+  : CloudEnvImpl(_cloud_env_options, underlying_env, info_log) {
+#ifdef USE_AWS
   Aws::InitAPI(Aws::SDKOptions());
+#endif //USE_AWS
 }
-
+  
 // If you do not specify a region, then S3 buckets are created in the
 // standard-region which might not satisfy read-your-own-writes. So,
 // explicitly make the default region be us-west-2.
@@ -200,8 +201,8 @@ Status AwsEnv::PrepareOptions(const ConfigOptions& options) {
     // If the user has not specified a storage provider, then use the default
     // provider for this CloudType
     Status s = CloudStorageProvider::CreateFromString(
-        options, CloudStorageProviderImpl::kS3(),
-        &cloud_env_options.storage_provider);
+                                                      options, CloudStorageProviderImpl::kS3(),
+                                                      &cloud_env_options.storage_provider);
     if (!s.ok()) {
       return s;
     }
@@ -209,9 +210,14 @@ Status AwsEnv::PrepareOptions(const ConfigOptions& options) {
   return CloudEnvImpl::PrepareOptions(options);
 }
 
-void AwsEnv::Shutdown() { Aws::ShutdownAPI(Aws::SDKOptions()); }
+void AwsEnv::Shutdown() {
+#ifdef USE_AWS
+  Aws::ShutdownAPI(Aws::SDKOptions());
+#endif // USE_AWS
+}
 
 
+#ifdef USE_AWS
 // The factory method for creating an S3 Env
 Status AwsEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& cloud_options,
                          const std::shared_ptr<Logger>& info_log,
@@ -230,6 +236,11 @@ Status AwsEnv::NewAwsEnv(Env* base_env, const CloudEnvOptions& cloud_options,
     *cenv = aenv.release();
   }
   return status;
+}
+#else
+Status AwsEnv::NewAwsEnv(Env*, const CloudEnvOptions&,
+                         const std::shared_ptr<Logger>&, CloudEnv**) {
+  return Status::NotSupported("AWS not supported");
 }
 #endif  // USE_AWS
 

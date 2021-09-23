@@ -4184,7 +4184,7 @@ Status VersionSet::ProcessManifestWrites(
       }
       if (s.ok()) {
         if (!db_options_->disable_manifest_sync) {
-          io_s = SyncManifest(env_, db_options_, descriptor_log_->file());
+          io_s = SyncManifest(db_options_, descriptor_log_->file());
           manifest_io_status = io_s;
         }
         TEST_SYNC_POINT_CALLBACK(

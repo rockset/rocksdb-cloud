@@ -279,7 +279,7 @@ Status CloudStorageProviderImpl::PrepareOptions(const ConfigOptions& options) {
   }
   return st;
 }
-
+  
 CloudStorageProviderImpl::CloudStorageProviderImpl() : rng_(time(nullptr)) {}
 
 CloudStorageProviderImpl::~CloudStorageProviderImpl() {}

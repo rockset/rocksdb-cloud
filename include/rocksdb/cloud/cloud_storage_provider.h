@@ -13,6 +13,7 @@ class CloudEnv;
 class CloudStorageProvider;
 class Logger;
 struct ColumnFamilyOptions;
+struct ConfigOptions;
 struct DBOptions;
 
 class CloudStorageReadableFile : virtual public SequentialFile,

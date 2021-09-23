@@ -51,12 +51,14 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
                                const EnvOptions& options);
 
   virtual ~CloudStorageWritableFileImpl();
+  using CloudStorageWritableFile::Append;
   virtual Status Append(const Slice& data) override {
     assert(status_.ok());
     // write to temporary file
     return local_file_->Append(data);
   }
 
+  using CloudStorageWritableFile::PositionedAppend;
   Status PositionedAppend(const Slice& data, uint64_t offset) override {
     return local_file_->PositionedAppend(data, offset);
   }
@@ -101,7 +103,7 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
  public:
   static Status CreateS3Provider(std::unique_ptr<CloudStorageProvider>* result);
   static const char* kS3() { return "s3"; }
-
+  
   CloudStorageProviderImpl();
   virtual ~CloudStorageProviderImpl();
   Status GetCloudObject(const std::string& bucket_name,

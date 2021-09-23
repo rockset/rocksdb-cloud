@@ -5,8 +5,8 @@
 #include <memory>
 #include <unordered_map>
 
-#include "rocksdb/configurable.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
@@ -175,7 +175,6 @@ class AwsCloudOptions {
 // Environent used for the cloud.
 //
 class CloudEnvOptions {
- private:
  public:
   static const char* kName() { return "CloudEnvOptions"; }
   BucketOptions src_bucket;
@@ -399,7 +398,8 @@ typedef std::map<std::string, std::string> DbidList;
 //
 // The Cloud environment
 //
-class CloudEnv : public Env, public Configurable {
+//**TODO: Configurable is temporary here until Env inherits from it...
+class CloudEnv : public Env, public Configurable { 
  protected:
   CloudEnvOptions cloud_env_options;
   Env* base_env_;  // The underlying env
@@ -413,9 +413,9 @@ class CloudEnv : public Env, public Configurable {
 
   static void RegisterCloudObjects(const std::string& mode = "");
   static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,
+                                 const CloudEnvOptions& cloud_options,
                                  std::unique_ptr<CloudEnv>* env);
   static Status CreateFromString(const ConfigOptions& config_options, const std::string& id,
-                                 const CloudEnvOptions& cloud_options,
                                  std::unique_ptr<CloudEnv>* env);
   static const char* kCloud() { return "cloud"; }
   static const char* kAws() { return "aws"; }
@@ -524,6 +524,8 @@ class CloudEnv : public Env, public Configurable {
   static Status NewAwsEnv(Env* base_env, const CloudEnvOptions& env_options,
                           const std::shared_ptr<Logger>& logger,
                           CloudEnv** cenv);
+protected:
+  Status TEST_Initialize(const std::string& name) override;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

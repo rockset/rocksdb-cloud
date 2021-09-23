@@ -265,7 +265,7 @@ Status ConfigurableHelper::ConfigureOptions(
     std::unordered_map<std::string, std::string>* unused) {
   std::unordered_map<std::string, std::string> remaining = opts_map;
   Status s = Status::OK();
-  if (!opts_map.empty()) {
+  if (!remaining.empty()) {
 #ifndef ROCKSDB_LITE
     for (const auto& iter : configurable.options_) {
       s = ConfigureSomeOptions(config_options, configurable, *(iter.type_map),

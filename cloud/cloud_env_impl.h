@@ -5,9 +5,11 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 #include "cloud/cloud_manifest.h"
 #include "rocksdb/cloud/cloud_env_options.h"
+#include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
@@ -31,6 +33,13 @@ class CloudEnvImpl : public CloudEnv {
   virtual ~CloudEnvImpl();
   static const char *kClassName() { return kCloud(); }
   virtual const char* Name() const override { return kClassName(); }
+  static const char *kAwsName() { return "aws"; }
+  
+  static Status CreateAwsEnv(std::unique_ptr<CloudEnv>* cenv) {
+    return CreateAwsEnv(Env::Default(), CloudEnvOptions(), nullptr, cenv);
+  }
+  static Status CreateAwsEnv(Env *base, const CloudEnvOptions& options, const std::shared_ptr<Logger>& logger, std::unique_ptr<CloudEnv>* cenv);
+  
   
   Status NewSequentialFile(const std::string& fname,
                            std::unique_ptr<SequentialFile>* result,
@@ -270,6 +279,8 @@ class CloudEnvImpl : public CloudEnv {
     return kDbIdRegistry() + dbid;
   }
 
+  Status TEST_Initialize(const std::string& name) override;
+  
   // Checks to see if the input fname exists in the dest or src bucket
   Status ExistsCloudObject(const std::string& fname);
 

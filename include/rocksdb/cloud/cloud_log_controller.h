@@ -4,13 +4,13 @@
 #include <atomic>
 #include <thread>
 
+
 #include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
-
 namespace ROCKSDB_NAMESPACE {
 class CloudEnv;
-class CloudEnvOptions;
+struct ConfigOptions;
 
 // Creates a new file, appends data to a file or delete an existing file via
 // logging into a cloud stream (such as Kinesis).
@@ -21,23 +21,17 @@ class CloudLogWritableFile : public WritableFile {
                        const EnvOptions& options);
   virtual ~CloudLogWritableFile();
 
-  virtual Status Flush() {
+  virtual Status Flush() override {
     assert(status_.ok());
     return status_;
   }
 
-  virtual Status Sync() {
+  virtual Status Sync() override {
     assert(status_.ok());
     return status_;
   }
 
   virtual Status status() { return status_; }
-
-  // Appends data to the file. If the file doesn't exist, it'll get created.
-  virtual Status Append(const Slice& data) = 0;
-
-  // Closes a file by writing an EOF marker to the Cloud stream.
-  virtual Status Close() = 0;
 
   // Delete a file by logging a delete operation to the Cloud stream.
   virtual Status LogDelete() = 0;

@@ -339,4 +339,9 @@ class CompositeEnvWrapper : public CompositeEnv {
  private:
   Env* env_target_;
 };
+
+// Temporary method until CloudEnv uses FileSystem
+std::unique_ptr<FSSequentialFile> NewLegacySequentialFileWrapper(
+    std::unique_ptr<SequentialFile>& file);
+
 }  // namespace ROCKSDB_NAMESPACE

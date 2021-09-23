@@ -35,8 +35,7 @@ class SstFileManagerImpl : public SstFileManager {
   ~SstFileManagerImpl();
 
   // DB will call OnAddFile whenever a new sst file is added.
-  virtual Status OnAddFile(const std::string& file_path,
-                           bool compaction = false);
+  virtual Status OnAddFile(const std::string& file_path);
 
   // Overload where size of the file is provided by the caller rather than
   // queried from the filesystem. This is an optimization.

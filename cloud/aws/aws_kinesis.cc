@@ -55,6 +55,7 @@ class KinesisWritableFile : public CloudLogWritableFile {
   }
   virtual ~KinesisWritableFile() {}
 
+  using CloudLogWritableFile::Append;
   virtual Status Append(const Slice& data) override;
   virtual Status Close() override;
   virtual Status LogDelete() override;
@@ -188,7 +189,7 @@ class KinesisController : public CloudLogControllerImpl {
     }
   }
 
-  const char* Name() const override { return "kinesis"; }
+  const char* Name() const override { return kKinesisControllerName(); }
 
   Status CreateStream(const std::string& bucket) override;
   Status WaitForStreamReady(const std::string& bucket) override;

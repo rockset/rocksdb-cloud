@@ -9,7 +9,6 @@
 
 namespace ROCKSDB_NAMESPACE {
 class CloudEnv;
-class CloudEnvOptions;
 
 class CloudLogControllerImpl : public CloudLogController {
  public:
@@ -19,6 +18,8 @@ class CloudLogControllerImpl : public CloudLogController {
   static constexpr const char* kCacheDir = "/tmp/ROCKSET";
   // Delay in Cloud Log stream: writes to read visibility
   static const std::chrono::microseconds kRetryPeriod;
+  static const char *kKinesisControllerName() { return "kinesis"; }
+  static const char *kKafkaControllerName() { return "kafka"; }
   static Status CreateKinesisController(
       std::unique_ptr<CloudLogController>* result);
   static Status CreateKafkaController(
