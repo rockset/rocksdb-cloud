@@ -114,7 +114,9 @@ class AwsS3ClientWrapper {
       const Aws::Client::ClientConfiguration& config,
       const CloudEnvOptions& cloud_options)
       : cloud_request_callback_(cloud_options.cloud_request_callback) {
-    if (creds) {
+    if (cloud_options.s3_client_factory) {
+      client_ = cloud_options.s3_client_factory(creds, config);
+    } else if (creds) {
       client_ = std::make_shared<Aws::S3::S3Client>(creds, config);
     } else {
       client_ = std::make_shared<Aws::S3::S3Client>(config);
@@ -936,7 +938,8 @@ Status S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
             Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
             std::ios_base::out | std::ios_base::trunc);
       }
-      return new IOStreamWithOwnedBuf<WritableFileStreamBuf>(
+      return Aws::New<IOStreamWithOwnedBuf<WritableFileStreamBuf>>(
+          Aws::Utils::ARRAY_ALLOCATION_TAG,
           std::unique_ptr<WritableFileStreamBuf>(new WritableFileStreamBuf(
               std::unique_ptr<WritableFileWriter>(new WritableFileWriter(
                   std::move(file), destination, foptions)))));
