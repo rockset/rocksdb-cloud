@@ -145,6 +145,8 @@ PLATFORM_SHARED_VERSIONED=true
 # generic port files (working on all platform by #ifdef) go directly in /port
 GENERIC_PORT_FILES=`cd "$ROCKSDB_ROOT"; find port -name '*.cc' | tr "\n" " "`
 
+echo "BENDEBUG running build_detect_platform on OS $TARGET_OS"  >&2
+
 # On GCC, we pick libc's memcmp over GCC's memcmp via -fno-builtin-memcmp
 case "$TARGET_OS" in
     Darwin)
@@ -174,9 +176,12 @@ case "$TARGET_OS" in
         if test -z "$ROCKSDB_USE_IO_URING"; then
             ROCKSDB_USE_IO_URING=1
         fi
+        echo "BENDEBUG ROCKSDB_USE_IO_URING? $ROCKSDB_USE_IO_URING"  >&2
         if test "$ROCKSDB_USE_IO_URING" -ne 0; then
             # check for liburing
-            $CXX $PLATFORM_CXXFLAGS -x c++ - -luring -o /dev/null 2>/dev/null  <<EOF
+            echo "BENDEBUG do we support liburing?"  >&2
+            echo "BENDEBUG flags $CXX $PLATFORM_CXXFLAGS"  >&2
+            $CXX $PLATFORM_CXXFLAGS -x c++ - -luring  <<EOF
               #include <liburing.h>
               int main() {
                 struct io_uring ring;
@@ -185,6 +190,7 @@ case "$TARGET_OS" in
               }
 EOF
             if [ "$?" = 0 ]; then
+                echo "BENDEBUG We do!"  >&2
                 PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -luring"
                 COMMON_FLAGS="$COMMON_FLAGS -DROCKSDB_IOURING_PRESENT"
             fi

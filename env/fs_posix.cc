@@ -13,6 +13,7 @@
 #ifndef ROCKSDB_NO_DYNAMIC_EXTENSION
 #include <dlfcn.h>
 #endif
+#include <iostream>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -1033,6 +1034,7 @@ class PosixFileSystem : public FileSystem {
 
 #ifdef ROCKSDB_IOURING_PRESENT
   bool IsIOUringEnabled() {
+    std::cerr << "BENDEBUG RocksDbIOUringEnable " << RocksDbIOUringEnable << ", " << RocksDbIOUringEnable() << std::endl;
     if (RocksDbIOUringEnable && RocksDbIOUringEnable()) {
       return true;
     } else {

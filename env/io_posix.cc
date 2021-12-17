@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <algorithm>
+#include <iostream>
 #if defined(OS_LINUX)
 #include <linux/fs.h>
 #ifndef FALLOC_FL_KEEP_SIZE
@@ -624,12 +625,17 @@ IOStatus PosixRandomAccessFile::MultiRead(FSReadRequest* reqs,
       iu = CreateIOUring();
       if (iu != nullptr) {
         thread_local_io_urings_->Reset(iu);
+      } else {
+        std::cerr << "BENDEBUG CreateIOUring returned nullptr" << std::endl;
       }
     }
+  } else {
+    std::cerr << "BENDEBUG no thread_local_io_urings_" << std::endl;
   }
 
   // Init failed, platform doesn't support io_uring. Fall back to
   // serialized reads
+  std::cerr << "BENDEBUG is iu available? " << (iu != nullptr) << std::endl;
   if (iu == nullptr) {
     return FSRandomAccessFile::MultiRead(reqs, num_reqs, options, dbg);
   }
@@ -792,6 +798,7 @@ IOStatus PosixRandomAccessFile::MultiRead(FSReadRequest* reqs,
   }
   return ios;
 #else
+  std::cerr << "BENDEBUG is iu available? ROCKSDB_IOURING_PRESENT is not set" << std::endl;
   return FSRandomAccessFile::MultiRead(reqs, num_reqs, options, dbg);
 #endif
 }
