@@ -3,6 +3,7 @@
 
 #include "cloud/manifest_reader.h"
 
+#include "cloud/aws/aws_env.h"
 #include "cloud/cloud_manifest.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
@@ -15,9 +16,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-ManifestReader::ManifestReader(std::shared_ptr<Logger> info_log, CloudEnv* cenv,
-                               const std::string& bucket_prefix)
-    : info_log_(info_log), cenv_(cenv), bucket_prefix_(bucket_prefix) {}
+ManifestReader::ManifestReader(CloudEnv* cenv, const std::string& bucket_prefix)
+    : cenv_(cenv), bucket_prefix_(bucket_prefix) {
+  info_log_ = cenv_->GetLogger();
+}
 
 ManifestReader::~ManifestReader() {}
 

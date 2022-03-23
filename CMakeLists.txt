@@ -185,7 +185,7 @@ endif()
 
 if(WITH_AWS)
   find_package(AWSSDK REQUIRED COMPONENTS s3 transfer kinesis)
-  add_definitions(-DUSE_AWS)
+  add_definitions(-DUSE_AWS -DUSE_CLOUD)
   include_directories(${AWS_INCLUDE_DIR})
   list(APPEND THIRDPARTY_LIBS ${AWSSDK_LINK_LIBRARIES})
 endif()
@@ -947,6 +947,7 @@ set(SOURCES
         cloud/cloud_scheduler.cc
         cloud/cloud_storage_provider.cc
         cloud/cloud_file_cache.cc
+        cloud/mock_cloud_storage_provider.cc
         db/db_impl/db_impl_remote_compaction.cc
         $<TARGET_OBJECTS:build_version>)
 

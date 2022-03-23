@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "cloud/aws/aws_env.h"
 #include "db/db_impl/db_impl.h"
 #include "file/filename.h"
 #include "rocksdb/cache.h"
@@ -876,18 +877,11 @@ class DBTestBase : public testing::Test {
     kEnd,
   };
 
-  // The types of envs that we want to test with
-  enum OptionConfigEnv {
-    kDefaultEnv = 0,  // posix env
-    kAwsEnv = 1,      // aws env
-    kEndEnv = 2,
-  };
-  int option_env_;
-
  public:
   std::string dbname_;
   std::string alternative_wal_dir_;
   std::string alternative_db_log_dir_;
+  bool is_cloud_env_;
   MockEnv* mem_env_;
   Env* encrypted_env_;
   SpecialEnv* env_;
@@ -897,8 +891,6 @@ class DBTestBase : public testing::Test {
 
   int option_config_;
   Options last_options_;
-
-  Env* s3_env_;
 
   // Skip some options, as they may not be applicable to a specific test.
   // To add more skip constants, use values 4, 8, 16, etc.
