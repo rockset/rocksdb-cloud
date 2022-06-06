@@ -5,11 +5,13 @@
 #include <cinttypes>
 
 #include "cloud/filename.h"
+#include "db/column_family.h"
 #include "db/db_impl/db_impl.h"
 #include "file/file_util.h"
 #include "file/filename.h"
 #include "logging/logging.h"
 #include "rocksdb/db.h"
+#include "rocksdb/listener.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/table.h"
@@ -29,6 +31,32 @@ class Listener : public ReplicationLogListener {
   enum State { OPEN, RECOVERY, TAILING };
 
   void setState(State state) { state_ = state; }
+
+  std::string NewReplicationSequence() override {
+    assert(state_ == TAILING);
+    {
+      MutexLock lock(log_records_mutex_);
+      return std::to_string(log_records_->size());
+    }
+  }
+
+  bool OnReplicationLogRecord(Slice /* replication_sequence */,
+                              ReplicationLogRecord record) override {
+    // size_t seq_num = std::atoi(replication_sequence.data());
+    bool matched = false;
+    {
+      MutexLock lock(log_records_mutex_);
+      // TODO(wei): enable this assertion check once we fix the bug of invalid kMemtableSwitch
+      // and kManifestWrite ordering, which can be caused when memtable switch and manifest update
+      // are executed concurrently
+      // assert(seq_num == log_records_->size());
+      matched = true;
+    }
+    if (matched) {
+      OnReplicationLogRecord(std::move(record));
+    }
+    return matched;
+  }
 
   std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
     // We should't be producing replication log records during open
@@ -120,6 +148,8 @@ class ReplicationTest : public testing::Test {
     return follower_cfs_;
   }
 
+
+
   ColumnFamilyHandle* leaderCF(const std::string& name) const {
     auto pos = leader_cfs_.find(name);
     assert(pos != leader_cfs_.end());
@@ -131,13 +161,28 @@ class ReplicationTest : public testing::Test {
     return pos->second.get();
   }
 
-  DB* openLeader();
+  ColumnFamilyData* leaderCFD(const std::string& name) const {
+    auto* handle = leaderCF(name);
+    return static_cast_with_check<ColumnFamilyHandleImpl>(handle)->cfd();
+  }
+  ColumnFamilyData* followerCFD(const std::string& name) const {
+    auto* handle = followerCF(name);
+    return static_cast_with_check<ColumnFamilyHandleImpl>(handle)->cfd();
+  }
+  
+  DB* openLeader() {
+    return openLeader(leaderOptions());
+  }
+  DB* openLeader(Options options);
   void closeLeader() {
     leader_cfs_.clear();
     leader_db_.reset();
   }
 
-  DB* openFollower();
+  DB* openFollower() {
+    return openFollower(leaderOptions());
+  }
+  DB* openFollower(Options options);
 
   void closeFollower() {
     follower_cfs_.clear();
@@ -157,6 +202,37 @@ class ReplicationTest : public testing::Test {
 
   void createColumnFamily(std::string name);
   void deleteColumnFamily(std::string name);
+
+  DB* currentLeader() const {
+    return leader_db_.get();
+  }
+  DB* currentFollower() const {
+    return follower_db_.get();
+  }
+
+  // Check that CFs in leader and follower have the same next_log_num for all
+  // switched memtables
+  void verifyNextLogNumConsistency() const {
+    for (const auto& cf : leader_cfs_) {
+      verifyNextLogNumConsistency(cf.first);
+    }
+  }
+
+  void verifyNextLogNumConsistency(const std::string& name) const {
+    auto leader_cfd = leaderCFD(name);
+    auto follower_cfd = followerCFD(name);
+    ASSERT_TRUE(leader_cfd != nullptr && follower_cfd != nullptr);
+    ASSERT_EQ(leader_cfd->imm()->NumNotFlushed(),
+              follower_cfd->imm()->NumNotFlushed());
+    ASSERT_EQ(leader_cfd->imm()->NumFlushed(),
+              follower_cfd->imm()->NumFlushed());
+    auto leader_lognums = leader_cfd->imm()->TEST_GetNextLogNumbers();
+    auto follower_lognums = follower_cfd->imm()->TEST_GetNextLogNumbers();
+    ASSERT_EQ(leader_lognums.size(), follower_lognums.size());
+    for (size_t i = 0; i < leader_lognums.size(); i++) {
+      ASSERT_EQ(leader_lognums[i], follower_lognums[i]);
+    }
+  }
 
  private:
   std::string test_dir_;
@@ -185,7 +261,8 @@ Options ReplicationTest::leaderOptions() const {
   return options;
 }
 
-DB* ReplicationTest::openLeader() {
+
+DB* ReplicationTest::openLeader(Options options) {
   bool firstOpen = log_records_.empty();
   auto dbname = test_dir_ + "/leader";
 
@@ -196,7 +273,6 @@ DB* ReplicationTest::openLeader() {
     cf_names.push_back(kDefaultColumnFamilyName);
   }
 
-  auto options = leaderOptions();
   auto listener =
       std::make_shared<Listener>(&log_records_mutex_, &log_records_);
   options.replication_log_listener = listener;
@@ -238,7 +314,7 @@ DB* ReplicationTest::openLeader() {
   return db;
 }
 
-DB* ReplicationTest::openFollower() {
+DB* ReplicationTest::openFollower(Options options) {
   auto dbname = test_dir_ + "/follower";
 
   std::vector<std::string> cf_names;
@@ -247,7 +323,6 @@ DB* ReplicationTest::openFollower() {
     cf_names.push_back(kDefaultColumnFamilyName);
   }
 
-  auto options = leaderOptions();
   options.env = &follower_env_;
   options.disable_auto_compactions = true;
   options.write_buffer_size = 100 << 20;
@@ -515,6 +590,83 @@ TEST_F(ReplicationTest, MultiColumnFamily) {
   EXPECT_EQ(followerColumnFamilies().count(cf(9)), 0);
 }
 
+class TestEventListener: public EventListener {
+  public:
+    explicit TestEventListener(ReplicationTest* testInstance): testInstance_(testInstance) { }
+    void OnFlushCompleted(DB*, const FlushJobInfo& info) override {
+      ASSERT_EQ(info.smallest_seqno, info.largest_seqno);
+      if (info.smallest_seqno == seq1) {  // the first memtable is flushed
+        testInstance_->catchUpFollower();
+        ASSERT_EQ(1,
+                  testInstance_->leaderCFD("default")->imm()->NumNotFlushed());
+        ASSERT_EQ(
+            1, testInstance_->followerCFD("default")->imm()->NumNotFlushed());
+        testInstance_->verifyNextLogNumConsistency();
+      } else if (info.smallest_seqno == seq2) { // the second memtable is flushed
+        testInstance_->catchUpFollower();
+        ASSERT_EQ(0,
+                  testInstance_->leaderCFD("default")->imm()->NumNotFlushed());
+        ASSERT_EQ(
+            0, testInstance_->followerCFD("default")->imm()->NumNotFlushed());
+      }
+    }
+
+    std::atomic<SequenceNumber> seq1{0};
+    std::atomic<SequenceNumber> seq2{0};
+  private:
+    ReplicationTest* testInstance_;
+};
+
+// Verifies next_log_num of memtables in `imm` is consistent between leader and
+// follower.
+//
+// When a memtable is flushed on leader, and follower gets the manifest updates,
+// follower will try to remove all the flushed memtables. This test verifies
+// that follower only removes the flushed memtables
+//
+// We first create two unflushed memtables on both leader and follower, then
+// flush the memtables one by one. Whenever a memtable is flushed, we catch the
+// event and check the next log number consistency between leader and follower
+TEST_F(ReplicationTest, NextLogNumConsistency) {
+  auto leaderOpenOptions = leaderOptions();
+
+  // We need to maintain at most 3 memtables(1 active, 2 unflushed)
+  leaderOpenOptions.max_write_buffer_number = 3;
+
+  // event listener helps catch the flush complete events
+  std::shared_ptr<TestEventListener> eventListener =
+      std::make_shared<TestEventListener>(this);
+  leaderOpenOptions.listeners.push_back(eventListener);
+  auto leader = openLeader(leaderOpenOptions);
+  auto leaderFull = static_cast_with_check<DBImpl>(leader);
+  leaderFull->PauseBackgroundWork();
+
+  // Following flushes will create two unflushed memtables, we rely on the
+  // sequence number to figure out which memtable is flushed
+  leader->Put(wo(), "key1", "val1");
+  eventListener->seq1 = leader->GetLatestSequenceNumber();
+  FlushOptions flushOpts;
+  flushOpts.wait = false;
+  leader->Flush(flushOpts);
+  leader->Put(wo(), "key2", "val2");
+  eventListener->seq2 = leader->GetLatestSequenceNumber();
+  leader->Flush(flushOpts);
+
+  auto followerOpenOptions = leaderOptions();
+  followerOpenOptions.max_write_buffer_number = 3;
+
+  openFollower(followerOpenOptions);
+  catchUpFollower();
+
+  for (auto cfd : {leaderCFD("default"), followerCFD("default")}) {
+    ASSERT_EQ(2, cfd->imm()->NumNotFlushed());
+  }
+  verifyNextLogNumConsistency();
+
+  leaderFull->ContinueBackgroundWork();
+  leaderFull->TEST_WaitForBackgroundWork();
+}
+
 TEST_F(ReplicationTest, Stress) {
   std::string val;
   auto leader = openLeader();
@@ -547,6 +699,9 @@ TEST_F(ReplicationTest, Stress) {
 
   auto verify_equal = [&]() {
     for (int i = 0; i < kColumnFamilyCount; ++i) {
+      // check that next log number is the same between leader and follower
+      verifyNextLogNumConsistency(cf(i));
+
       auto itrLeader = std::unique_ptr<Iterator>(
           leader->NewIterator(ReadOptions(), leaderCF(cf(i))));
       auto itrFollower = std::unique_ptr<Iterator>(

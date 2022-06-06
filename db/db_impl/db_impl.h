@@ -86,6 +86,7 @@ class WriteCallback;
 struct JobContext;
 struct ExternalSstFileInfo;
 struct MemTableInfo;
+struct MemtableLogNumAndReplSeq;
 
 // Class to maintain directories for all database paths other than main one.
 class Directories {
@@ -1717,8 +1718,16 @@ class DBImpl : public DB {
 
   Status TrimMemtableHistory(WriteContext* context);
 
+  // Depending on `lognum_and_repl_seq`, different actions can be taken when
+  // switching memtable.
+  // 1) lognum_and_repl_seq is null: create new log when !log_empty
+  // 2) lognum_and_repl_seq is not null & it contains valid log number: always
+  // create new log, use the log number specified in lognum_and_repl_seq
+  // 3) lognum_and_repl_seq is not null & no valid log number: always create new
+  // log, generate log number based on manifest next_file_num and initialize lognum
+  // in lognum_and_repl_seq as the generated log number
   Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
-                        std::string replication_sequence);
+                        MemtableLogNumAndReplSeq* lognum_and_repl_seq);
 
   void SelectColumnFamiliesForAtomicFlush(autovector<ColumnFamilyData*>* cfds);
 

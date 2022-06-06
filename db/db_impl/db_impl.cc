@@ -53,6 +53,7 @@
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
 #include "db/write_callback.h"
+#include "db/db_impl/replication_codec.h"
 #include "env/unique_id_gen.h"
 #include "file/file_util.h"
 #include "file/filename.h"
@@ -1131,16 +1132,23 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
       }
       case ReplicationLogRecord::kMemtableSwitch: {
         WriteContext write_context;
-        autovector<ColumnFamilyData*> cfds;
-        SelectColumnFamiliesForAtomicFlush(&cfds);
-        for (const auto cfd : cfds) {
+        MemtableSwitchRecord mem_switch_record;
+        Slice contents_slice(record.contents);
+        DeserializeMemtableSwitchRecord(&contents_slice, &mem_switch_record);
+
+        auto cf_set = versions_->GetColumnFamilySet();
+        for (size_t i = 0; i < mem_switch_record.lognums.size(); i++) {
+          MemtableLogNumAndReplSeq lognum_and_repl_seq = mem_switch_record.GetLogNumAndReplSeq(i);
+          auto cfd = cf_set->GetColumnFamily(lognum_and_repl_seq.lognum->column_family);
+          assert(cfd != nullptr && !cfd->IsDropped() && !cfd->IsEmpty());
           cfd->Ref();
-          s = SwitchMemtable(cfd, &write_context, "");
+          s = SwitchMemtable(cfd, &write_context, &lognum_and_repl_seq);
           cfd->UnrefAndTryDelete();
           if (!s.ok()) {
             break;
           }
         }
+
         break;
       }
       case ReplicationLogRecord::kManifestWrite: {

@@ -11,6 +11,7 @@
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
+#include "db/db_impl/replication_codec.h"
 #include "logging/logging.h"
 #include "monitoring/perf_context_imp.h"
 #include "options/options_helper.h"
@@ -1474,18 +1475,6 @@ void DBImpl::AssignAtomicFlushSeq(const autovector<ColumnFamilyData*>& cfds) {
   }
 }
 
-namespace {
-inline std::string MaybeRecordMemtableSwitch(
-    const std::shared_ptr<ReplicationLogListener>& replication_log_listener) {
-  if (!replication_log_listener) {
-    return "";
-  }
-  ReplicationLogRecord rlr;
-  rlr.type = ReplicationLogRecord::kMemtableSwitch;
-  return replication_log_listener->OnReplicationLogRecord(std::move(rlr));
-}
-}  // namespace
-
 Status DBImpl::SwitchWAL(WriteContext* write_context) {
   mutex_.AssertHeld();
   assert(write_context != nullptr);
@@ -1554,12 +1543,9 @@ Status DBImpl::SwitchWAL(WriteContext* write_context) {
     nonmem_write_thread_.EnterUnbatched(&nonmem_w, &mutex_);
   }
 
-  std::string replication_sequence =
-      MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener);
-
   for (const auto cfd : cfds) {
     cfd->Ref();
-    status = SwitchMemtable(cfd, write_context, replication_sequence);
+    status = SwitchMemtable(cfd, write_context, nullptr);
     cfd->UnrefAndTryDelete();
     if (!status.ok()) {
       break;
@@ -1636,8 +1622,12 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
     MaybeFlushStatsCF(&cfds);
   }
 
-  std::string replication_sequence =
-      MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener);
+  MemtableSwitchRecord mem_switch_record;
+  if (immutable_db_options_.replication_log_listener) {
+    mem_switch_record.replication_sequence =
+        immutable_db_options_.replication_log_listener
+            ->NewReplicationSequence();
+  }
 
   WriteThread::Writer nonmem_w;
   if (two_write_queues_) {
@@ -1648,7 +1638,8 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
       continue;
     }
     cfd->Ref();
-    status = SwitchMemtable(cfd, write_context, replication_sequence);
+    auto lognum_and_repl_seq = mem_switch_record.AddUninitializedLogNum();
+    status = SwitchMemtable(cfd, write_context, &lognum_and_repl_seq);
     cfd->UnrefAndTryDelete();
     if (!status.ok()) {
       break;
@@ -1656,6 +1647,11 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
   }
   if (two_write_queues_) {
     nonmem_write_thread_.ExitUnbatched(&nonmem_w);
+  }
+
+  if (status.ok()) {
+    MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener,
+                              mem_switch_record);
   }
 
   if (status.ok()) {
@@ -1901,12 +1897,17 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
     nonmem_write_thread_.EnterUnbatched(&nonmem_w, &mutex_);
   }
 
-  std::string replication_sequence =
-      MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener);
+  MemtableSwitchRecord mem_switch_record;
+  if (immutable_db_options_.replication_log_listener) {
+    mem_switch_record.replication_sequence =
+        immutable_db_options_.replication_log_listener
+            ->NewReplicationSequence();
+  }
 
   for (auto& cfd : cfds) {
     if (!cfd->mem()->IsEmpty()) {
-      status = SwitchMemtable(cfd, context, replication_sequence);
+      auto lognum_and_repl_seq = mem_switch_record.AddUninitializedLogNum();
+      status = SwitchMemtable(cfd, context, &lognum_and_repl_seq);
     }
     if (cfd->UnrefAndTryDelete()) {
       cfd = nullptr;
@@ -1918,6 +1919,11 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   if (two_write_queues_) {
     nonmem_write_thread_.ExitUnbatched(&nonmem_w);
+  }
+
+  if (status.ok()) {
+    MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener,
+                              mem_switch_record);
   }
 
   if (status.ok()) {
@@ -1959,7 +1965,7 @@ void DBImpl::NotifyOnMemTableSealed(ColumnFamilyData* /*cfd*/,
 // REQUIRES: this thread is currently at the front of the 2nd writer queue if
 // two_write_queues_ is true (This is to simplify the reasoning.)
 Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
-                              std::string replication_sequence) {
+                              MemtableLogNumAndReplSeq* lognum_and_repl_seq) {
   mutex_.AssertHeld();
   log::Writer* new_log = nullptr;
   MemTable* new_mem = nullptr;
@@ -1982,13 +1988,25 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
   if (two_write_queues_) {
     log_write_mutex_.Unlock();
   }
+
+  if (lognum_and_repl_seq != nullptr) {
+    creating_new_log = true;
+  }
+
   uint64_t recycle_log_number = 0;
   if (creating_new_log && immutable_db_options_.recycle_log_file_num &&
       !log_recycle_files_.empty()) {
     recycle_log_number = log_recycle_files_.front();
   }
-  uint64_t new_log_number =
-      creating_new_log ? versions_->NewFileNumber() : logfile_number_;
+  uint64_t new_log_number;
+
+  if (lognum_and_repl_seq != nullptr && lognum_and_repl_seq->lognum_initialized) {
+    new_log_number = lognum_and_repl_seq->lognum->memtable_next_log_num;
+    versions_->MarkFileNumberUsed(new_log_number);
+  } else {
+    new_log_number = creating_new_log ? versions_->NewFileNumber() : logfile_number_;
+  }
+
   const MutableCFOptions mutable_cf_options = *cfd->GetLatestMutableCFOptions();
 
   // Set memtable_info for memtable sealed callback
@@ -2009,6 +2027,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
   if (creating_new_log) {
     // TODO: Write buffer size passed in should be max of all CF's instead
     // of mutable_cf_options.write_buffer_size.
+    // TODO(wei): no need to create WAL for rocksdb-cloud
     io_s = CreateWAL(new_log_number, recycle_log_number, preallocate_block_size,
                      &new_log);
     if (s.ok()) {
@@ -2144,7 +2163,12 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
   }
 
   cfd->mem()->SetNextLogNumber(logfile_number_);
-  cfd->mem()->SetReplicationSequence(std::move(replication_sequence));
+  if (lognum_and_repl_seq != nullptr) {
+    cfd->mem()->SetReplicationSequence(*lognum_and_repl_seq->replication_sequence);
+    if (!lognum_and_repl_seq->lognum_initialized) {
+      *lognum_and_repl_seq->lognum = MemtableLogNumber{cfd->GetID(), cfd->mem()->GetID(), logfile_number_};
+    }
+  }
   assert(new_mem != nullptr);
   cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
   new_mem->Ref();
