@@ -1622,7 +1622,7 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
     MaybeFlushStatsCF(&cfds);
   }
 
-  MemtableSwitchRecord mem_switch_record;
+  MemTableSwitchRecord mem_switch_record;
   if (immutable_db_options_.replication_log_listener) {
     mem_switch_record.replication_sequence =
         immutable_db_options_.replication_log_listener
@@ -1897,7 +1897,7 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
     nonmem_write_thread_.EnterUnbatched(&nonmem_w, &mutex_);
   }
 
-  MemtableSwitchRecord mem_switch_record;
+  MemTableSwitchRecord mem_switch_record;
   if (immutable_db_options_.replication_log_listener) {
     mem_switch_record.replication_sequence =
         immutable_db_options_.replication_log_listener
@@ -1965,7 +1965,7 @@ void DBImpl::NotifyOnMemTableSealed(ColumnFamilyData* /*cfd*/,
 // REQUIRES: this thread is currently at the front of the 2nd writer queue if
 // two_write_queues_ is true (This is to simplify the reasoning.)
 Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
-                              MemtableLogNumAndReplSeq* lognum_and_repl_seq) {
+                              MemTableLogNumAndReplSeq* lognum_and_repl_seq) {
   mutex_.AssertHeld();
   log::Writer* new_log = nullptr;
   MemTable* new_mem = nullptr;
@@ -2166,7 +2166,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
   if (lognum_and_repl_seq != nullptr) {
     cfd->mem()->SetReplicationSequence(*lognum_and_repl_seq->replication_sequence);
     if (!lognum_and_repl_seq->lognum_initialized) {
-      *lognum_and_repl_seq->lognum = MemtableLogNumber{cfd->GetID(), cfd->mem()->GetID(), logfile_number_};
+      *lognum_and_repl_seq->lognum = MemTableLogNumber{cfd->GetID(), cfd->mem()->GetID(), logfile_number_};
     }
   }
   assert(new_mem != nullptr);

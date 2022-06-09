@@ -476,32 +476,11 @@ class ReplicationLogListener {
   // DB::GetPersistedReplicationSequence() (non-inclusive).
   virtual std::string OnReplicationLogRecord(ReplicationLogRecord record) = 0;
 
-  // Unlike the other log event, kMemtableSwitch needs to be split into two
-  // phases:
-
-  // Phase1): Get the replication sequence and assign it to all the
-  // switched memtablesx
-  // Phase2): Write the kMemtableSwitch event to log (with the
-  // replication sequence)
-  //
-  // TODO(wei): note that there is race condition with current implementation!
-  // It's possible to have concurrent kMemtableSwitch and kManifiestWrite. So
-  // it's possible to have another kManifestWrite(with bigger replication
-  // sequence) happens after Phase1 and before Phase2. One solution for this
-  // issue is to split the `kMemtableSwitch` event into two:
-  //
-  // a) `kMemtableSwitchPrepare`, we assign the replication sequence generated
-  // in this step to switched memtables and write log.
-  // b) `kMemtableSwitchCommit`, we log the replication sequence generated in
-  // Prepare phase and all the next_log_number for memtables.
-
-  // When server recovers based on manifest and replication log, it will find
-  // the last flushed `kMemtableSwitchPrepare`, apply all the logs after that
-  // EXCEPT `kManifestWrite` already committed and the first
-  // `kMemtableSwitchCommit` after it.
+  // Generate a new replication sequence. Used when we need a replication
+  // sequence before sending the log record to listender
+  // 
+  // Similar to OnReplicationLogRecord, this function needs to be thread safe
   virtual std::string NewReplicationSequence() = 0;
-  virtual bool OnReplicationLogRecord(Slice replication_sequence,
-                                      ReplicationLogRecord record) = 0;
 };
 
 struct DBOptions {

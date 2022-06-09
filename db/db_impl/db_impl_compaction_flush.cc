@@ -2164,7 +2164,7 @@ Status DBImpl::AtomicFlushMemTables(
       }
     }
 
-    MemtableSwitchRecord mem_switch_record;
+    MemTableSwitchRecord mem_switch_record;
     if (immutable_db_options_.replication_log_listener) {
       mem_switch_record.replication_sequence = immutable_db_options_.replication_log_listener->NewReplicationSequence();
     }

@@ -10,51 +10,56 @@
 namespace ROCKSDB_NAMESPACE {
 
 // log number related info we store in the log with each `kMemtableSwitch` event
-struct MemtableLogNumber {
+struct MemTableLogNumber {
   uint64_t column_family;
   uint64_t memtable_id;
   uint64_t memtable_next_log_num;
 };
 
-struct MemtableLogNumAndReplSeq {
-  MemtableLogNumber* lognum{nullptr};
+struct MemTableLogNumAndReplSeq {
+  MemTableLogNumber* lognum{nullptr};
   std::string* replication_sequence{nullptr};
   bool lognum_initialized{false};
 };
 
 // A record corresponds to `kMemtableSwitch` event
-struct MemtableSwitchRecord {
-  void AddLogNum(MemtableLogNumber lognum) {
+struct MemTableSwitchRecord {
+  void AddLogNum(MemTableLogNumber lognum) {
     lognums.push_back(std::move(lognum));
   }
 
-  MemtableLogNumAndReplSeq AddUninitializedLogNum() {
+  MemTableLogNumAndReplSeq AddUninitializedLogNum() {
     lognums.push_back({});
     return {&lognums.back(), &replication_sequence, false};
   }
 
   // Assuming all the lognums has been initialized
-  MemtableLogNumAndReplSeq GetLogNumAndReplSeq(size_t idx) {
-    return MemtableLogNumAndReplSeq{
+  MemTableLogNumAndReplSeq GetLogNumAndReplSeq(size_t idx) {
+    return MemTableLogNumAndReplSeq{
       &lognums[idx],
       &replication_sequence,
       true};
   }
 
   // next_log_number for all the switched memtables
-  autovector<MemtableLogNumber> lognums;
+  autovector<MemTableLogNumber> lognums;
   std::string replication_sequence;
 };
 
 
 Status SerializeMemtableSwitchRecord(
     std::string* dst,
-    const MemtableSwitchRecord &record);
+    const MemTableSwitchRecord &record);
 Status DeserializeMemtableSwitchRecord(
     Slice* src,
-    MemtableSwitchRecord* record);
+    MemTableSwitchRecord* record);
 
+// Record `kMemtableSwitch` event.
+//
+// NOTE: this function has to be called before corresponding `kManifestWrite`.
+// We rely on this assumption during recovery based on Manifest and repliation
+// log
 void MaybeRecordMemtableSwitch(
   const std::shared_ptr<rocksdb::ReplicationLogListener> &replication_log_listener,
-  const MemtableSwitchRecord& mem_switch_record);
+  const MemTableSwitchRecord& mem_switch_record);
 }

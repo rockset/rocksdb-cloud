@@ -40,24 +40,6 @@ class Listener : public ReplicationLogListener {
     }
   }
 
-  bool OnReplicationLogRecord(Slice /* replication_sequence */,
-                              ReplicationLogRecord record) override {
-    // size_t seq_num = std::atoi(replication_sequence.data());
-    bool matched = false;
-    {
-      MutexLock lock(log_records_mutex_);
-      // TODO(wei): enable this assertion check once we fix the bug of invalid kMemtableSwitch
-      // and kManifestWrite ordering, which can be caused when memtable switch and manifest update
-      // are executed concurrently
-      // assert(seq_num == log_records_->size());
-      matched = true;
-    }
-    if (matched) {
-      OnReplicationLogRecord(std::move(record));
-    }
-    return matched;
-  }
-
   std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
     // We should't be producing replication log records during open
     assert(state_ != OPEN);
@@ -210,15 +192,15 @@ class ReplicationTest : public testing::Test {
     return follower_db_.get();
   }
 
-  // Check that CFs in leader and follower have the same next_log_num for all
-  // switched memtables
-  void verifyNextLogNumConsistency() const {
+  // Check that CFs in leader and follower have the same next_log_num and
+  // replication_sequence for all unflushed memtables
+  void verifyNextLogNumAndReplSeqConsistency() const {
     for (const auto& cf : leader_cfs_) {
-      verifyNextLogNumConsistency(cf.first);
+      verifyNextLogNumAndReplSeqConsistency(cf.first);
     }
   }
 
-  void verifyNextLogNumConsistency(const std::string& name) const {
+  void verifyNextLogNumAndReplSeqConsistency(const std::string& name) const {
     auto leader_cfd = leaderCFD(name);
     auto follower_cfd = followerCFD(name);
     ASSERT_TRUE(leader_cfd != nullptr && follower_cfd != nullptr);
@@ -226,11 +208,11 @@ class ReplicationTest : public testing::Test {
               follower_cfd->imm()->NumNotFlushed());
     ASSERT_EQ(leader_cfd->imm()->NumFlushed(),
               follower_cfd->imm()->NumFlushed());
-    auto leader_lognums = leader_cfd->imm()->TEST_GetNextLogNumbers();
-    auto follower_lognums = follower_cfd->imm()->TEST_GetNextLogNumbers();
-    ASSERT_EQ(leader_lognums.size(), follower_lognums.size());
-    for (size_t i = 0; i < leader_lognums.size(); i++) {
-      ASSERT_EQ(leader_lognums[i], follower_lognums[i]);
+    auto leader_lognums_and_repl_seq = leader_cfd->imm()->TEST_GetNextLogNumAndReplSeq();
+    auto follower_lognums_and_repl_seq = follower_cfd->imm()->TEST_GetNextLogNumAndReplSeq();
+    ASSERT_EQ(leader_lognums_and_repl_seq.size(), follower_lognums_and_repl_seq.size());
+    for (size_t i = 0; i < leader_lognums_and_repl_seq.size(); i++) {
+      ASSERT_EQ(leader_lognums_and_repl_seq[i], follower_lognums_and_repl_seq[i]);
     }
   }
 
@@ -601,7 +583,7 @@ class TestEventListener: public EventListener {
                   testInstance_->leaderCFD("default")->imm()->NumNotFlushed());
         ASSERT_EQ(
             1, testInstance_->followerCFD("default")->imm()->NumNotFlushed());
-        testInstance_->verifyNextLogNumConsistency();
+        testInstance_->verifyNextLogNumAndReplSeqConsistency();
       } else if (info.smallest_seqno == seq2) { // the second memtable is flushed
         testInstance_->catchUpFollower();
         ASSERT_EQ(0,
@@ -661,7 +643,7 @@ TEST_F(ReplicationTest, NextLogNumConsistency) {
   for (auto cfd : {leaderCFD("default"), followerCFD("default")}) {
     ASSERT_EQ(2, cfd->imm()->NumNotFlushed());
   }
-  verifyNextLogNumConsistency();
+  verifyNextLogNumAndReplSeqConsistency();
 
   leaderFull->ContinueBackgroundWork();
   leaderFull->TEST_WaitForBackgroundWork();
@@ -700,7 +682,7 @@ TEST_F(ReplicationTest, Stress) {
   auto verify_equal = [&]() {
     for (int i = 0; i < kColumnFamilyCount; ++i) {
       // check that next log number is the same between leader and follower
-      verifyNextLogNumConsistency(cf(i));
+      verifyNextLogNumAndReplSeqConsistency(cf(i));
 
       auto itrLeader = std::unique_ptr<Iterator>(
           leader->NewIterator(ReadOptions(), leaderCF(cf(i))));
