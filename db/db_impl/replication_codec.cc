@@ -5,13 +5,8 @@ namespace ROCKSDB_NAMESPACE {
 
 Status SerializeMemtableSwitchRecord(std::string* dst, const MemTableSwitchRecord &record) {
   PutFixed16(dst, 1); // version
+  PutVarint64(dst, record.next_log_num);
   PutLengthPrefixedSlice(dst, record.replication_sequence);
-  PutVarint64(dst, record.lognums.size());
-  for (auto lognum: record.lognums) {
-    PutVarint64(dst, lognum.column_family);
-    PutVarint64(dst, lognum.memtable_id);
-    PutVarint64(dst, lognum.memtable_next_log_num);
-  }
   return Status::OK();
 }
 Status DeserializeMemtableSwitchRecord(Slice* src, MemTableSwitchRecord* record) {
@@ -19,30 +14,17 @@ Status DeserializeMemtableSwitchRecord(Slice* src, MemTableSwitchRecord* record)
   if (!GetFixed16(src, &version)) {
     return Status::Corruption("Unable to decode memtable switch record version");
   }
+  uint64_t next_log_num;
+  if (!GetVarint64(src, &next_log_num)) {
+    return Status::Corruption("Unable to decode memtable switch next_log_num");
+  }
   Slice replication_sequence_slice;
   if (!GetLengthPrefixedSlice(src, &replication_sequence_slice)) {
     return Status::Corruption("Unable to decode memtable switch replication sequence");
   }
-  uint64_t size;
-  if (!GetVarint64(src, &size)) {
-    return Status::Corruption("Unable to decode memtable switch lognums array size");
-  }
-  autovector<MemTableLogNumber> lognums;
-  for (uint64_t i = 0; i < size; i++) {
-    uint64_t column_family, memtable_id, next_log_num;
-    if (!GetVarint64(src, &column_family)) {
-      return Status::Corruption("Unable to decode memtable switch record column family");
-    }
-    if (!GetVarint64(src, &memtable_id)) {
-      return Status::Corruption("Unable to decode memtable switch record memtable id");
-    }
-    if (!GetVarint64(src, &next_log_num)) {
-      return Status::Corruption("Unable to decode memtable switch next log num");
-    }
-    lognums.push_back({column_family, memtable_id, next_log_num});
-  }
+
+  record->next_log_num = next_log_num;
   record->replication_sequence = replication_sequence_slice.ToString(false);
-  record->lognums = std::move(lognums);
   return Status::OK();
 }
 

@@ -2013,7 +2013,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
       // retry resume, it is possible that in some CFs,
       // cfd->imm()->NumNotFlushed() = 0. In this case, so no flush request will
       // be created and scheduled, status::OK() will be returned.
-      s = SwitchMemtable(cfd, &context, nullptr);
+      s = SwitchMemtable(cfd, &context);
     }
     const uint64_t flush_memtable_id = port::kMaxUint64;
     if (s.ok()) {
@@ -2046,7 +2046,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
                            "Force flushing stats CF with manual flush of %s "
                            "to avoid holding old logs",
                            cfd->GetName().c_str());
-            s = SwitchMemtable(cfd_stats, &context, nullptr);
+            s = SwitchMemtable(cfd_stats, &context);
             FlushRequest req{{cfd_stats, flush_memtable_id}};
             flush_reqs.emplace_back(std::move(req));
             memtable_ids_to_wait.emplace_back(
@@ -2166,7 +2166,10 @@ Status DBImpl::AtomicFlushMemTables(
 
     MemTableSwitchRecord mem_switch_record;
     if (immutable_db_options_.replication_log_listener) {
-      mem_switch_record.replication_sequence = immutable_db_options_.replication_log_listener->NewReplicationSequence();
+      mem_switch_record.next_log_num = versions_->NewFileNumber();
+      mem_switch_record.replication_sequence =
+          immutable_db_options_.replication_log_listener
+              ->NewReplicationSequence();
     }
 
     for (auto cfd : cfds) {
@@ -2175,8 +2178,11 @@ Status DBImpl::AtomicFlushMemTables(
         continue;
       }
       cfd->Ref();
-      auto lognum_and_repl_seq = mem_switch_record.AddUninitializedLogNum();
-      s = SwitchMemtable(cfd, &context, &lognum_and_repl_seq);
+      if (immutable_db_options_.replication_log_listener) {
+        s = SwitchMemtable(cfd, &context, mem_switch_record);
+      } else {
+        s = SwitchMemtable(cfd, &context);
+      }
       cfd->UnrefAndTryDelete();
       if (!s.ok()) {
         break;

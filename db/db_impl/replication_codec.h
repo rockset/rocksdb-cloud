@@ -9,43 +9,17 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// log number related info we store in the log with each `kMemtableSwitch` event
-struct MemTableLogNumber {
-  uint64_t column_family;
-  uint64_t memtable_id;
-  uint64_t memtable_next_log_num;
-};
-
-struct MemTableLogNumAndReplSeq {
-  MemTableLogNumber* lognum{nullptr};
-  std::string* replication_sequence{nullptr};
-  bool lognum_initialized{false};
-};
-
 // A record corresponds to `kMemtableSwitch` event
 struct MemTableSwitchRecord {
-  void AddLogNum(MemTableLogNumber lognum) {
-    lognums.push_back(std::move(lognum));
-  }
-
-  MemTableLogNumAndReplSeq AddUninitializedLogNum() {
-    lognums.push_back({});
-    return {&lognums.back(), &replication_sequence, false};
-  }
-
-  // Assuming all the lognums has been initialized
-  MemTableLogNumAndReplSeq GetLogNumAndReplSeq(size_t idx) {
-    return MemTableLogNumAndReplSeq{
-      &lognums[idx],
-      &replication_sequence,
-      true};
-  }
-
-  // next_log_number for all the switched memtables
-  autovector<MemTableLogNumber> lognums;
+  // next_log_num for the switched memtables. All CFDs flushed atomically will
+  // share same next_log_num. next_log_num is used to determine whether a
+  // memtable is flushed and can be removed
+  uint64_t next_log_num;
+  // replication sequence number for the switched memtables. All CFDs flushed
+  // atomically will share the same replication_sequence. We rely on the
+  // replication_sequence when recovering based on Manifest + replication log
   std::string replication_sequence;
 };
-
 
 Status SerializeMemtableSwitchRecord(
     std::string* dst,

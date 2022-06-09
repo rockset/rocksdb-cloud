@@ -22,6 +22,7 @@
 #include "db/column_family.h"
 #include "db/compaction/compaction_iterator.h"
 #include "db/compaction/compaction_job.h"
+#include "db/db_impl/replication_codec.h"
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
 #include "db/external_sst_file_ingestion_job.h"
@@ -1718,16 +1719,14 @@ class DBImpl : public DB {
 
   Status TrimMemtableHistory(WriteContext* context);
 
-  // Depending on `lognum_and_repl_seq`, different actions can be taken when
-  // switching memtable.
-  // 1) lognum_and_repl_seq is null: create new log when !log_empty
-  // 2) lognum_and_repl_seq is not null & it contains valid log number: always
-  // create new log, use the log number specified in lognum_and_repl_seq
-  // 3) lognum_and_repl_seq is not null & no valid log number: always create new
-  // log, generate log number based on manifest next_file_num and initialize lognum
-  // in lognum_and_repl_seq as the generated log number
+  // Switch memtable without creating new WAL. Also set the next_log_num as
+  // specified in mem_switch_record.
+  //
+  // NOTE: this function should only be used when WAL is disabled
   Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
-                        MemTableLogNumAndReplSeq* lognum_and_repl_seq);
+                        const MemTableSwitchRecord& mem_switch_record);
+
+  Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context);
 
   void SelectColumnFamiliesForAtomicFlush(autovector<ColumnFamilyData*>* cfds);
 
