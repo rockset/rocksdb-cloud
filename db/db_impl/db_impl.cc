@@ -1134,14 +1134,18 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         WriteContext write_context;
         MemTableSwitchRecord mem_switch_record;
         Slice contents_slice(record.contents);
-        DeserializeMemtableSwitchRecord(&contents_slice, &mem_switch_record);
+        DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
 
         autovector<ColumnFamilyData*> cfds;
         SelectColumnFamiliesForAtomicFlush(&cfds);
 
         for (auto cfd: cfds) {
+          if (cfd->mem()->IsEmpty()) {
+            continue;
+          }
+
           cfd->Ref();
-          s = SwitchMemtable(cfd, &write_context, mem_switch_record);
+          s = SwitchMemtableWithoutCreatingWAL(cfd, &write_context, mem_switch_record);
           cfd->UnrefAndTryDelete();
           if (!s.ok()) {
             break;

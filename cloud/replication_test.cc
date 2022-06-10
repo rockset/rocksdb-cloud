@@ -572,6 +572,39 @@ TEST_F(ReplicationTest, MultiColumnFamily) {
   EXPECT_EQ(followerColumnFamilies().count(cf(9)), 0);
 }
 
+// Test that we never switch empty memtables on both leader and follower
+TEST_F(ReplicationTest, SwitchEmptyMemTable) {
+  auto openOptions = leaderOptions();
+  openOptions.max_write_buffer_number = 3;
+
+  auto leader = openLeader(openOptions);
+  openFollower(openOptions);
+
+  auto leaderFull = static_cast_with_check<DBImpl>(leader);
+  leaderFull->PauseBackgroundWork();
+
+  // Empty memtable is not expected to be switched
+  FlushOptions flushOpts;
+  flushOpts.wait = false;
+  leader->Flush(flushOpts);
+  catchUpFollower();
+  ASSERT_EQ(0, leaderCFD("default")->imm()->NumNotFlushed());
+  ASSERT_EQ(0, followerCFD("default")->imm()->NumNotFlushed());
+
+  leader->Put(wo(), "key1", "val1");
+  leader->Flush(flushOpts);
+  catchUpFollower();
+
+  ASSERT_EQ(1, leaderCFD("default")->imm()->NumNotFlushed());
+  ASSERT_EQ(1, followerCFD("default")->imm()->NumNotFlushed());
+
+  // Empty memtable is not expected to be switched
+  leader->Flush(flushOpts);
+  catchUpFollower();
+  ASSERT_EQ(1, leaderCFD("default")->imm()->NumNotFlushed());
+  ASSERT_EQ(1, followerCFD("default")->imm()->NumNotFlushed());
+}
+
 class TestEventListener: public EventListener {
   public:
     explicit TestEventListener(ReplicationTest* testInstance): testInstance_(testInstance) { }
