@@ -2166,10 +2166,10 @@ Status DBImpl::AtomicFlushMemTables(
 
     MemTableSwitchRecord mem_switch_record;
     if (immutable_db_options_.replication_log_listener) {
-      mem_switch_record.next_log_num = versions_->NewFileNumber();
-      mem_switch_record.replication_sequence =
-          immutable_db_options_.replication_log_listener
-              ->NewReplicationSequence();
+      MaybeRecordMemTableSwitch(
+        immutable_db_options_.replication_log_listener,
+        versions_->NewFileNumber(),
+        &mem_switch_record);
     }
 
     for (auto cfd : cfds) {
@@ -2179,7 +2179,7 @@ Status DBImpl::AtomicFlushMemTables(
       }
       cfd->Ref();
       if (immutable_db_options_.replication_log_listener) {
-        s = SwitchMemtable(cfd, &context, mem_switch_record);
+        s = SwitchMemtableWithoutCreatingWAL(cfd, &context, mem_switch_record);
       } else {
         s = SwitchMemtable(cfd, &context);
       }
@@ -2187,12 +2187,6 @@ Status DBImpl::AtomicFlushMemTables(
       if (!s.ok()) {
         break;
       }
-    }
-
-    if (s.ok()) {
-      MaybeRecordMemtableSwitch(
-        immutable_db_options_.replication_log_listener,
-        mem_switch_record);
     }
 
     if (s.ok()) {

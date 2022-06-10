@@ -21,19 +21,20 @@ struct MemTableSwitchRecord {
   std::string replication_sequence;
 };
 
-Status SerializeMemtableSwitchRecord(
+Status SerializeMemTableSwitchRecord(
     std::string* dst,
     const MemTableSwitchRecord &record);
-Status DeserializeMemtableSwitchRecord(
+Status DeserializeMemTableSwitchRecord(
     Slice* src,
     MemTableSwitchRecord* record);
 
-// Record `kMemtableSwitch` event.
+// Record `kMemtableSwitch` event, also initializes `mem_switch_record`
 //
 // NOTE: this function has to be called before corresponding `kManifestWrite`.
 // We rely on this assumption during recovery based on Manifest and repliation
 // log
-void MaybeRecordMemtableSwitch(
+void MaybeRecordMemTableSwitch(
   const std::shared_ptr<rocksdb::ReplicationLogListener> &replication_log_listener,
-  const MemTableSwitchRecord& mem_switch_record);
+  uint64_t next_log_num,
+  MemTableSwitchRecord *mem_switch_record);
 }

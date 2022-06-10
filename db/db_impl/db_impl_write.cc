@@ -1624,10 +1624,10 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
 
   MemTableSwitchRecord mem_switch_record;
   if (immutable_db_options_.replication_log_listener) {
-    mem_switch_record.next_log_num = versions_->NewFileNumber();
-    mem_switch_record.replication_sequence =
-        immutable_db_options_.replication_log_listener
-            ->NewReplicationSequence();
+    MaybeRecordMemTableSwitch(
+      immutable_db_options_.replication_log_listener,
+      versions_->NewFileNumber(),
+      &mem_switch_record);
   }
 
   WriteThread::Writer nonmem_w;
@@ -1641,7 +1641,7 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
     cfd->Ref();
     if (immutable_db_options_.replication_log_listener) {
       status =
-          SwitchMemtable(cfd, write_context, mem_switch_record);
+          SwitchMemtableWithoutCreatingWAL(cfd, write_context, mem_switch_record);
     } else {
       status = SwitchMemtable(cfd, write_context);
     }
@@ -1652,12 +1652,6 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
   }
   if (two_write_queues_) {
     nonmem_write_thread_.ExitUnbatched(&nonmem_w);
-  }
-
-  if (status.ok()) {
-      MaybeRecordMemtableSwitch(
-        immutable_db_options_.replication_log_listener,
-        mem_switch_record);
   }
 
   if (status.ok()) {
@@ -1905,16 +1899,16 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   MemTableSwitchRecord mem_switch_record;
   if (immutable_db_options_.replication_log_listener) {
-    mem_switch_record.next_log_num = versions_->NewFileNumber();
-    mem_switch_record.replication_sequence =
-        immutable_db_options_.replication_log_listener
-            ->NewReplicationSequence();
+    MaybeRecordMemTableSwitch(
+      immutable_db_options_.replication_log_listener,
+      versions_->NewFileNumber(),
+      &mem_switch_record);
   }
 
   for (auto& cfd : cfds) {
     if (!cfd->mem()->IsEmpty()) {
       if (immutable_db_options_.replication_log_listener) {
-        status = SwitchMemtable(cfd, context, mem_switch_record);
+        status = SwitchMemtableWithoutCreatingWAL(cfd, context, mem_switch_record);
       } else {
         status = SwitchMemtable(cfd, context);
       }
@@ -1929,11 +1923,6 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   if (two_write_queues_) {
     nonmem_write_thread_.ExitUnbatched(&nonmem_w);
-  }
-
-  if (status.ok()) {
-    MaybeRecordMemtableSwitch(immutable_db_options_.replication_log_listener,
-                              mem_switch_record);
   }
 
   if (status.ok()) {
@@ -1970,21 +1959,11 @@ void DBImpl::NotifyOnMemTableSealed(ColumnFamilyData* /*cfd*/,
 }
 #endif  // ROCKSDB_LITE
 
-// REQUIRES: mutex_ is held
-// REQUIRES: this thread is currently at the front of the writer queue
-// REQUIRES: this thread is currently at the front of the 2nd writer queue if
-// two_write_queues_ is true (This is to simplify the reasoning.)
-Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
-                              const MemTableSwitchRecord& mem_switch_record) {
+Status DBImpl::SwitchMemtableWithoutCreatingWAL(
+    ColumnFamilyData* cfd, WriteContext* context,
+    const MemTableSwitchRecord& mem_switch_record) {
   mutex_.AssertHeld();
   MemTable* new_mem = nullptr;
-
-  // Recoverable state is persisted in WAL. After memtable switch, WAL might
-  // be deleted, so we write the state to memtable to be persisted as well.
-  Status s = WriteRecoverableState();
-  if (!s.ok()) {
-    return s;
-  }
 
   // Attempt to switch to a new memtable and trigger flush of old.
   assert(versions_->prev_log_number() == 0);
@@ -2031,7 +2010,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
   NotifyOnMemTableSealed(cfd, memtable_info);
   mutex_.Lock();
 #endif  // ROCKSDB_LITE
-  return s;
+  return Status::OK();
 }
 
 // REQUIRES: mutex_ is held
@@ -2061,17 +2040,13 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   if (two_write_queues_) {
     log_write_mutex_.Unlock();
   }
-
   uint64_t recycle_log_number = 0;
   if (creating_new_log && immutable_db_options_.recycle_log_file_num &&
       !log_recycle_files_.empty()) {
     recycle_log_number = log_recycle_files_.front();
   }
-  uint64_t new_log_number;
-
-  new_log_number =
+  uint64_t new_log_number =
       creating_new_log ? versions_->NewFileNumber() : logfile_number_;
-
   const MutableCFOptions mutable_cf_options = *cfd->GetLatestMutableCFOptions();
 
   // Set memtable_info for memtable sealed callback
@@ -2092,7 +2067,6 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   if (creating_new_log) {
     // TODO: Write buffer size passed in should be max of all CF's instead
     // of mutable_cf_options.write_buffer_size.
-    // TODO(wei): no need to create WAL for rocksdb-cloud
     io_s = CreateWAL(new_log_number, recycle_log_number, preallocate_block_size,
                      &new_log);
     if (s.ok()) {

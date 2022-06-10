@@ -1719,11 +1719,19 @@ class DBImpl : public DB {
 
   Status TrimMemtableHistory(WriteContext* context);
 
-  // Switch memtable without creating new WAL. Also set the next_log_num as
-  // specified in mem_switch_record.
+  // Switch memtable without creating new WAL. Also set the next_log_num and
+  // replication_sequence as specified in mem_switch_record.
   //
-  // NOTE: this function should only be used when WAL is disabled
-  Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context,
+  // NOTE:
+  // - this function should only be used when WAL is disabled.
+  // - Unlike `SwitchMemtable`, the dbmutex will be held throughput the function
+  // call, unless there is listener on `OnMemTableSealed` event
+  //
+  // REQUIRES: mutex_ is held
+  // REQUIRES: this thread is currently at the front of the writer queue
+  // REQUIRES: this thread is currently at the front of the 2nd writer queue if
+  // two_write_queues_ is true (This is to simplify the reasoning.)
+  Status SwitchMemtableWithoutCreatingWAL(ColumnFamilyData* cfd, WriteContext* context,
                         const MemTableSwitchRecord& mem_switch_record);
 
   Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context);
