@@ -22,23 +22,18 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+using LogRecordsVector =
+    std::vector<std::pair<ReplicationLogRecord, std::string>>;
+
 class Listener : public ReplicationLogListener {
  public:
   Listener(port::Mutex* log_records_mutex,
-           std::vector<ReplicationLogRecord>* log_records)
+           LogRecordsVector* log_records)
       : log_records_mutex_(log_records_mutex), log_records_(log_records) {}
 
   enum State { OPEN, RECOVERY, TAILING };
 
   void setState(State state) { state_ = state; }
-
-  std::string NewReplicationSequence() override {
-    assert(state_ == TAILING);
-    {
-      MutexLock lock(log_records_mutex_);
-      return std::to_string(log_records_->size());
-    }
-  }
 
   std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
     // We should't be producing replication log records during open
@@ -49,14 +44,17 @@ class Listener : public ReplicationLogListener {
     assert(state_ == TAILING);
     {
       MutexLock lock(log_records_mutex_);
-      log_records_->push_back(std::move(record));
-      return std::to_string(log_records_->size() - 1);
+      std::string replication_sequence = std::to_string(log_records_->size());
+      log_records_->emplace_back(
+        std::move(record),
+        replication_sequence);
+      return replication_sequence;
     }
   }
 
  private:
   port::Mutex* log_records_mutex_;
-  std::vector<ReplicationLogRecord>* log_records_;
+  LogRecordsVector* log_records_;
   State state_{OPEN};
 };
 
@@ -221,7 +219,7 @@ class ReplicationTest : public testing::Test {
   FollowerEnv follower_env_;
 
   port::Mutex log_records_mutex_;
-  std::vector<ReplicationLogRecord> log_records_;
+  LogRecordsVector log_records_;
   int followerSequence_{0};
 
   std::unique_ptr<DB> leader_db_;
@@ -287,7 +285,8 @@ DB* ReplicationTest::openLeader(Options options) {
     DB::ApplyReplicationLogRecordInfo info;
     auto leaderSeq = getPersistedSequence(db) + 1;
     for (; leaderSeq < (int)log_records_.size(); ++leaderSeq) {
-      s = db->ApplyReplicationLogRecord(log_records_[leaderSeq], &info);
+      s = db->ApplyReplicationLogRecord(log_records_[leaderSeq].first,
+                                        log_records_[leaderSeq].second, &info);
       assert(s.ok());
     }
     listener->setState(Listener::TAILING);
@@ -336,7 +335,8 @@ size_t ReplicationTest::catchUpFollower() {
   size_t ret = 0;
   for (; followerSequence_ < (int)log_records_.size(); ++followerSequence_) {
     auto s = follower_db_->ApplyReplicationLogRecord(
-        log_records_[followerSequence_], &info);
+        log_records_[followerSequence_].first,
+        log_records_[followerSequence_].second, &info);
     assert(s.ok());
     ++ret;
   }

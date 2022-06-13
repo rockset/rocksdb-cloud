@@ -1092,6 +1092,7 @@ Status DeserializeReplicationLogManifestWrite(Slice* src,
 }  // namespace
 
 Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
+                                         std::string replication_sequence,
                                          ApplyReplicationLogRecordInfo* info) {
   JobContext job_context(0, true);
   Status s;
@@ -1145,7 +1146,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           }
 
           cfd->Ref();
-          s = SwitchMemtableWithoutCreatingWAL(cfd, &write_context, mem_switch_record);
+          s = SwitchMemtableWithoutCreatingWAL(cfd, &write_context,
+                                               mem_switch_record.next_log_num,
+                                               replication_sequence);
           cfd->UnrefAndTryDelete();
           if (!s.ok()) {
             break;

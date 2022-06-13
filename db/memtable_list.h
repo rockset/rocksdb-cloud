@@ -391,7 +391,8 @@ class MemTableList {
   void RemoveOldMemTables(uint64_t log_number,
                           autovector<MemTable*>* to_delete);
 
-  // Return all the next_log_num and replication_sequence in unflushed memtables
+  // @return vector of <memtable id, next_log_num, replication_sequence> in
+  // unflushed memtables
   std::vector<std::tuple<uint64_t, uint64_t, std::string>>
   TEST_GetNextLogNumAndReplSeq() const {
     const auto& memlist = current_->memlist_;

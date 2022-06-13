@@ -2165,11 +2165,12 @@ Status DBImpl::AtomicFlushMemTables(
     }
 
     MemTableSwitchRecord mem_switch_record;
+    std::string replication_sequence;
     if (immutable_db_options_.replication_log_listener) {
-      MaybeRecordMemTableSwitch(
+      mem_switch_record.next_log_num = versions_->NewFileNumber();
+      replication_sequence = RecordMemTableSwitch(
         immutable_db_options_.replication_log_listener,
-        versions_->NewFileNumber(),
-        &mem_switch_record);
+        mem_switch_record);
     }
 
     for (auto cfd : cfds) {
@@ -2179,7 +2180,9 @@ Status DBImpl::AtomicFlushMemTables(
       }
       cfd->Ref();
       if (immutable_db_options_.replication_log_listener) {
-        s = SwitchMemtableWithoutCreatingWAL(cfd, &context, mem_switch_record);
+        s = SwitchMemtableWithoutCreatingWAL(cfd, &context,
+                                             mem_switch_record.next_log_num,
+                                             replication_sequence);
       } else {
         s = SwitchMemtable(cfd, &context);
       }

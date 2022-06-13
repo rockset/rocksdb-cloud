@@ -1623,11 +1623,11 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
   }
 
   MemTableSwitchRecord mem_switch_record;
+  std::string replication_sequence;
   if (immutable_db_options_.replication_log_listener) {
-    MaybeRecordMemTableSwitch(
-      immutable_db_options_.replication_log_listener,
-      versions_->NewFileNumber(),
-      &mem_switch_record);
+    mem_switch_record.next_log_num = versions_->NewFileNumber();
+    replication_sequence = RecordMemTableSwitch(
+        immutable_db_options_.replication_log_listener, mem_switch_record);
   }
 
   WriteThread::Writer nonmem_w;
@@ -1640,8 +1640,9 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
     }
     cfd->Ref();
     if (immutable_db_options_.replication_log_listener) {
-      status =
-          SwitchMemtableWithoutCreatingWAL(cfd, write_context, mem_switch_record);
+      status = SwitchMemtableWithoutCreatingWAL(cfd, write_context,
+                                                mem_switch_record.next_log_num,
+                                                replication_sequence);
     } else {
       status = SwitchMemtable(cfd, write_context);
     }
@@ -1898,17 +1899,19 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
   }
 
   MemTableSwitchRecord mem_switch_record;
+  std::string replication_sequence;
   if (immutable_db_options_.replication_log_listener) {
-    MaybeRecordMemTableSwitch(
+    mem_switch_record.next_log_num = versions_->NewFileNumber();
+    replication_sequence = RecordMemTableSwitch(
       immutable_db_options_.replication_log_listener,
-      versions_->NewFileNumber(),
-      &mem_switch_record);
+      mem_switch_record);
   }
 
   for (auto& cfd : cfds) {
     if (!cfd->mem()->IsEmpty()) {
       if (immutable_db_options_.replication_log_listener) {
-        status = SwitchMemtableWithoutCreatingWAL(cfd, context, mem_switch_record);
+        status = SwitchMemtableWithoutCreatingWAL(
+            cfd, context, mem_switch_record.next_log_num, replication_sequence);
       } else {
         status = SwitchMemtable(cfd, context);
       }
@@ -1960,8 +1963,8 @@ void DBImpl::NotifyOnMemTableSealed(ColumnFamilyData* /*cfd*/,
 #endif  // ROCKSDB_LITE
 
 Status DBImpl::SwitchMemtableWithoutCreatingWAL(
-    ColumnFamilyData* cfd, WriteContext* context,
-    const MemTableSwitchRecord& mem_switch_record) {
+    ColumnFamilyData* cfd, WriteContext* context, uint64_t next_log_num,
+    const std::string& replication_sequence) {
   mutex_.AssertHeld();
   MemTable* new_mem = nullptr;
 
@@ -1987,17 +1990,17 @@ Status DBImpl::SwitchMemtableWithoutCreatingWAL(
   ROCKS_LOG_INFO(immutable_db_options_.info_log,
                  "[%s] New memtable created with log file: #%" PRIu64
                  ". Immutable memtables: %d.\n",
-                 cfd->GetName().c_str(), mem_switch_record.next_log_num, num_imm_unflushed);
+                 cfd->GetName().c_str(), next_log_num, num_imm_unflushed);
   log_write_mutex_.Lock();
-  logfile_number_ = mem_switch_record.next_log_num;
+  logfile_number_ = next_log_num;
   // alive_log_files_ and logs_ size should be 1, so updating front is exactly the same as
   // updating back
-  alive_log_files_.front().number = mem_switch_record.next_log_num;
-  logs_.front().number = mem_switch_record.next_log_num;
+  alive_log_files_.front().number = next_log_num;
+  logs_.front().number = next_log_num;
   log_write_mutex_.Unlock();
 
   cfd->mem()->SetNextLogNumber(logfile_number_);
-  cfd->mem()->SetReplicationSequence(mem_switch_record.replication_sequence);
+  cfd->mem()->SetReplicationSequence(replication_sequence);
   cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
   new_mem->Ref();
   cfd->SetMemtable(new_mem);

@@ -333,6 +333,7 @@ class DBImpl : public DB {
 
   Status ApplyReplicationLogRecord(
       ReplicationLogRecord record,
+      std::string replication_sequence,
       ApplyReplicationLogRecordInfo* info) override;
   Status GetPersistedReplicationSequence(std::string* out) override;
 
@@ -1720,7 +1721,7 @@ class DBImpl : public DB {
   Status TrimMemtableHistory(WriteContext* context);
 
   // Switch memtable without creating new WAL. Also set the next_log_num and
-  // replication_sequence as specified in mem_switch_record.
+  // replication_sequence in switched memtable
   //
   // NOTE:
   // - this function should only be used when WAL is disabled.
@@ -1731,8 +1732,9 @@ class DBImpl : public DB {
   // REQUIRES: this thread is currently at the front of the writer queue
   // REQUIRES: this thread is currently at the front of the 2nd writer queue if
   // two_write_queues_ is true (This is to simplify the reasoning.)
-  Status SwitchMemtableWithoutCreatingWAL(ColumnFamilyData* cfd, WriteContext* context,
-                        const MemTableSwitchRecord& mem_switch_record);
+  Status SwitchMemtableWithoutCreatingWAL(
+      ColumnFamilyData* cfd, WriteContext* context, uint64_t next_log_num,
+      const std::string& replication_sequence);
 
   Status SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context);
 

@@ -475,12 +475,6 @@ class ReplicationLogListener {
   // the database needs to re-apply all replication log records since
   // DB::GetPersistedReplicationSequence() (non-inclusive).
   virtual std::string OnReplicationLogRecord(ReplicationLogRecord record) = 0;
-
-  // Generate a new replication sequence. Used when we need a replication
-  // sequence before sending the log record to listender
-  // 
-  // Similar to OnReplicationLogRecord, this function needs to be thread safe
-  virtual std::string NewReplicationSequence() = 0;
 };
 
 struct DBOptions {
