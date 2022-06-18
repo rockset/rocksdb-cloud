@@ -2065,7 +2065,7 @@ Status CloudEnvImpl::FindAllLiveFiles(const std::string& bucket_name_prefix,
   size_t idx = 0;
   for (auto num: file_nums) {
     std::string table_file = MakeTableFileName(bucket_name_prefix, num);
-    live_sst_files[idx] = table_file + "-" + current_epoch;
+    (*live_sst_files)[idx] = table_file + "-" + current_epoch;
     idx++;
   }
   return Status::OK();

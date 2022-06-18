@@ -533,7 +533,7 @@ class CloudEnv : public Env {
   // return the list of live files under object path
   virtual Status FindAllLiveFiles(const std::string& object_path,
                                   std::vector<std::string>* live_sst_files,
-                                  std::string* manifest_file);
+                                  std::string* manifest_file) = 0;
 
   // Create a new AWS env.
   // src_bucket_name: bucket name suffix where db data is read from
