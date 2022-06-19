@@ -1,5 +1,6 @@
 // Copyright (c) 2017 Rockset
 
+#include <gtest/gtest.h>
 #include "cloud/cloud_env_impl.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #ifndef ROCKSDB_LITE
@@ -382,13 +383,21 @@ TEST_F(CloudTest, FindAllLiveFilesTest) {
 
   std::vector<std::string> tablefiles;
   std::string manifest;
-  aenv_->FindAllLiveFiles(aenv_->GetSrcBucketName(), aenv_->GetSrcObjectPath(), &tablefiles, &manifest);
+  aenv_->FindAllLiveFiles(aenv_->GetSrcBucketName(), aenv_->GetSrcObjectPath(),
+                          &tablefiles, &manifest);
   EXPECT_EQ(tablefiles.size(), 1);
   for (auto name: tablefiles) {
     EXPECT_EQ(GetFileType(name), RocksDBFileType::kSstFile);
+    // verify that the sst file indeed exists
+    EXPECT_TRUE(aenv_->GetStorageProvider()
+                    ->ExistsCloudObject(aenv_->GetSrcBucketName(), name)
+                    .ok());
   }
 
   EXPECT_EQ(GetFileType(manifest), RocksDBFileType::kManifestFile);
+  EXPECT_TRUE(aenv_->GetStorageProvider()
+                  ->ExistsCloudObject(aenv_->GetSrcBucketName(), manifest)
+                  .ok());
 }
 
 TEST_F(CloudTest, GetChildrenTest) {
