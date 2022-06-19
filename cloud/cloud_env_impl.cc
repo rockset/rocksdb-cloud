@@ -2049,22 +2049,23 @@ Status CloudEnvImpl::CheckValidity() const {
   }
 }
 
-Status CloudEnvImpl::FindAllLiveFiles(const std::string& bucket_name_prefix,
+Status CloudEnvImpl::FindAllLiveFiles(const std::string& bucket,
+                                      const std::string& object_path,
                                       std::vector<std::string>* live_sst_files,
                                       std::string* manifest_file) {
   std::unique_ptr<ManifestReader> extractor(
-      new ManifestReader(info_log_, this, bucket_name_prefix));
+      new ManifestReader(info_log_, this, bucket));
   std::set<uint64_t> file_nums;
   std::string current_epoch;
-  auto st = extractor->GetLiveFiles(bucket_name_prefix, &file_nums, &current_epoch);
+  auto st = extractor->GetLiveFiles(object_path, &file_nums, &current_epoch);
   if (!st.ok()) {
     return st;
   }
   live_sst_files->resize(file_nums.size());
-  *manifest_file = ManifestFileWithEpoch(bucket_name_prefix, current_epoch);
+  *manifest_file = ManifestFileWithEpoch(object_path, current_epoch);
   size_t idx = 0;
   for (auto num: file_nums) {
-    std::string table_file = MakeTableFileName(bucket_name_prefix, num);
+    std::string table_file = MakeTableFileName(object_path, num);
     (*live_sst_files)[idx] = table_file + "-" + current_epoch;
     idx++;
   }

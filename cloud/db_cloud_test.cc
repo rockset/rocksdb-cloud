@@ -1,5 +1,7 @@
 // Copyright (c) 2017 Rockset
 
+#include "cloud/cloud_env_impl.h"
+#include "rocksdb/cloud/cloud_env_options.h"
 #ifndef ROCKSDB_LITE
 
 #ifdef USE_AWS
@@ -367,6 +369,26 @@ TEST_F(CloudTest, BasicTest) {
   ASSERT_OK(GetCloudLiveFilesSrc(&live_files));
   ASSERT_GT(live_files.size(), 0);
   CloseDB();
+}
+
+TEST_F(CloudTest, FindAllLiveFilesTest) {
+  OpenDB();
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  CloseDB();
+  DestroyDir(dbname_);
+  OpenDB();
+
+  std::vector<std::string> tablefiles;
+  std::string manifest;
+  aenv_->FindAllLiveFiles(aenv_->GetSrcBucketName(), aenv_->GetSrcObjectPath(), &tablefiles, &manifest);
+  EXPECT_EQ(tablefiles.size(), 1);
+  for (auto name: tablefiles) {
+    EXPECT_EQ(GetFileType(name), RocksDBFileType::kSstFile);
+  }
+
+  EXPECT_EQ(GetFileType(manifest), RocksDBFileType::kManifestFile);
 }
 
 TEST_F(CloudTest, GetChildrenTest) {
