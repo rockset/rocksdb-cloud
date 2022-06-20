@@ -1783,7 +1783,7 @@ Status CloudEnvImpl::CreateCloudManifest(const std::string& local_dbname) {
 // REQ: This is an existing database.
 Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   assert(cloud_env_options.roll_cloud_manifest_on_open);
-  auto oldEpoch = GetCloudManifest()->GetCurrentEpoch().ToString();
+  auto oldEpoch = GetCurrentEpoch().ToString();
   // Find next file number. We use dummy MANIFEST filename, which should get
   // remapped into the correct MANIFEST filename through CloudManifest.
   // After this call we should also have a local file named
@@ -1797,8 +1797,8 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   }
   // roll new epoch
   auto newEpoch = generateNewEpochId();
-  GetCloudManifest()->AddEpoch(maxFileNumber, newEpoch);
-  GetCloudManifest()->Finalize();
+  cloud_manifest_->AddEpoch(maxFileNumber, newEpoch);
+  cloud_manifest_->Finalize();
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
       "MANIFEST-%s",
@@ -1815,7 +1815,7 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   if (!st.ok()) {
     return st;
   }
-  st = writeCloudManifest(GetCloudManifest(), CloudManifestFile(local_dbname));
+  st = writeCloudManifest(cloud_manifest_.get(), CloudManifestFile(local_dbname));
   if (!st.ok()) {
     return st;
   }

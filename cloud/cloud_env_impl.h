@@ -237,7 +237,6 @@ class CloudEnvImpl : public CloudEnv {
     return base_env_->GetFreeSpace(path, diskfree);
   }
 
-  CloudManifest* GetCloudManifest() { return cloud_manifest_.get(); }
   void TEST_InitEmptyCloudManifest();
   void TEST_DisableCloudManifest() { test_disable_cloud_manifest_ = true; }
 
@@ -265,6 +264,15 @@ class CloudEnvImpl : public CloudEnv {
   void FileCachePurge();
   uint64_t FileCacheGetCharge();
   uint64_t FileCacheGetNumItems();
+  bool IsCloudManifestLoaded() const {
+    return cloud_manifest_.get() != nullptr;
+  }
+
+  // Get current epoch from the cloud manifest
+  // REQUIRES: cloud_manifest_ set
+  Slice GetCurrentEpoch() const {
+    return cloud_manifest_->GetCurrentEpoch();
+  }
 
  protected:
   Status CheckValidity() const;

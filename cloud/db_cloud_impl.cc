@@ -123,7 +123,7 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
   bool new_db = false;
   // If cloud manifest is already loaded, this means the directory has been
   // sanitized (possibly by the call to ListColumnFamilies())
-  if (cenv->GetCloudManifest() == nullptr) {
+  if (!cenv->IsCloudManifestLoaded()) {
     st = cenv->SanitizeDirectory(options, local_dbname, read_only);
 
     if (st.ok()) {
@@ -343,7 +343,7 @@ Status DBCloudImpl::DoCheckpointToCloud(
   files_to_copy.emplace_back(IdentityFileName(""), IdentityFileName(""));
 
   // MANIFEST file
-  auto current_epoch = cenv->GetCloudManifest()->GetCurrentEpoch().ToString();
+  auto current_epoch = cenv->GetCurrentEpoch().ToString();
   auto manifest_fname = ManifestFileWithEpoch("", current_epoch);
   auto tmp_manifest_fname = manifest_fname + ".tmp";
   auto fs = base_env->GetFileSystem();
