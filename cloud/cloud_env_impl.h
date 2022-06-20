@@ -185,11 +185,6 @@ class CloudEnvImpl : public CloudEnv {
   // Load CLOUDMANIFEST if exists in local disk to current env.
   Status LoadLocalCloudManifest(const std::string& dbname);
 
-  // Local CLOUDMANIFEST from `base_env` into `cloud_manifest`.
-  static Status LoadLocalCloudManifest(
-      const std::string& dbname, Env* base_env,
-      std::unique_ptr<CloudManifest>* cloud_manifest);
-
   Status CreateCloudManifest(const std::string& local_dbname);
 
   // Transfers the filename from RocksDB's domain to the physical domain, based
@@ -273,6 +268,8 @@ class CloudEnvImpl : public CloudEnv {
   Slice GetCurrentEpoch() const {
     return cloud_manifest_->GetCurrentEpoch();
   }
+
+  std::string CloudManifestFile(const std::string& dbname) const;
 
  protected:
   Status CheckValidity() const;
@@ -364,6 +361,9 @@ class CloudEnvImpl : public CloudEnv {
            const std::string& msg);
   Status writeCloudManifest(CloudManifest* manifest, const std::string& fname);
   std::string generateNewEpochId();
+
+  // TODO(wei): support switching cloud_manifest_ and cookie without reopening
+  // db. We need to protect these two with a shared mutex.
   std::unique_ptr<CloudManifest> cloud_manifest_;
   // This runs only in tests when we want to disable cloud manifest
   // functionality

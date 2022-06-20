@@ -351,6 +351,13 @@ class CloudEnvOptions {
   // Default: true
   bool roll_cloud_manifest_on_open;
 
+  // Cookie determines which CLOUDMANIFEST file we read. The value will
+  // be changed when there is leader election(set as leader's epoch)
+  // If 0, cookie won't be used. So we are expecting that valid epoch of leader
+  // should always be > 0
+  // Default: 0
+  uint64_t cookie;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -368,7 +375,8 @@ class CloudEnvOptions {
       bool _skip_cloud_files_in_getchildren = false,
       bool _use_direct_io_for_cloud_download = false,
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
-      bool _roll_cloud_manifest_on_open = true)
+      bool _roll_cloud_manifest_on_open = true,
+      uint64_t _cookie = 0)
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -390,7 +398,8 @@ class CloudEnvOptions {
             _constant_sst_file_size_in_sst_file_manager),
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
-        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open) {
+        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
+        cookie(_cookie) {
     (void) _cloud_type;
   }
 

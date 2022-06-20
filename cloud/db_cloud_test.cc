@@ -1,6 +1,7 @@
 // Copyright (c) 2017 Rockset
 
 #include <gtest/gtest.h>
+#include <cstring>
 #include "cloud/cloud_env_impl.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #ifndef ROCKSDB_LITE
@@ -1798,6 +1799,38 @@ TEST_F(CloudTest, FileCacheOnDemand) {
   EXPECT_EQ(local_files.size(), 2);
 
   CloseDB();
+}
+
+TEST_F(CloudTest, CookieZeroTest) {
+  cloud_env_options_.cookie = 0;
+  OpenDB();
+  auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
+  auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST");
+}
+
+TEST_F(CloudTest, CookieNonZeroTest) {
+  cloud_env_options_.cookie = 1;
+  OpenDB();
+  std::string value;
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
+  ASSERT_EQ(value, "World");
+
+  auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
+  auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
+  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
+                                                 cloud_manifest_file);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
+  CloseDB();
+  DestroyDir(dbname_);
+  OpenDB();
+
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
+  ASSERT_EQ(value, "World");
+  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
+                                                 cloud_manifest_file);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

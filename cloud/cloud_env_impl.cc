@@ -4,6 +4,7 @@
 #include "cloud/cloud_env_impl.h"
 
 #include <cinttypes>
+#include <iomanip>
 
 #include "cloud/cloud_env_wrapper.h"
 #include "cloud/cloud_log_controller_impl.h"
@@ -23,6 +24,77 @@
 #include "util/xxhash.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+namespace {
+
+// Make cloud manifest file path based on cookie. Similar to sst files, we
+// follow the same convention of filling 0 when the width is smaller than 6
+//
+// NOTE: we don't use cookie if value is 0.
+std::string MakeCloudManifestFile(const std::string& dbname, uint64_t cookie) {
+  if (cookie == 0) {
+    return dbname + "/CLOUDMANIFEST";
+  } else {
+    std::stringstream ss;
+    ss << dbname << "/CLOUDMANIFEST-";
+    ss << std::setfill('0') << std::setw(6) << cookie;
+    return ss.str();
+  }
+}
+
+// Local CLOUDMANIFEST from `base_env` into `cloud_manifest`.
+Status LoadLocalCloudManifestFromBaseEnv(
+    const std::string& dbname, Env* base_env, uint64_t cookie,
+    std::unique_ptr<CloudManifest>* cloud_manifest) {
+  std::unique_ptr<SequentialFileReader> reader;
+  auto cloud_manifest_file_name = MakeCloudManifestFile(dbname, cookie);
+  Status s = SequentialFileReader::Create(base_env->GetFileSystem(),
+                                          cloud_manifest_file_name,
+                                          FileOptions(), &reader, nullptr);
+  if (s.ok()) {
+    s = CloudManifest::LoadFromLog(std::move(reader), cloud_manifest);
+  }
+  return s;
+}
+
+std::string RemapFilenameWithCloudManifest(const std::string& logical_path, CloudManifest* cloud_manifest) {
+  auto file_name = basename(logical_path);
+  uint64_t fileNumber;
+  FileType type;
+  WalFileType walType;
+  if (file_name == "MANIFEST") {
+    type = kDescriptorFile;
+  } else {
+    bool ok = ParseFileName(file_name, &fileNumber, &type, &walType);
+    if (!ok) {
+      return logical_path;
+    }
+  }
+  Slice epoch;
+  switch (type) {
+    case kTableFile:
+      // We should not be accessing sst files before CLOUDMANIFEST is loaded
+      assert(cloud_manifest);
+      epoch = cloud_manifest->GetEpoch(fileNumber);
+      break;
+    case kDescriptorFile:
+      // We should not be accessing MANIFEST files before CLOUDMANIFEST is
+      // loaded
+      // Even though logical file might say MANIFEST-000001, we cut the number
+      // suffix and store MANIFEST-[epoch] in the cloud and locally.
+      file_name = "MANIFEST";
+      assert(cloud_manifest);
+      epoch = cloud_manifest->GetCurrentEpoch();
+      break;
+    default:
+      return logical_path;
+  };
+  auto dir = dirname(logical_path);
+  return dir + (dir.empty() ? "" : "/") + file_name +
+         (epoch.empty() ? "" : ("-" + epoch.ToString()));
+}
+
+}  // namespace
 
 CloudEnvImpl::CloudEnvImpl(const CloudEnvOptions& opts, Env* base,
                            const std::shared_ptr<Logger>& l)
@@ -851,59 +923,8 @@ Status CloudEnvImpl::LoadLocalCloudManifest(const std::string& dbname) {
   if (cloud_manifest_) {
     cloud_manifest_.reset();
   }
-  return CloudEnvImpl::LoadLocalCloudManifest(dbname, GetBaseEnv(),
-                                              &cloud_manifest_);
-}
-
-Status CloudEnvImpl::LoadLocalCloudManifest(
-    const std::string& dbname, Env* base_env,
-    std::unique_ptr<CloudManifest>* cloud_manifest) {
-  std::unique_ptr<SequentialFileReader> reader;
-  auto cloud_manifest_file_name = CloudManifestFile(dbname);
-  Status s = SequentialFileReader::Create(base_env->GetFileSystem(),
-                                          cloud_manifest_file_name,
-                                          FileOptions(), &reader, nullptr);
-  if (s.ok()) {
-    s = CloudManifest::LoadFromLog(std::move(reader), cloud_manifest);
-  }
-  return s;
-}
-
-std::string RemapFilenameWithCloudManifest(const std::string& logical_path, CloudManifest* cloud_manifest) {
-  auto file_name = basename(logical_path);
-  uint64_t fileNumber;
-  FileType type;
-  WalFileType walType;
-  if (file_name == "MANIFEST") {
-    type = kDescriptorFile;
-  } else {
-    bool ok = ParseFileName(file_name, &fileNumber, &type, &walType);
-    if (!ok) {
-      return logical_path;
-    }
-  }
-  Slice epoch;
-  switch (type) {
-    case kTableFile:
-      // We should not be accessing sst files before CLOUDMANIFEST is loaded
-      assert(cloud_manifest);
-      epoch = cloud_manifest->GetEpoch(fileNumber);
-      break;
-    case kDescriptorFile:
-      // We should not be accessing MANIFEST files before CLOUDMANIFEST is
-      // loaded
-      // Even though logical file might say MANIFEST-000001, we cut the number
-      // suffix and store MANIFEST-[epoch] in the cloud and locally.
-      file_name = "MANIFEST";
-      assert(cloud_manifest);
-      epoch = cloud_manifest->GetCurrentEpoch();
-      break;
-    default:
-      return logical_path;
-  };
-  auto dir = dirname(logical_path);
-  return dir + (dir.empty() ? "" : "/") + file_name +
-         (epoch.empty() ? "" : ("-" + epoch.ToString()));
+  return LoadLocalCloudManifestFromBaseEnv(
+      dbname, GetBaseEnv(), cloud_env_options.cookie, &cloud_manifest_);
 }
 
 std::string CloudEnvImpl::RemapFilename(const std::string& logical_path) const {
@@ -1314,8 +1335,8 @@ Status CloudEnvImpl::NeedsReinitialization(const std::string& local_dir,
     // need to reinitialize the entire directory.
     std::unique_ptr<CloudManifest> cloud_manifest;
     Env* base_env = GetBaseEnv();
-    Status load_status =
-        LoadLocalCloudManifest(local_dir, base_env, &cloud_manifest);
+    Status load_status = LoadLocalCloudManifestFromBaseEnv(
+        local_dir, base_env, cloud_env_options.cookie, &cloud_manifest);
     if (load_status.ok()) {
       std::string current_epoch = cloud_manifest->GetCurrentEpoch().ToString();
       Status local_manifest_exists =
@@ -2077,6 +2098,10 @@ Status CloudEnvImpl::FindAllLiveFiles(const std::string& bucket,
     idx++;
   }
   return Status::OK();
+}
+
+std::string CloudEnvImpl::CloudManifestFile(const std::string& dbname) const {
+  return MakeCloudManifestFile(dbname, cloud_env_options.cookie);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

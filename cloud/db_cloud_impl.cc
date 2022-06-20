@@ -192,8 +192,8 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     // was already uploaded. It is at this point we consider the database
     // committed in the cloud.
     st = cenv->GetStorageProvider()->PutCloudObject(
-        CloudManifestFile(local_dbname), cenv->GetDestBucketName(),
-        CloudManifestFile(cenv->GetDestObjectPath()));
+        cenv->CloudManifestFile(local_dbname), cenv->GetDestBucketName(),
+        cenv->CloudManifestFile(cenv->GetDestObjectPath()));
   }
 
   // now that the database is opened, all file sizes have been verified and we
@@ -357,7 +357,7 @@ Status DBCloudImpl::DoCheckpointToCloud(
   files_to_copy.emplace_back(tmp_manifest_fname, std::move(manifest_fname));
 
   // CLOUDMANIFEST file
-  files_to_copy.emplace_back(CloudManifestFile(""), CloudManifestFile(""));
+  files_to_copy.emplace_back(cenv->CloudManifestFile(""), cenv->CloudManifestFile(""));
 
   std::atomic<size_t> next_file_to_copy{0};
   int thread_count = std::max(1, options.thread_count);
