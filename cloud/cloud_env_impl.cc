@@ -851,15 +851,15 @@ Status CloudEnvImpl::LoadLocalCloudManifest(const std::string& dbname) {
   if (cloud_manifest_) {
     cloud_manifest_.reset();
   }
-  return CloudEnvImpl::LoadLocalCloudManifest(dbname, GetBaseEnv(),
-                                              &cloud_manifest_);
+  return CloudEnvImpl::LoadLocalCloudManifest(
+      dbname, GetBaseEnv(), cloud_env_options.cookie, &cloud_manifest_);
 }
 
 Status CloudEnvImpl::LoadLocalCloudManifest(
-    const std::string& dbname, Env* base_env,
+    const std::string& dbname, Env* base_env, const std::string& cookie,
     std::unique_ptr<CloudManifest>* cloud_manifest) {
   std::unique_ptr<SequentialFileReader> reader;
-  auto cloud_manifest_file_name = CloudManifestFile(dbname);
+  auto cloud_manifest_file_name = MakeCloudManifestFile(dbname, cookie);
   Status s = SequentialFileReader::Create(base_env->GetFileSystem(),
                                           cloud_manifest_file_name,
                                           FileOptions(), &reader, nullptr);
@@ -1315,8 +1315,8 @@ Status CloudEnvImpl::NeedsReinitialization(const std::string& local_dir,
     // need to reinitialize the entire directory.
     std::unique_ptr<CloudManifest> cloud_manifest;
     Env* base_env = GetBaseEnv();
-    Status load_status =
-        LoadLocalCloudManifest(local_dir, base_env, &cloud_manifest);
+    Status load_status = LoadLocalCloudManifest(
+        local_dir, base_env, cloud_env_options.cookie, &cloud_manifest);
     if (load_status.ok()) {
       std::string current_epoch = cloud_manifest->GetCurrentEpoch().ToString();
       Status local_manifest_exists =
@@ -2096,6 +2096,10 @@ Status CloudEnvImpl::FindAllLiveFilesAndFetchManifest(
     idx++;
   }
   return Status::OK();
+}
+
+std::string CloudEnvImpl::CloudManifestFile(const std::string& dbname) {
+  return MakeCloudManifestFile(dbname, cloud_env_options.cookie);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

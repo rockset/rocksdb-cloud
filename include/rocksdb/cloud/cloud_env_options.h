@@ -346,6 +346,16 @@ class CloudEnvOptions {
   // Default: true
   bool roll_cloud_manifest_on_open;
 
+  // If non-empty, cookie will be used as suffix of cloud manifest filename.
+  // Cookie can be used to roll the cloud manifest file. Currently, this is only
+  // used in leader-follower world, in which we create a new cloud-manifest file
+  // during leader election to protect old cloud-manifest file and enable
+  // rollback in emergency
+  //
+  // Default: "", means there is only one cloud manifest file (named as
+  // CLOUDMANIFEST)
+  std::string cookie;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -363,7 +373,7 @@ class CloudEnvOptions {
       bool _skip_cloud_files_in_getchildren = false,
       bool _use_direct_io_for_cloud_download = false,
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
-      bool _roll_cloud_manifest_on_open = true)
+      bool _roll_cloud_manifest_on_open = true, std::string _cookie = "")
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -385,7 +395,8 @@ class CloudEnvOptions {
             _constant_sst_file_size_in_sst_file_manager),
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
-        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open) {
+        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
+        cookie(std::move(_cookie)) {
     (void) _cloud_type;
   }
 

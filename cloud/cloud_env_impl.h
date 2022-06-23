@@ -196,7 +196,7 @@ class CloudEnvImpl : public CloudEnv {
 
   // Local CLOUDMANIFEST from `base_env` into `cloud_manifest`.
   static Status LoadLocalCloudManifest(
-      const std::string& dbname, Env* base_env,
+      const std::string& dbname, Env* base_env, const std::string& cookie,
       std::unique_ptr<CloudManifest>* cloud_manifest);
 
   Status CreateCloudManifest(const std::string& local_dbname);
@@ -274,6 +274,8 @@ class CloudEnvImpl : public CloudEnv {
   void FileCachePurge();
   uint64_t FileCacheGetCharge();
   uint64_t FileCacheGetNumItems();
+
+  std::string CloudManifestFile(const std::string& dbname);
 
  protected:
   Status CheckValidity() const;

@@ -1922,6 +1922,38 @@ TEST_F(CloudTest, FileModificationTimeTest) {
   EXPECT_GT(modtime2, modtime1);
 }
 
+TEST_F(CloudTest, EmptyCookieTest) {
+  // By default cookie is empty
+  OpenDB();
+  auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
+  auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST");
+}
+
+TEST_F(CloudTest, NonEmptyCookieTest) {
+  cloud_env_options_.cookie = "000001";
+  OpenDB();
+  std::string value;
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
+  ASSERT_EQ(value, "World");
+
+  auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
+  auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
+  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
+                                                 cloud_manifest_file);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
+  CloseDB();
+  DestroyDir(dbname_);
+  OpenDB();
+
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
+  ASSERT_EQ(value, "World");
+  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
+                                                 cloud_manifest_file);
+  EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
+}
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb

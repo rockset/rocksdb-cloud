@@ -152,7 +152,9 @@ Status ManifestReader::GetLiveFiles(const std::string& bucket_path,
   std::unique_ptr<CloudManifest> cloud_manifest;
   {
     std::unique_ptr<SequentialFile> file;
-    auto cloudManifestFile = CloudManifestFile(bucket_path);
+    auto cenv_impl = static_cast<CloudEnvImpl*>(cenv_);
+    assert(cenv_impl);
+    auto cloudManifestFile = cenv_impl->CloudManifestFile(bucket_path);
     s = cenv_->NewSequentialFileCloud(bucket_prefix_, cloudManifestFile, &file,
                                       EnvOptions());
     if (!s.ok()) {
