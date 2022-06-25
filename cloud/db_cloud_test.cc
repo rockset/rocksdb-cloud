@@ -1,5 +1,6 @@
 // Copyright (c) 2017 Rockset
 
+#include <gtest/gtest.h>
 #ifndef ROCKSDB_LITE
 
 #ifdef USE_AWS
@@ -331,7 +332,11 @@ class CloudTest : public testing::Test {
     }
   }
 
-  DBImpl* GetDBImpl() {
+  CloudEnvImpl* GetCloudEnvImpl() const {
+    return static_cast<CloudEnvImpl*>(aenv_.get());
+  }
+
+  DBImpl* GetDBImpl() const {
     return static_cast<DBImpl*>(db_->GetBaseDB());
   }
 
@@ -1928,10 +1933,11 @@ TEST_F(CloudTest, EmptyCookieTest) {
   auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
   auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
   EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST");
+  CloseDB();
 }
 
 TEST_F(CloudTest, NonEmptyCookieTest) {
-  cloud_env_options_.cookie = "000001";
+  cloud_env_options_.cookie_on_open = "000001";
   OpenDB();
   std::string value;
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
@@ -1952,6 +1958,77 @@ TEST_F(CloudTest, NonEmptyCookieTest) {
   aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
                                                  cloud_manifest_file);
   EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
+  CloseDB();
+}
+
+TEST_F(CloudTest, LiveFilesConsistentBetweenCloudManifestRollTest) {
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  std::vector<std::string> live_sst_files1;
+  std::string manifest_file1;
+  ASSERT_OK(aenv_->FindAllLiveFiles(dbname_, &live_sst_files1, &manifest_file1));
+
+  std::string new_cookie = "2";
+  std::string serialized_delta;
+  ASSERT_OK(GetCloudEnvImpl()->RollCloudManifest(
+      dbname_, new_cookie, GetDBImpl()->TEST_Current_Next_FileNo(),
+      &serialized_delta));
+  Slice delta_slice(serialized_delta);
+  CloudManifestDelta delta;
+  ASSERT_OK(DeserializeCloudManifestDelta(&delta_slice, &delta));
+  EXPECT_EQ(delta.file_num, GetDBImpl()->TEST_Current_Next_FileNo());
+
+  std::vector<std::string> live_sst_files2;
+  std::string manifest_file2;
+  ASSERT_OK(aenv_->FindAllLiveFiles(dbname_, &live_sst_files2, &manifest_file2));
+
+  EXPECT_EQ(live_sst_files1, live_sst_files2);
+  EXPECT_EQ(manifest_file1, manifest_file2);
+
+  CloseDB();
+}
+
+TEST_F(CloudTest, ApplyCloudManifestDeltaTest) {
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "world"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+  auto max_next_file_num = GetDBImpl()->TEST_Current_Next_FileNo();
+  CloudManifestDelta delta{max_next_file_num, "dca7f3e19212c4b3" /* fake epoch */};
+  std::string serialized_delta;
+  ASSERT_OK(SerializeCloudManifestDelta(&serialized_delta, std::move(delta)));
+  ASSERT_OK(GetCloudEnvImpl()->ApplyCloudManifestDelta(std::move(serialized_delta)));
+  CloseDB();
+}
+
+TEST_F(CloudTest, WriteAfterRollingArePersistedInNewEpoch) {
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "world"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  std::string new_cookie = "2";
+  std::string serialized_delta;
+  ASSERT_OK(GetCloudEnvImpl()->RollCloudManifest(
+      dbname_, new_cookie, GetDBImpl()->TEST_Current_Next_FileNo(),
+      &serialized_delta));
+
+  // following writes are not visible after rolling cloud manifest
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "new_world"));
+  ASSERT_OK(db_->Flush(FlushOptions()));
+
+  // reopen with cookie = 1, new updates after rolling are not visible
+  CloseDB();
+  DestroyDir(dbname_);
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  std::string value;
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
+  ASSERT_EQ(value, "world");
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

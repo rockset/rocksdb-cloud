@@ -347,14 +347,19 @@ class CloudEnvOptions {
   bool roll_cloud_manifest_on_open;
 
   // If non-empty, cookie will be used as suffix of cloud manifest filename.
-  // Cookie can be used to roll the cloud manifest file. Currently, this is only
-  // used in leader-follower world, in which we create a new cloud-manifest file
-  // during leader election to protect old cloud-manifest file and enable
+  // Cookie can be used to specify the cloud manifest file. Currently, this is
+  // only used in leader-follower world, in which we create a new cloud-manifest
+  // file during leader election to protect old cloud-manifest file and enable
   // rollback in emergency
+  //
+  // NOTE: cookie_on_open is only used to determine the CloudManifest file in s3
+  // when we open the db. Once db is opened, we should never need to access the
+  // CloudManifest file in s3. Also, the in-memory CloudManifest will be updated
+  // and it might point to some other CloudManifest file with different cookie
   //
   // Default: "", means there is only one cloud manifest file (named as
   // CLOUDMANIFEST)
-  std::string cookie;
+  std::string cookie_on_open;
 
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
@@ -373,7 +378,8 @@ class CloudEnvOptions {
       bool _skip_cloud_files_in_getchildren = false,
       bool _use_direct_io_for_cloud_download = false,
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
-      bool _roll_cloud_manifest_on_open = true, std::string _cookie = "")
+      bool _roll_cloud_manifest_on_open = true,
+      std::string _cookie_on_open = "")
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -396,7 +402,7 @@ class CloudEnvOptions {
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
         roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
-        cookie(std::move(_cookie)) {
+        cookie_on_open(std::move(_cookie_on_open)) {
     (void) _cloud_type;
   }
 
