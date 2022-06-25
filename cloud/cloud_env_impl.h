@@ -7,9 +7,11 @@
 #include <thread>
 
 #include "cloud/cloud_manifest.h"
+#include "port/port_posix.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
+#include "util/mutexlock.h"
 
 namespace ROCKSDB_NAMESPACE {
 class CloudScheduler;
@@ -177,6 +179,11 @@ class CloudEnvImpl : public CloudEnv {
                           const std::string& object_path,
                           std::vector<std::string>* live_sst_files,
                           std::string* manifest_file) override;
+  // Find all live files based on the cookie specified. 
+  Status FindAllLiveFilesWithCookie(
+      const std::string& bucket, const std::string& object_path,
+      std::string cookie, std::vector<std::string>* live_sst_files,
+      std::string* manifest_file);
   Status extractParents(const std::string& bucket_name_prefix,
                         const DbidList& dbid_list, DbidParents* parents);
   Status PreloadCloudManifest(const std::string& local_dbname) override;
@@ -268,6 +275,26 @@ class CloudEnvImpl : public CloudEnv {
 
   std::string CloudManifestFile(const std::string& dbname);
 
+  // Roll the cloud manifest happens when follower tries to become the leader.
+  // It will:
+  //
+  // - Generate new delta based on the specified next_file_num, which represents
+  // the snapshot we cut for the new cloud manifest. SST files with filenum >=
+  // next_file_num belongs to the new epoch
+  // - Apply the delta locally
+  // - Upload CLOUDMANIFEST and MANIFEST to s3
+  //
+  // `cloud_manifest_delta` contains the generated cloud manifest delta during rolling.
+  //
+  // NOTE: If any step after(include itself) this, and before we write
+  // `kNewEpoch` with the delta, fails, we would have to reopen the db. Reason is the local cloudmanifest
+  // contains dirty delta generated during rolling and we have to reopen db to clean it up.
+  Status RollCloudManifest(std::string local_dbname, std::string new_cookie,
+                           uint64_t next_file_num,
+                           std::string* cloud_manifest_delta);
+  // Apply the serialized cloud manifest delta locally.
+  Status ApplyCloudManifestDelta(std::string cloud_manifest_delta);
+
  protected:
   Status CheckValidity() const;
   // Status TEST_Initialize(const std::string& name) override;
@@ -356,8 +383,11 @@ class CloudEnvImpl : public CloudEnv {
  private:
   void log(InfoLogLevel level, const std::string& fname,
            const std::string& msg);
+  // Fetch the cloud manifest based on the cookie
+  Status FetchCloudManifest(const std::string& local_dbname, const std::string& cookie);
   Status writeCloudManifest(CloudManifest* manifest, const std::string& fname);
   std::string generateNewEpochId();
+
   std::unique_ptr<CloudManifest> cloud_manifest_;
   // This runs only in tests when we want to disable cloud manifest
   // functionality

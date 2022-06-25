@@ -343,7 +343,7 @@ Status DBCloudImpl::DoCheckpointToCloud(
   files_to_copy.emplace_back(IdentityFileName(""), IdentityFileName(""));
 
   // MANIFEST file
-  auto current_epoch = cenv->GetCloudManifest()->GetCurrentEpoch().ToString();
+  auto current_epoch = cenv->GetCloudManifest()->GetCurrentEpoch();
   auto manifest_fname = ManifestFileWithEpoch("", current_epoch);
   auto tmp_manifest_fname = manifest_fname + ".tmp";
   auto fs = base_env->GetFileSystem();

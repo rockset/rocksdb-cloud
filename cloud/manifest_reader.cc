@@ -26,14 +26,14 @@ ManifestReader::~ManifestReader() {}
 // cloud_manifest object
 //
 Status ManifestReader::GetLiveFilesAndCloudManifest(
-    const std::string bucket_path, std::set<uint64_t>* list,
-    std::unique_ptr<CloudManifest>* cloud_manifest) {
+    const std::string bucket_path, const std::string cookie,
+    std::set<uint64_t>* list, std::unique_ptr<CloudManifest>* cloud_manifest) {
   Status s;
   {
     std::unique_ptr<SequentialFile> file;
     auto cenv_impl = static_cast<CloudEnvImpl*>(cenv_);
     assert(cenv_impl);
-    auto cloudManifestFile = cenv_impl->CloudManifestFile(bucket_path);
+    auto cloudManifestFile = MakeCloudManifestFile(bucket_path, cookie);
     s = cenv_->NewSequentialFileCloud(bucket_prefix_, cloudManifestFile, &file,
                                       EnvOptions());
     if (!s.ok()) {
@@ -50,7 +50,7 @@ Status ManifestReader::GetLiveFilesAndCloudManifest(
   std::unique_ptr<SequentialFileReader> file_reader;
   {
     auto manifestFile = ManifestFileWithEpoch(
-        bucket_path, (*cloud_manifest)->GetCurrentEpoch().ToString());
+        bucket_path, (*cloud_manifest)->GetCurrentEpoch());
     std::unique_ptr<SequentialFile> file;
     s = cenv_->NewSequentialFileCloud(bucket_prefix_, manifestFile, &file,
                                       EnvOptions());
