@@ -24,21 +24,22 @@ class ManifestReader {
   virtual ~ManifestReader();
 
   // Retrieve all live files referred to by this bucket path
-  Status GetLiveFiles(const std::string bucket_path, std::set<uint64_t>* list) {
+  Status GetLiveFiles(const std::string& bucket_path,
+                      std::set<uint64_t>* list) {
     std::unique_ptr<CloudManifest> cloud_manifest;
     // TODO(wei): this is not correct if we can roll cloud manifest without
     // reopening the shard. We should fix this by reading from
     // cenv_->cloud_manifest directly
     return GetLiveFilesAndCloudManifest(
-        std::move(bucket_path), cenv_->GetCloudEnvOptions().cookie_on_open,
+        bucket_path, cenv_->GetCloudEnvOptions().cookie_on_open,
         list, &cloud_manifest);
   }
 
   // Retrive all live files referred by the bucket path and cookie, also get the
   // constructed cloud_manifest
   Status GetLiveFilesAndCloudManifest(
-      const std::string bucket_path,
-      const std::string cookie,
+      const std::string& bucket_path,
+      const std::string& cookie,
       std::set<uint64_t>* list,
       std::unique_ptr<CloudManifest>* cloud_manifest);
 

@@ -2,11 +2,8 @@
 
 #include <gtest/gtest.h>
 #include "cloud/cloud_env_impl.h"
-#include "cloud/cloud_manifest.h"
-#include "db/db_impl/replication_codec.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "db/db_impl/db_impl.h"
-#include "trace_replay/trace_replay.h"
 #ifndef ROCKSDB_LITE
 
 #ifdef USE_AWS
@@ -1844,71 +1841,64 @@ TEST_F(CloudTest, NonEmptyCookieTest) {
   EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
 }
 
-TEST_F(CloudTest, LiveFilesConsistentBetweenCloudManifestRollTest) {
+// Verify that live sst files are the same after applying cloud manifest delta
+TEST_F(CloudTest, LiveFilesConsistentAfterApplyLocalCloudManifestDeltaTest) {
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  auto cenv_impl = GetCloudEnvImpl();
   // verify that live files are the same between CLOUD_MANIFEST-cookie1 and
   // CLOUD_MANIFEST-cookie2
-  auto verifyLiveFiles = [cloud_env = GetCloudEnvImpl()](std::string cookie1,
-                                                         std::string cookie2) {
+  auto verifyLiveFiles = [cenv_impl](std::string cookie1, std::string cookie2) {
     std::vector<std::string> live_sst_files1, live_sst_files2;
     std::string manifest_file1, manifest_file2;
-    cloud_env->FindAllLiveFilesWithCookie(
-        cloud_env->GetSrcBucketName(), cloud_env->GetSrcObjectPath(), cookie1,
-        &live_sst_files1, &manifest_file1);
-    cloud_env->FindAllLiveFilesWithCookie(
-        cloud_env->GetSrcBucketName(), cloud_env->GetSrcObjectPath(), cookie2,
-        &live_sst_files2, &manifest_file2);
+    ASSERT_OK(cenv_impl->FindAllLiveFilesWithCookie(
+        cenv_impl->GetSrcBucketName(), cenv_impl->GetSrcObjectPath(), cookie1,
+        &live_sst_files1, &manifest_file1));
+    ASSERT_OK(cenv_impl->FindAllLiveFilesWithCookie(
+        cenv_impl->GetSrcBucketName(), cenv_impl->GetSrcObjectPath(), cookie2,
+        &live_sst_files2, &manifest_file2));
     EXPECT_NE(manifest_file1, manifest_file2);
     EXPECT_EQ(live_sst_files1, live_sst_files2);
   };
 
-  cloud_env_options_.cookie_on_open = "1";
-  OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   std::string new_cookie = "2";
-  std::string serialized_delta;
-  ASSERT_OK(GetCloudEnvImpl()->RollCloudManifest(
-      dbname_, new_cookie, GetDBImpl()->TEST_Current_Next_FileNo(),
-      &serialized_delta));
-  Slice delta_slice(serialized_delta);
-  CloudManifestDelta delta;
-  ASSERT_OK(DeserializeCloudManifestDelta(&delta_slice, &delta));
-  EXPECT_EQ(delta.file_num, GetDBImpl()->TEST_Current_Next_FileNo());
+  std::string new_epoch = "dca7f3e19212c4b3";  // new epoch for MANIFEST file
+  ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
+      dbname_, new_cookie,
+      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
+  // check that a new manifest files are generated
+  EXPECT_OK(base_env_->FileExists(MakeCloudManifestFile(dbname_, new_cookie)));
+  EXPECT_OK(base_env_->FileExists(ManifestFileWithEpoch(dbname_, new_epoch)));
+
+  // Upload CLOUD_MANIFEST_new_cookie and MANIFEST_new_epoch to s3
+  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
+
   verifyLiveFiles("1" /* old cookie */, "2" /* new cookie */);
 }
 
-TEST_F(CloudTest, ApplyCloudManifestDeltaTest) {
-  cloud_env_options_.cookie_on_open = "1";
-  OpenDB();
-  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "world"));
-  ASSERT_OK(db_->Flush(FlushOptions()));
-  auto max_next_file_num = GetDBImpl()->TEST_Current_Next_FileNo();
-  CloudManifestDelta delta{max_next_file_num, "dca7f3e19212c4b3" /* fake epoch */};
-  std::string serialized_delta;
-  ASSERT_OK(SerializeCloudManifestDelta(&serialized_delta, std::move(delta)));
-  ASSERT_OK(GetCloudEnvImpl()->ApplyCloudManifestDelta(std::move(serialized_delta)));
-}
-
-TEST_F(CloudTest, WriteAfterRollingArePersistedInNewEpoch) {
+// After calling `ApplyLocalCloudManifestDelta`, writes should be persisted in
+// sst files only visible in new Manifest
+TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   cloud_env_options_.cookie_on_open = "1";
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "world"));
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   std::string new_cookie = "2";
-  std::string serialized_delta;
-  ASSERT_OK(GetCloudEnvImpl()->RollCloudManifest(
-      dbname_, new_cookie, GetDBImpl()->TEST_Current_Next_FileNo(),
-      &serialized_delta));
+  std::string new_epoch = "dca7f3e19212c4b3";
+  ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
+      dbname_, new_cookie,
+      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
 
-  // following writes are not visible after rolling cloud manifest
+  // following writes are not visible for old cookie
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "new_world"));
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   // reopen with cookie = 1, new updates after rolling are not visible
   CloseDB();
-  DestroyDir(dbname_);
   cloud_env_options_.cookie_on_open = "1";
   OpenDB();
   std::string value;

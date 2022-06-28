@@ -8,15 +8,9 @@
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "port/port_posix.h"
-#include "util/mutexlock.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-// CloudManifestDelta represents delta changes between rolling cloud manifest
-struct CloudManifestDelta {
-  uint64_t file_num; // max next file number for new epoch
-  std::string epoch; // epoch for the new manifest file
-};
 
 // Cloud manifest holds the information about mapping between original file
 // names and their suffixes.
@@ -55,10 +49,7 @@ class CloudManifest {
   void AddEpoch(uint64_t startFileNumber, std::string epochId);
 
   std::string GetEpoch(uint64_t fileNumber);
-  std::string GetCurrentEpoch() {
-    ReadLock lck(&mutex_);
-    return currentEpoch_;
-  }
+  std::string GetCurrentEpoch();
   std::string ToString();
 
  private:
@@ -74,6 +65,8 @@ class CloudManifest {
   // (exclusive) of an epoch
   std::vector<std::pair<uint64_t, std::string>> pastEpochs_;
   std::string currentEpoch_;
+
+  static constexpr uint32_t kCurrentFormatVersion = 1;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

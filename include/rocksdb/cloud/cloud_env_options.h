@@ -439,6 +439,17 @@ struct CheckpointToCloudOptions {
 // A map of dbid to the pathname where the db is stored
 typedef std::map<std::string, std::string> DbidList;
 
+// CloudManifestDelta represents delta changes when rolling cloud manifest.
+//
+// Whenever we roll cloud manifest, we generate a new MANIFEST-epoch file, all
+// files with file number >= file_num are only visible in the new
+// MANIFEST-epoch file
+struct CloudManifestDelta {
+  uint64_t file_num; // next file number for new epoch
+  std::string epoch; // epoch for the new manifest file
+};
+
+
 //
 // The Cloud environment
 //

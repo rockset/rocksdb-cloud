@@ -26,7 +26,7 @@ ManifestReader::~ManifestReader() {}
 // cloud_manifest object
 //
 Status ManifestReader::GetLiveFilesAndCloudManifest(
-    const std::string bucket_path, const std::string cookie,
+    const std::string& bucket_path, const std::string& cookie,
     std::set<uint64_t>* list, std::unique_ptr<CloudManifest>* cloud_manifest) {
   Status s;
   {

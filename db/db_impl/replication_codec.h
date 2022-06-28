@@ -2,7 +2,6 @@
 
 #include <string>
 
-#include "cloud/cloud_manifest.h"
 #include "db/memtable.h"
 #include "rocksdb/options.h"
 #include "util/autovector.h"
@@ -36,8 +35,4 @@ std::string RecordMemTableSwitch(
     const std::shared_ptr<rocksdb::ReplicationLogListener>&
         replication_log_listener,
     const MemTableSwitchRecord& mem_switch_record);
-
-Status SerializeCloudManifestDelta(std::string* dst, CloudManifestDelta delta);
-Status DeserializeCloudManifestDelta(Slice* src, CloudManifestDelta* delta);
-
 }  // namespace ROCKSDB_NAMESPACE
