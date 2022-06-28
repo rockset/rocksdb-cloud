@@ -31,10 +31,15 @@ enum class RecordTags : uint32_t {
   kCurrentEpoch = 2,
 };
 
-static constexpr uint32_t kCurrentFormatVersion = 1;
-Status LoadEpochsFromLog(std::unique_ptr<SequentialFileReader> log,
-                   std::string& currentEpoch,
-                   std::vector<std::pair<uint64_t, std::string>>& pastEpochs) {
+}  // namespace
+
+// Format:
+// header: format_version (varint) number of records (varint)
+// record: tag (varint, 1 or 2)
+// record 1: epoch (slice), file number
+// record 2: current epoch
+Status CloudManifest::LoadFromLog(std::unique_ptr<SequentialFileReader> log,
+                                  std::unique_ptr<CloudManifest>* manifest) {
   Status status;
   CorruptionReporter reporter;
   reporter.status = &status;
@@ -45,6 +50,8 @@ Status LoadEpochsFromLog(std::unique_ptr<SequentialFileReader> log,
   bool headerRead = false;
   uint32_t expectedRecords = 0;
   uint32_t recordsRead = 0;
+  std::string currentEpoch;
+  std::vector<std::pair<uint64_t, std::string>> pastEpochs;
   while (reader.ReadRecord(&record, &scratch,
                            WALRecoveryMode::kAbsoluteConsistency) &&
          status.ok()) {
@@ -102,25 +109,9 @@ Status LoadEpochsFromLog(std::unique_ptr<SequentialFileReader> log,
   if (!std::is_sorted(pastEpochs.begin(), pastEpochs.end())) {
     return Status::Corruption("Cloud manifest records not sorted");
   }
-  return status;
-}
-
-}  // namespace
-
-// Format:
-// header: format_version (varint) number of records (varint)
-// record: tag (varint, 1 or 2)
-// record 1: epoch (slice), file number
-// record 2: current epoch
-Status CloudManifest::LoadFromLog(std::unique_ptr<SequentialFileReader> log,
-                                  std::unique_ptr<CloudManifest>* manifest) {
-  std::string currentEpoch;                                
-  std::vector<std::pair<uint64_t, std::string>> pastEpochs;
-  auto st = LoadEpochsFromLog(std::move(log), currentEpoch, pastEpochs);
-  if (!st.ok()) return st;
   manifest->reset(
       new CloudManifest(std::move(pastEpochs), std::move(currentEpoch)));
-  return st;
+  return status;
 }
 
 Status CloudManifest::CreateForEmptyDatabase(
@@ -199,6 +190,11 @@ std::string CloudManifest::GetEpoch(uint64_t fileNumber) {
     return currentEpoch_;
   }
   return itr->second;
+}
+
+std::string CloudManifest::GetCurrentEpoch() {
+  ReadLock lck(&mutex_);
+  return currentEpoch_;
 }
 
 std::string CloudManifest::ToString(bool include_past_epochs) {

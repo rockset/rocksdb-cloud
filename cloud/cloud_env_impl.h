@@ -279,25 +279,28 @@ class CloudEnvImpl : public CloudEnv {
 
   std::string CloudManifestFile(const std::string& dbname);
 
-  // Roll the cloud manifest happens when follower tries to become the leader.
+  // Apply cloud manifest delta to db locally
+  //
   // It will:
   //
-  // - Generate new delta based on the specified next_file_num, which represents
-  // the snapshot we cut for the new cloud manifest. SST files with filenum >=
-  // next_file_num belongs to the new epoch
-  // - Apply the delta locally
-  // - Upload CLOUDMANIFEST and MANIFEST to s3
-  //
-  // `cloud_manifest_delta` contains the generated cloud manifest delta during rolling.
+  // - Update in memory cloud manifest
+  // - Persist the changes to disk by writing new CLOUDMANIFEST-new_cookie and
+  // MANIFEST-delta.epoch files
   //
   // NOTE: If any step after(include itself) this, and before we write
-  // `kNewEpoch` with the delta, fails, we would have to reopen the db. Reason is the local cloudmanifest
-  // contains dirty delta generated during rolling and we have to reopen db to clean it up.
-  Status RollCloudManifest(std::string local_dbname, std::string new_cookie,
-                           uint64_t next_file_num,
-                           std::string* cloud_manifest_delta);
-  // Apply the serialized cloud manifest delta locally.
-  Status ApplyCloudManifestDelta(std::string cloud_manifest_delta);
+  // `kNewEpoch` with the delta, fails, we would have to reopen the db. Reason
+  // is the local cloudmanifest contains dirty delta generated during rolling
+  // and we have to reopen db to clean it up.
+  Status ApplyLocalCloudManifestDelta(
+    const std::string& local_dbname,
+    const std::string& new_cookie,
+    const CloudManifestDelta& delta);
+
+  // Upload local CLOUDMANIFEST-cookie file and the corresponding
+  // MANIFEST-current_epoch file to cloud
+  //
+  // REQUIRES: the file exists locally
+  Status UploadLocalCloudManifest(const std::string& local_dbname, const std::string& cookie);
 
  protected:
   Status CheckValidity() const;
@@ -391,7 +394,6 @@ class CloudEnvImpl : public CloudEnv {
   Status FetchCloudManifest(const std::string& local_dbname, const std::string& cookie);
   Status writeCloudManifest(CloudManifest* manifest, const std::string& fname);
   std::string generateNewEpochId();
-
   std::unique_ptr<CloudManifest> cloud_manifest_;
   // This runs only in tests when we want to disable cloud manifest
   // functionality

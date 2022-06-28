@@ -27,27 +27,4 @@ std::string RecordMemTableSwitch(
   SerializeMemTableSwitchRecord(&rlr.contents, record);
   return replication_log_listener->OnReplicationLogRecord(std::move(rlr));
 }
-
-Status SerializeCloudManifestDelta(std::string* dst, CloudManifestDelta delta) {
-  PutVarint64(dst, delta.file_num);
-  PutLengthPrefixedSlice(dst, delta.epoch);
-  return Status::OK();
 }
-Status DeserializeCloudManifestDelta(Slice* src, CloudManifestDelta* delta) {
-  uint64_t file_num;
-  std::string epoch;
-  if (!GetVarint64(src, &file_num)) {
-    return Status::Corruption(
-        "Unable to decode file_num of cloud manifest delta");
-  }
-
-  Slice epoch_slice;
-  if (!GetLengthPrefixedSlice(src, &epoch_slice)) {
-    return Status::Corruption("Unable to decode epoch of cloud manifest delta");
-  }
-
-  delta->file_num = file_num;
-  delta->epoch = epoch_slice.ToString();
-  return Status::OK();
-}
-}  // namespace ROCKSDB_NAMESPACE

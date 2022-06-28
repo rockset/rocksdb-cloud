@@ -1856,67 +1856,43 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   return Status::OK();
 }
 
-Status CloudEnvImpl::RollCloudManifest(std::string local_dbname,
-                                       std::string new_cookie,
-                                       uint64_t max_next_file_num,
-                                       std::string* cloud_manifest_delta) {
+Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
+                                              const std::string& cookie) {
   assert(HasDestBucket());
 
+  std::string current_epoch = cloud_manifest_->GetCurrentEpoch();
+  // upload the manifest file
+  auto st = GetStorageProvider()->PutCloudObject(
+      ManifestFileWithEpoch(local_dbname, current_epoch), GetDestBucketName(),
+      ManifestFileWithEpoch(GetDestObjectPath(), current_epoch));
+  if (!st.ok()) {
+    return st;
+  }
+
+  // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
+  return GetStorageProvider()->PutCloudObject(
+      MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
+      MakeCloudManifestFile(GetDestObjectPath(), cookie));
+}
+
+Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbname,
+    const std::string& new_cookie,
+    const CloudManifestDelta& delta) {
   std::string old_epoch = cloud_manifest_->GetCurrentEpoch();
-  std::string new_epoch = generateNewEpochId();
   const auto& fs = GetBaseEnv()->GetFileSystem();
   auto io_st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
-                     ManifestFileWithEpoch(local_dbname, new_epoch),
+                     ManifestFileWithEpoch(local_dbname, delta.epoch),
                      0 /* size */, true /* use_fsync */,
                      nullptr /* io_tracer */, Temperature::kUnknown);
   if (!io_st.ok()) {
     return io_st;
   }
 
-  cloud_manifest_->AddEpoch(std::move(max_next_file_num), std::move(new_epoch));
+  cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
 
   // Dump cloud_manifest into the CLOUDMANIFEST-new_cookie file
-  auto st = writeCloudManifest(cloud_manifest_.get(),
-                          MakeCloudManifestFile(local_dbname, new_cookie));
-  if (!st.ok()) {
-    return st;
-  }
-
-  // upload new manifest
-  st = GetStorageProvider()->PutCloudObject(
-      ManifestFileWithEpoch(local_dbname, new_epoch), GetDestBucketName(),
-      ManifestFileWithEpoch(GetDestObjectPath(), new_epoch));
-  if (!st.ok()) {
-    return st;
-  }
-
-  // upload new cloud manifest
-  st = GetStorageProvider()->PutCloudObject(
-      MakeCloudManifestFile(local_dbname, new_cookie), GetDestBucketName(),
-      MakeCloudManifestFile(GetDestObjectPath(), new_cookie));
-
-  if (!st.ok()) {
-    return st;
-  }
-
-  std::string serialized;
-  st = SerializeCloudManifestDelta(
-      &serialized, CloudManifestDelta{max_next_file_num, new_epoch});
-  *cloud_manifest_delta = std::move(serialized);
-
-  return st;
-}
-
-Status CloudEnvImpl::ApplyCloudManifestDelta(std::string serialzed_delta) {
-  CloudManifestDelta delta;
-  Slice slice(serialzed_delta);
-  auto st = DeserializeCloudManifestDelta(&slice, &delta);
-  if (!st.ok()) {
-    return st;
-  }
-
-  cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
-  return st;
+  return writeCloudManifest(cloud_manifest_.get(),
+                            MakeCloudManifestFile(local_dbname, new_cookie));
 }
 
 // All db in a bucket are stored in path /.rockset/dbid/<dbid>
