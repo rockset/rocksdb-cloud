@@ -173,10 +173,15 @@ class CloudEnvImpl : public CloudEnv {
                            std::vector<std::string>* pathnames);
   Status FindObsoleteDbid(const std::string& bucket_name_prefix,
                           std::vector<std::string>* dbids);
-  Status FindAllLiveFiles(const std::string& bucket,
-                          const std::string& object_path,
+  Status FetchCurrentManifest(const std::string& local_dbname) const override;
+
+  // Find all live files based on cloud_manifest_ and local MANIFEST FILE
+  // 
+  // NOTE: we assume that cloud_manifest_ is not changed when calling FindAllLiveFiles
+  Status FindAllLiveFiles(const std::string& local_dbname,
                           std::vector<std::string>* live_sst_files,
                           std::string* manifest_file) override;
+
   Status extractParents(const std::string& bucket_name_prefix,
                         const DbidList& dbid_list, DbidParents* parents);
   Status PreloadCloudManifest(const std::string& local_dbname) override;
