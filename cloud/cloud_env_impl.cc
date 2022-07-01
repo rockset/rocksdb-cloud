@@ -2054,40 +2054,6 @@ Status CloudEnvImpl::CheckValidity() const {
   }
 }
 
-Status CloudEnvImpl::FetchCurrentManifest(const std::string& local_dbname) const {
-  assert(cloud_manifest_);
-  auto current_epoch = cloud_manifest_->GetCurrentEpoch().ToString();
-  if (HasDestBucket()) {
-    Status st = GetStorageProvider()->GetCloudObject(
-      GetDestBucketName(), ManifestFileWithEpoch(GetDestObjectPath(), current_epoch),
-      ManifestFileWithEpoch(local_dbname, current_epoch));
-    if (!st.ok() && !st.IsPathNotFound()) {
-      return st;
-    }
-
-    if (st.ok()) {
-      return st;
-    }
-  }
-
-  // we couldn't get cloud manifest from dest, need to try from src
-  if (HasSrcBucket() && !SrcMatchesDest()) {
-    Status st = GetStorageProvider()->GetCloudObject(
-      GetSrcBucketName(), ManifestFileWithEpoch(GetSrcObjectPath(), current_epoch),
-      ManifestFileWithEpoch(local_dbname, current_epoch));
-    if (!st.ok() && !st.IsPathNotFound()) {
-      return st;
-    }
-
-    if (st.ok()) {
-      return st;
-    }
-  }
-
-  return Status::NotFound("Manifest file with epoch: " + current_epoch +
-                          " is not found in s3");
-}
-
 Status CloudEnvImpl::FindAllLiveFiles(const std::string& local_dbname,
                                       std::vector<std::string>* live_sst_files,
                                       std::string* manifest_file) {

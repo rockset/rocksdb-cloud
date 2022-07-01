@@ -19,9 +19,11 @@ class LocalManifestReader {
   LocalManifestReader(std::shared_ptr<Logger> info_log, CloudEnv* cenv);
 
   // Retrive all live files by reading manifest files locally.
-  // REQUIRES: there are CLOUDMANIFEST and MANIFEST files in local_dbname
+  // If Manifest file doesn't exist, it will be pulled from s3
+  //
   // REQUIRES: cenv_ should have cloud_manifest_ set, and it should have the
-  // same content as the CLOUDMANIFEST file stored locally
+  // same content as the CLOUDMANIFEST file stored locally. cloud_manifest_ is
+  // not updated when calling the function
   Status GetLiveFilesLocally(const std::string& local_dbname,
                              std::set<uint64_t>* list) const;
 

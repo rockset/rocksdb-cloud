@@ -32,17 +32,12 @@ Status LocalManifestReader::GetLiveFilesLocally(const std::string& local_dbname,
   std::unique_ptr<SequentialFileReader> manifest_file_reader;
   Status s;
   {
-    // file name here doesn't matter, 
-    auto manifest_file = ManifestFileWithEpoch(local_dbname, current_epoch);
-    // Check local file existence to return IsNotFound error if it doesn't exist.
-    // NewSequentialFile directly will return IOError
-    s = cenv_impl->GetBaseEnv()->FileExists(manifest_file);
-    if (!s.ok()) {
-      return s;
-    }
+    // file name here doesn't matter, it will always be mapped to the correct Manifest file
+    // use empty epoch here so that it will be recognized as manifest file type
+    auto manifest_file = ManifestFileWithEpoch(local_dbname, "" /* epoch */);
 
     std::unique_ptr<SequentialFile> file;
-    s = cenv_impl->GetBaseEnv()->NewSequentialFile(manifest_file, &file, EnvOptions());
+    s = cenv_impl->NewSequentialFile(manifest_file, &file, EnvOptions());
     if (!s.ok()) {
       return s;
     }

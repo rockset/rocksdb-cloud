@@ -530,8 +530,6 @@ class CloudEnv : public Env {
   // Files both in S3 and in the local directory have this [epoch] suffix.
   virtual std::string RemapFilename(const std::string& logical_name) const = 0;
 
-  // Fetch current Manifest file into local
-  virtual Status FetchCurrentManifest(const std::string& local_dbname) const = 0;
   // Find the list of live files based on CloudManifest and Manifest in local db
   //
   // For the returned filepath in `live_sst_files` and `manifest_file`, we only

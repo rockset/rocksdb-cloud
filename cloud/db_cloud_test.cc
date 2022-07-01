@@ -1864,7 +1864,7 @@ TEST_F(CloudTest, FileCacheOnDemand) {
   CloseDB();
 }
 
-TEST_F(CloudTest, FetchCurrentManifestTest) {
+TEST_F(CloudTest, FindLiveFilesFetchManifestTest) {
   OpenDB();
   ASSERT_OK(db_->Put({}, "a", "1"));
   ASSERT_OK(db_->Flush({}));
@@ -1881,13 +1881,7 @@ TEST_F(CloudTest, FetchCurrentManifestTest) {
   // fetch and load CloudManifest
   ASSERT_OK(aenv_->PreloadCloudManifest(dbname_));
 
-  // there is no local Manifest file, so find live files will fail
-  EXPECT_TRUE(aenv_->FindAllLiveFiles(dbname_, &live_sst_files, &manifest_file)
-                  .IsNotFound());
-
-  // fetch the current manifest
-  ASSERT_OK(aenv_->FetchCurrentManifest(dbname_));
-
+  // manifest file will be fetched to local db
   ASSERT_OK(aenv_->FindAllLiveFiles(dbname_, &live_sst_files, &manifest_file));
   EXPECT_EQ(live_sst_files.size(), 1);
 }
