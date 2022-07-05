@@ -349,11 +349,19 @@ class CloudTest : public testing::Test {
   std::unique_ptr<CloudEnv> aenv_;
 };
 
+class CloudTestWithParam : public CloudTest,
+                           public testing::WithParamInterface<bool> {
+ public:
+  CloudTestWithParam() : CloudTest() {
+    cloud_env_options_.local_manifest_has_epoch_suffix = GetParam();
+  }
+};
+
 //
 // Most basic test. Create DB, write one key, close it and then check to see
 // that the key exists.
 //
-TEST_F(CloudTest, BasicTest) {
+TEST_P(CloudTestWithParam, BasicTest) {
   // Put one key-value
   OpenDB();
   std::string value;
@@ -374,7 +382,7 @@ TEST_F(CloudTest, BasicTest) {
   CloseDB();
 }
 
-TEST_F(CloudTest, FindAllLiveFilesTest) {
+TEST_P(CloudTestWithParam, FindAllLiveFilesTest) {
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
   ASSERT_OK(db_->Flush(FlushOptions()));
@@ -413,7 +421,7 @@ TEST_F(CloudTest, FindAllLiveFilesTest) {
 }
 
 // Files of dropped CF should not be included in live files
-TEST_F(CloudTest, LiveFilesOfDroppedCFTest) {
+TEST_P(CloudTestWithParam, LiveFilesOfDroppedCFTest) {
   std::vector<ColumnFamilyHandle*> handles;
   OpenDB(&handles);
 
@@ -444,7 +452,7 @@ TEST_F(CloudTest, LiveFilesOfDroppedCFTest) {
 
 // Verifies that when we move files across levels, the files are still listed as
 // live files
-TEST_F(CloudTest, LiveFilesAfterChangingLevelTest) {
+TEST_P(CloudTestWithParam, LiveFilesAfterChangingLevelTest) {
   options_.num_levels = 3;
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "a", "1"));
@@ -471,7 +479,7 @@ TEST_F(CloudTest, LiveFilesAfterChangingLevelTest) {
   EXPECT_EQ(tablefiles_before_move, tablefiles_after_move);
 }
 
-TEST_F(CloudTest, GetChildrenTest) {
+TEST_P(CloudTestWithParam, GetChildrenTest) {
   // Create some objects in S3
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
@@ -498,7 +506,7 @@ TEST_F(CloudTest, GetChildrenTest) {
 //
 // Create and read from a clone.
 //
-TEST_F(CloudTest, Newdb) {
+TEST_P(CloudTestWithParam, Newdb) {
   std::string master_dbid;
   std::string newdb1_dbid;
   std::string newdb2_dbid;
@@ -578,7 +586,7 @@ TEST_F(CloudTest, Newdb) {
   CloseDB();
 }
 
-TEST_F(CloudTest, ColumnFamilies) {
+TEST_P(CloudTestWithParam, ColumnFamilies) {
   std::vector<ColumnFamilyHandle*> handles;
   // Put one key-value
   OpenDB(&handles);
@@ -628,7 +636,7 @@ TEST_F(CloudTest, ColumnFamilies) {
 //
 // Create and read from a clone.
 //
-TEST_F(CloudTest, DISABLED_TrueClone) {
+TEST_P(CloudTestWithParam, DISABLED_TrueClone) {
   std::string master_dbid;
   std::string newdb1_dbid;
   std::string newdb2_dbid;
@@ -742,7 +750,7 @@ TEST_F(CloudTest, DISABLED_TrueClone) {
 //
 // verify that dbid registry is appropriately handled
 //
-TEST_F(CloudTest, DbidRegistry) {
+TEST_P(CloudTestWithParam, DbidRegistry) {
   // Put one key-value
   OpenDB();
   std::string value;
@@ -758,7 +766,7 @@ TEST_F(CloudTest, DbidRegistry) {
   CloseDB();
 }
 
-TEST_F(CloudTest, KeepLocalFiles) {
+TEST_P(CloudTestWithParam, KeepLocalFiles) {
   cloud_env_options_.keep_local_sst_files = true;
   for (int iter = 0; iter < 4; ++iter) {
     cloud_env_options_.use_direct_io_for_cloud_download =
@@ -797,7 +805,7 @@ TEST_F(CloudTest, KeepLocalFiles) {
   }
 }
 
-TEST_F(CloudTest, CopyToFromS3) {
+TEST_P(CloudTestWithParam, CopyToFromS3) {
   std::string fname = dbname_ + "/100000.sst";
 
   // iter 0 -- not using transfer manager
@@ -842,7 +850,7 @@ TEST_F(CloudTest, CopyToFromS3) {
   }
 }
 
-TEST_F(CloudTest, DelayFileDeletion) {
+TEST_P(CloudTestWithParam, DelayFileDeletion) {
   std::string fname = dbname_ + "/000010.sst";
 
   // Create aws env
@@ -887,7 +895,7 @@ TEST_F(CloudTest, DelayFileDeletion) {
 }
 
 // Verify that a savepoint copies all src files to destination
-TEST_F(CloudTest, Savepoint) {
+TEST_P(CloudTestWithParam, Savepoint) {
   // Put one key-value
   OpenDB();
   std::string value;
@@ -916,7 +924,7 @@ TEST_F(CloudTest, Savepoint) {
     ASSERT_TRUE(flist.size() == 1);
 
     CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(cloud_env.get());
-    auto remapped_fname = cimpl->RemapFilename(flist[0].name);
+    auto remapped_fname = cimpl->RemapFilename(flist[0].name).remote;
     // source path
     std::string spath = cloud_env->GetSrcObjectPath() + "/" + remapped_fname;
     ASSERT_OK(cloud_env->GetStorageProvider()->ExistsCloudObject(
@@ -961,7 +969,7 @@ TEST_F(CloudTest, Savepoint) {
                                            dest_path);
 }
 
-TEST_F(CloudTest, Encryption) {
+TEST_P(CloudTestWithParam, Encryption) {
   // Create aws env
   cloud_env_options_.server_side_encryption = true;
   char* key_id = getenv("AWS_KMS_KEY_ID");
@@ -985,7 +993,7 @@ TEST_F(CloudTest, Encryption) {
   CloseDB();
 }
 
-TEST_F(CloudTest, DirectReads) {
+TEST_P(CloudTestWithParam, DirectReads) {
   options_.use_direct_reads = true;
   options_.use_direct_io_for_flush_and_compaction = true;
   BlockBasedTableOptions bbto;
@@ -1010,7 +1018,7 @@ TEST_F(CloudTest, DirectReads) {
 }
 
 #ifdef USE_KAFKA
-TEST_F(CloudTest, KeepLocalLogKafka) {
+TEST_P(CloudTestWithParam, KeepLocalLogKafka) {
   cloud_env_options_.keep_local_log_files = false;
   cloud_env_options_.log_type = LogType::kLogKafka;
   cloud_env_options_.kafka_log_options
@@ -1050,7 +1058,7 @@ TEST_F(CloudTest, KeepLocalLogKafka) {
 
 // TODO(igor): determine why this fails,
 // https://github.com/rockset/rocksdb-cloud/issues/35
-TEST_F(CloudTest, DISABLED_KeepLocalLogKinesis) {
+TEST_P(CloudTestWithParam, DISABLED_KeepLocalLogKinesis) {
   cloud_env_options_.keep_local_log_files = false;
   cloud_env_options_.log_type = LogType::kLogKinesis;
 
@@ -1088,16 +1096,17 @@ TEST_F(CloudTest, DISABLED_KeepLocalLogKinesis) {
 
 // Test whether we are able to recover nicely from two different writers to the
 // same S3 bucket. (The feature that was enabled by CLOUDMANIFEST)
-TEST_F(CloudTest, TwoDBsOneBucket) {
+TEST_P(CloudTestWithParam, TwoDBsOneBucket) {
   auto firstDB = dbname_;
   auto secondDB = dbname_ + "-1";
   cloud_env_options_.keep_local_sst_files = true;
   std::string value;
 
+  cloud_env_options_.resync_on_open = true;
   OpenDB();
   CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(aenv_.get());
   auto firstManifestFile =
-      aenv_->GetDestObjectPath() + "/" + cimpl->RemapFilename("MANIFEST-1");
+      aenv_->GetDestObjectPath() + "/" + cimpl->RemapFilename("MANIFEST-1").remote;
   EXPECT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
       aenv_->GetDestBucketName(), firstManifestFile));
   // Create two files
@@ -1112,6 +1121,7 @@ TEST_F(CloudTest, TwoDBsOneBucket) {
   // Open again, with no destination bucket
   cloud_env_options_.dest_bucket.SetBucketName("");
   cloud_env_options_.dest_bucket.SetObjectPath("");
+  cloud_env_options_.resync_on_open = false;
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Third", "File"));
   ASSERT_OK(db_->Flush(FlushOptions()));
@@ -1128,6 +1138,7 @@ TEST_F(CloudTest, TwoDBsOneBucket) {
   // Open in a different directory with destination bucket set
   dbname_ = secondDB;
   cloud_env_options_.dest_bucket = cloud_env_options_.src_bucket;
+  cloud_env_options_.resync_on_open = true;
   OpenDB();
   ASSERT_OK(db_->Put(WriteOptions(), "Third", "DifferentFile"));
   ASSERT_OK(db_->Flush(FlushOptions()));
@@ -1137,6 +1148,7 @@ TEST_F(CloudTest, TwoDBsOneBucket) {
   dbname_ = firstDB;
   cloud_env_options_.dest_bucket.SetBucketName("");
   cloud_env_options_.dest_bucket.SetObjectPath("");
+  cloud_env_options_.resync_on_open = false;
   OpenDB();
   // Changes to the cloud database should make no difference for us. This is an
   // important check because we should not reinitialize from the cloud if we
@@ -1148,6 +1160,7 @@ TEST_F(CloudTest, TwoDBsOneBucket) {
   // Reopen in the first directory, this time with destination path
   dbname_ = firstDB;
   cloud_env_options_.dest_bucket = cloud_env_options_.src_bucket;
+  cloud_env_options_.resync_on_open = true;
   OpenDB();
   // Changes to the cloud database should be pulled down now.
   ASSERT_OK(db_->Get(ReadOptions(), "Third", &value));
@@ -1171,13 +1184,14 @@ TEST_F(CloudTest, TwoDBsOneBucket) {
 // -- it runs two databases on exact same S3 bucket. The work on CLOUDMANIFEST
 // enables us to run in that configuration for extended amount of time (1 hour
 // by default) without any issues -- the last CLOUDMANIFEST writer wins.
-TEST_F(CloudTest, TwoConcurrentWriters) {
+TEST_P(CloudTestWithParam, TwoConcurrentWriters) {
   auto firstDB = dbname_;
   auto secondDB = dbname_ + "-1";
 
   DBCloud *db1, *db2;
   CloudEnv *aenv1, *aenv2;
 
+  cloud_env_options_.resync_on_open = true;
   auto openDB1 = [&] {
     dbname_ = firstDB;
     OpenDB();
@@ -1260,7 +1274,7 @@ TEST_F(CloudTest, TwoConcurrentWriters) {
 
 // Creates a pure RocksDB database and makes sure we can migrate to RocksDB
 // Cloud
-TEST_F(CloudTest, MigrateFromPureRocksDB) {
+TEST_P(CloudTestWithParam, MigrateFromPureRocksDB) {
   {  // Create local RocksDB
     Options options;
     options.create_if_missing = true;
@@ -1303,7 +1317,7 @@ TEST_F(CloudTest, MigrateFromPureRocksDB) {
 
 // Tests that we can open cloud DB without destination and source bucket set.
 // This is useful for tests.
-TEST_F(CloudTest, NoDestOrSrc) {
+TEST_P(CloudTestWithParam, NoDestOrSrc) {
   DestroyDir(dbname_);
   cloud_env_options_.keep_local_sst_files = true;
   cloud_env_options_.src_bucket.SetBucketName("");
@@ -1323,7 +1337,7 @@ TEST_F(CloudTest, NoDestOrSrc) {
   CloseDB();
 }
 
-TEST_F(CloudTest, PreloadCloudManifest) {
+TEST_P(CloudTestWithParam, PreloadCloudManifest) {
   DestroyDir(dbname_);
   // Put one key-value
   OpenDB();
@@ -1347,7 +1361,7 @@ TEST_F(CloudTest, PreloadCloudManifest) {
 // from a cloud bucket but new writes are not propagated
 // back to any cloud bucket. Once cloned, all updates are local.
 //
-TEST_F(CloudTest, Ephemeral) {
+TEST_P(CloudTestWithParam, Ephemeral) {
   cloud_env_options_.keep_local_sst_files = true;
   options_.level0_file_num_compaction_trigger = 100;  // never compact
 
@@ -1444,33 +1458,22 @@ TEST_F(CloudTest, Ephemeral) {
 // started after durable clone upload its CLOUDMANIFEST but before it uploads
 // one of the MANIFEST. In this case, we want to verify that ephemeral clone is
 // able to reinitialize instead of crash looping.
-TEST_F(CloudTest, EphemeralOnCorruptedDB) {
+TEST_P(CloudTestWithParam, EphemeralOnCorruptedDB) {
   cloud_env_options_.keep_local_sst_files = true;
   options_.level0_file_num_compaction_trigger = 100;  // never compact
 
   OpenDB();
 
-  std::vector<std::string> files;
-  base_env_->GetChildren(dbname_, &files);
-
-  // Get the MANIFEST file
-  std::string manifest_file_name;
-  for (const auto& file_name : files) {
-    if (file_name.rfind("MANIFEST", 0) == 0) {
-      manifest_file_name = file_name;
-      break;
-    }
-  }
-
-  ASSERT_FALSE(manifest_file_name.empty());
+  auto [local_manifest_file, remote_manifest_file] = aenv_->RemapFilename(
+      ManifestFileWithEpoch("" /* dbname */, "" /* epoch */));
 
   // Delete MANIFEST file from S3 bucket.
   // This is to simulate the scenario where CLOUDMANIFEST is uploaded, but
   // MANIFEST is not yet uploaded from the durable shard.
   ASSERT_NE(aenv_.get(), nullptr);
-  aenv_->GetStorageProvider()->DeleteCloudObject(
+  ASSERT_OK(aenv_->GetStorageProvider()->DeleteCloudObject(
       aenv_->GetSrcBucketName(),
-      aenv_->GetSrcObjectPath() + "/" + manifest_file_name);
+      aenv_->GetSrcObjectPath() + "/" + remote_manifest_file));
 
   // Ephemeral clone should fail.
   std::unique_ptr<DBCloud> clone_db;
@@ -1480,8 +1483,8 @@ TEST_F(CloudTest, EphemeralOnCorruptedDB) {
 
   // Put the MANIFEST file back
   aenv_->GetStorageProvider()->PutCloudObject(
-      dbname_ + "/" + manifest_file_name, aenv_->GetSrcBucketName(),
-      aenv_->GetSrcObjectPath() + "/" + manifest_file_name);
+      dbname_ + "/" + local_manifest_file, aenv_->GetSrcBucketName(),
+      aenv_->GetSrcObjectPath() + "/" + remote_manifest_file);
 
   // Try one more time. This time it should succeed.
   clone_db.reset();
@@ -1498,7 +1501,7 @@ TEST_F(CloudTest, EphemeralOnCorruptedDB) {
 // In this mode, every open of the ephemeral clone db causes its
 // data to be resynced with the master db.
 //
-TEST_F(CloudTest, EphemeralResync) {
+TEST_P(CloudTestWithParam, EphemeralResync) {
   cloud_env_options_.keep_local_sst_files = true;
   cloud_env_options_.resync_on_open = true;
   options_.level0_file_num_compaction_trigger = 100;  // never compact
@@ -1593,7 +1596,7 @@ TEST_F(CloudTest, EphemeralResync) {
   }
 }
 
-TEST_F(CloudTest, CheckpointToCloud) {
+TEST_P(CloudTestWithParam, CheckpointToCloud) {
   cloud_env_options_.keep_local_sst_files = true;
   options_.level0_file_num_compaction_trigger = 100;  // never compact
 
@@ -1639,7 +1642,7 @@ TEST_F(CloudTest, CheckpointToCloud) {
 }
 
 // Basic test to copy object within S3.
-TEST_F(CloudTest, CopyObjectTest) {
+TEST_P(CloudTestWithParam, CopyObjectTest) {
   CreateCloudEnv();
 
   // We need to open an empty DB in order for epoch to work.
@@ -1657,7 +1660,7 @@ TEST_F(CloudTest, CopyObjectTest) {
   }
 
   Status st = aenv_->GetStorageProvider()->CopyCloudObject(
-      aenv_->GetSrcBucketName(), aenv_->RemapFilename(fname),
+      aenv_->GetSrcBucketName(), aenv_->RemapFilename(fname).local,
       aenv_->GetSrcBucketName(), dst_fname);
   ASSERT_OK(st);
 
@@ -1682,7 +1685,7 @@ TEST_F(CloudTest, CopyObjectTest) {
 //
 // Verify that we can cache data from S3 in persistent cache.
 //
-TEST_F(CloudTest, PersistentCache) {
+TEST_P(CloudTestWithParam, PersistentCache) {
   std::string pcache = test::TmpDir() + "/persistent_cache";
   SetPersistentCache(pcache, 1);
 
@@ -1704,7 +1707,7 @@ TEST_F(CloudTest, PersistentCache) {
 
 // This test create 2 DBs that shares a block cache. Ensure that reads from one
 // DB do not get the values from the other DB.
-TEST_F(CloudTest, SharedBlockCache) {
+TEST_P(CloudTestWithParam, SharedBlockCache) {
   cloud_env_options_.keep_local_sst_files = false;
 
   // Share the block cache.
@@ -1753,14 +1756,14 @@ TEST_F(CloudTest, SharedBlockCache) {
 }
 
 // Verify that sst_file_cache and file_cache cannot be set together
-TEST_F(CloudTest, KeepLocalFilesAndFileCache) {
+TEST_P(CloudTestWithParam, KeepLocalFilesAndFileCache) {
   cloud_env_options_.sst_file_cache = NewLRUCache(1024);  // 1 KB cache
   cloud_env_options_.keep_local_sst_files = true;
   ASSERT_TRUE(checkOpen().IsInvalidArgument());
 }
 
 // Verify that sst_file_cache can be disabled
-TEST_F(CloudTest, FileCacheZero) {
+TEST_P(CloudTestWithParam, FileCacheZero) {
   cloud_env_options_.sst_file_cache = NewLRUCache(0);  // zero size
   OpenDB();
   CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(aenv_.get());
@@ -1781,7 +1784,7 @@ TEST_F(CloudTest, FileCacheZero) {
 }
 
 // Verify that sst_file_cache is very small, so no files are local.
-TEST_F(CloudTest, FileCacheSmall) {
+TEST_P(CloudTestWithParam, FileCacheSmall) {
   cloud_env_options_.sst_file_cache = NewLRUCache(10);  // Practically zero size
   OpenDB();
   CloudEnvImpl* cimpl = static_cast<CloudEnvImpl*>(aenv_.get());
@@ -1796,7 +1799,7 @@ TEST_F(CloudTest, FileCacheSmall) {
 }
 
 // Relatively large sst_file cache, so all files are local.
-TEST_F(CloudTest, FileCacheLarge) {
+TEST_P(CloudTestWithParam, FileCacheLarge) {
   size_t capacity = 10240L;
   std::shared_ptr<Cache> cache = NewLRUCache(capacity);
   cloud_env_options_.sst_file_cache = cache;
@@ -1829,7 +1832,7 @@ TEST_F(CloudTest, FileCacheLarge) {
 }
 
 // Cache will have a few files only.
-TEST_F(CloudTest, FileCacheOnDemand) {
+TEST_P(CloudTestWithParam, FileCacheOnDemand) {
   size_t capacity = 3000;
   int num_shard_bits = 0; // 1 shard
   bool strict_capacity_limit = false;
@@ -1871,7 +1874,7 @@ TEST_F(CloudTest, FileCacheOnDemand) {
   CloseDB();
 }
 
-TEST_F(CloudTest, FindLiveFilesFetchManifestTest) {
+TEST_P(CloudTestWithParam, FindLiveFilesFetchManifestTest) {
   OpenDB();
   ASSERT_OK(db_->Put({}, "a", "1"));
   ASSERT_OK(db_->Flush({}));
@@ -1893,28 +1896,74 @@ TEST_F(CloudTest, FindLiveFilesFetchManifestTest) {
   EXPECT_EQ(live_sst_files.size(), 1);
 }
 
-TEST_F(CloudTest, FileModificationTimeTest) {
+TEST_P(CloudTestWithParam, FileModificationTimeTest) {
   OpenDB();
   ASSERT_OK(db_->Put({}, "a", "1"));
   ASSERT_OK(db_->Flush({}));
-  std::vector<std::string> live_sst_files;
-  std::string manifest_file;
-  ASSERT_OK(aenv_->FindAllLiveFiles(dbname_, &live_sst_files, &manifest_file));
   uint64_t modtime1;
-  ASSERT_OK(aenv_->GetFileModificationTime(dbname_ + pathsep + manifest_file,
+  // filename will be re-mapped correctly
+  ASSERT_OK(aenv_->GetFileModificationTime(ManifestFileWithEpoch(dbname_, ""),
                                            &modtime1));
   CloseDB();
   DestroyDir(dbname_);
-  // don't roll cloud manifest so that manifest file epoch is not updated
+  // don't roll cloud manifest so that manifest file name doens't change
   cloud_env_options_.roll_cloud_manifest_on_open = false;
   OpenDB();
   uint64_t modtime2;
-  ASSERT_OK(aenv_->GetFileModificationTime(dbname_ + pathsep + manifest_file,
+  // filename will be re-mapped correctly
+  ASSERT_OK(aenv_->GetFileModificationTime(ManifestFileWithEpoch(dbname_, ""),
                                            &modtime2));
   // we read local file modification time, so the second time we open db, the
   // modification time is changed
   EXPECT_GT(modtime2, modtime1);
 }
+
+TEST_F(CloudTest, FileRemappingTest) {
+  cloud_env_options_.local_manifest_has_epoch_suffix = true;
+  OpenDB();
+  ASSERT_OK(db_->Put({}, "a", "1"));
+  ASSERT_OK(db_->Flush({}));
+  std::vector<std::string> live_sst_files;
+  std::string remote_manifest_file;
+  ASSERT_OK(
+      aenv_->FindAllLiveFiles(dbname_, &live_sst_files, &remote_manifest_file));
+  ASSERT_EQ(live_sst_files.size(), 1);
+  {
+    auto [local_fname, remote_fname] = aenv_->RemapFilename(
+        ManifestFileWithEpoch("" /* dbanme */, "" /* epoch */));
+    EXPECT_EQ(local_fname, remote_fname);
+    EXPECT_EQ(remote_fname, remote_manifest_file);
+  }
+
+  {
+    auto [local_fname, remote_fname] =
+        aenv_->RemapFilename(RemoveEpoch(live_sst_files[0]));
+    EXPECT_EQ(local_fname, remote_fname);
+    EXPECT_EQ(remote_fname, live_sst_files[0]);
+  }
+
+  CloseDB();
+
+  cloud_env_options_.local_manifest_has_epoch_suffix = false;
+  // disable manifest rolling so that epoch is not changed
+  cloud_env_options_.roll_cloud_manifest_on_open = false;
+  OpenDB();
+  {
+    auto [local_fname, remote_fname] = aenv_->RemapFilename(
+        ManifestFileWithEpoch("" /* dbanme */, "" /* epoch */));
+    EXPECT_EQ(local_fname, "MANIFEST");
+    EXPECT_EQ(remote_fname, remote_manifest_file);
+  }
+  {
+    auto [local_fname, remote_fname] =
+        aenv_->RemapFilename(RemoveEpoch(live_sst_files[0]));
+    EXPECT_EQ(local_fname, remote_fname);
+    EXPECT_EQ(remote_fname, live_sst_files[0]);
+  }
+  CloseDB();
+}
+
+INSTANTIATE_TEST_CASE_P(All, CloudTestWithParam, ::testing::Values(false, true));
 
 }  //  namespace ROCKSDB_NAMESPACE
 

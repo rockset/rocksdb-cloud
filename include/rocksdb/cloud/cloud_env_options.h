@@ -346,6 +346,26 @@ class CloudEnvOptions {
   // Default: true
   bool roll_cloud_manifest_on_open;
 
+  // Experimental option!
+  // If true, local manifest filename will have epoch as suffix.
+  // else, local manifest filename is always mapped as MANIFEST.
+  //
+  // This option is used to support switching CLOUDMANIFEST and
+  // MANIFEST during epoch rolling without reopening DB. Switching from one
+  // MANIFEST-epoch file to another MANIFEST-new-epoch file is tricky on a
+  // running db. But if local filename is always mapped as MANIFEST, there is no
+  // need to do that.
+  //
+  // NOTE: the MANIFEST filename in cloud should always have epoch as suffix
+  //
+  // NOTE: when `resync_on_open=true` and this option is false, to maintain the
+  // invariant that MANIFEST file locally is always at local CLOUDMANIFEST's
+  // current epoch, we delete both CLOUDMANIFEST and MANIFEST on db open to
+  // force downloading the latest manifest files from cloud.
+  //
+  // Default: true
+  bool local_manifest_has_epoch_suffix;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -363,7 +383,8 @@ class CloudEnvOptions {
       bool _skip_cloud_files_in_getchildren = false,
       bool _use_direct_io_for_cloud_download = false,
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
-      bool _roll_cloud_manifest_on_open = true)
+      bool _roll_cloud_manifest_on_open = true,
+      bool _local_manifest_has_epoch_suffix = true)
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -385,7 +406,8 @@ class CloudEnvOptions {
             _constant_sst_file_size_in_sst_file_manager),
         skip_cloud_files_in_getchildren(_skip_cloud_files_in_getchildren),
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
-        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open) {
+        roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
+        local_manifest_has_epoch_suffix(_local_manifest_has_epoch_suffix) {
     (void) _cloud_type;
   }
 
@@ -520,12 +542,28 @@ class CloudEnv : public Env {
 
   // Transfers the filename from RocksDB's domain to the physical domain, based
   // on information stored in CLOUDMANIFEST.
-  // For example, it will map 00010.sst to 00010.sst-[epoch] where [epoch] is
-  // an epoch during which that file was created.
-  // Files both in S3 and in the local directory have this [epoch] suffix.
-  virtual std::string RemapFilename(const std::string& logical_name) const = 0;
+  //
+  // After remapping, it's possible that local fname != remote fname
+  //
+  // For example,
+  // - For sst file, it will map 00010.sst to 00010.sst-[epoch](both locally and
+  // remotely) where [epoch] is an epoch during which that file was created.
+  // - For manifest file, when `include_epoch_in_manifest_filename=false`,
+  // "MANIFEST-NUM" file will be mapped to MANIFEST locally and MANIFEST-epoch
+  // remotely.
+  struct RemappedFilenames {
+    std::string local;
+    std::string remote;
+
+    std::pair<std::string, std::string> ToPair() && {
+      return std::make_pair(std::move(local), std::move(remote));
+    }
+  };
+  virtual RemappedFilenames RemapFilename(
+      const std::string& logical_name) const = 0;
 
   // Find the list of live files based on CloudManifest and Manifest in local db
+  // The filenames returned are remote filename but not local filename
   //
   // For the returned filepath in `live_sst_files` and `manifest_file`, we only
   // include the basename of the filepath but not the directory prefix to the

@@ -41,6 +41,8 @@ void CloudEnvOptions::Dump(Logger* log) const {
          use_direct_io_for_cloud_download);
   Header(log, "        COptions.roll_cloud_manifest_on_open: %d",
          roll_cloud_manifest_on_open);
+  Header(log, "    COptions.local_manifest_has_epoch_suffix: %d",
+         local_manifest_has_epoch_suffix);
   if (sst_file_cache != nullptr) {
     Header(log, "           COptions.sst_file_cache size: %ld bytes",
            sst_file_cache->GetCapacity());

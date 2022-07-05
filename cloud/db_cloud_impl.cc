@@ -245,11 +245,11 @@ Status DBCloudImpl::Savepoint() {
   // If an sst file does not exist in the destination path, then remember it
   std::vector<std::string> to_copy;
   for (auto onefile : live_files) {
-    auto remapped_fname = cenv->RemapFilename(onefile.name);
-    std::string destpath = cenv->GetDestObjectPath() + "/" + remapped_fname;
+    auto remapped_remote_fname = cenv->RemapFilename(onefile.name).remote;
+    std::string destpath = cenv->GetDestObjectPath() + "/" + remapped_remote_fname;
     if (!provider->ExistsCloudObject(cenv->GetDestBucketName(), destpath)
              .ok()) {
-      to_copy.push_back(remapped_fname);
+      to_copy.push_back(remapped_remote_fname);
     }
   }
 
@@ -317,6 +317,8 @@ Status DBCloudImpl::DoCheckpointToCloud(
     return st;
   }
 
+  // a list of files to copy, for the pair, first being local fname, second
+  // being remote fname
   std::vector<std::pair<std::string, std::string>> files_to_copy;
   for (auto& f : live_files) {
     uint64_t number = 0;
@@ -329,8 +331,7 @@ Status DBCloudImpl::DoCheckpointToCloud(
       // ignore
       continue;
     }
-    auto remapped_fname = cenv->RemapFilename(f);
-    files_to_copy.emplace_back(remapped_fname, remapped_fname);
+    files_to_copy.emplace_back(cenv->RemapFilename(f).ToPair());
   }
 
   // IDENTITY file
@@ -343,18 +344,19 @@ Status DBCloudImpl::DoCheckpointToCloud(
   files_to_copy.emplace_back(IdentityFileName(""), IdentityFileName(""));
 
   // MANIFEST file
-  auto current_epoch = cenv->GetCloudManifest()->GetCurrentEpoch().ToString();
-  auto manifest_fname = ManifestFileWithEpoch("", current_epoch);
-  auto tmp_manifest_fname = manifest_fname + ".tmp";
+  auto [local_manifest_fname, remote_manifest_fname] = cenv->RemapFilename(
+      ManifestFileWithEpoch("" /* dbname */, "" /* epoch */));
+  auto tmp_manifest_fname = local_manifest_fname + ".tmp";
   auto fs = base_env->GetFileSystem();
   st =
-      CopyFile(fs.get(), GetName() + "/" + manifest_fname,
+      CopyFile(fs.get(), GetName() + "/" + local_manifest_fname,
                GetName() + "/" + tmp_manifest_fname, manifest_file_size, false,
                nullptr, Temperature::kUnknown);
   if (!st.ok()) {
     return st;
   }
-  files_to_copy.emplace_back(tmp_manifest_fname, std::move(manifest_fname));
+  // why do we copy tmp file instead of local file directly? To make sure we are copy a snapshot?
+  files_to_copy.emplace_back(tmp_manifest_fname, std::move(remote_manifest_fname));
 
   // CLOUDMANIFEST file
   files_to_copy.emplace_back(CloudManifestFile(""), CloudManifestFile(""));
@@ -429,7 +431,7 @@ Status DBCloudImpl::ExecuteRemoteCompactionRequest(
   // convert the local pathnames to the cloud pathnames
   for (unsigned int i = 0; i < result->output_files.size(); i++) {
     OutputFile* outfile = &result->output_files[i];
-    outfile->pathname = cenv->RemapFilename(outfile->pathname);
+    outfile->pathname = cenv->RemapFilename(outfile->pathname).remote;
   }
   return Status::OK();
 }

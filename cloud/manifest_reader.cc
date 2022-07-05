@@ -41,16 +41,16 @@ Status LocalManifestReader::GetLiveFilesLocally(
     assert(cloud_storage_provider);
     // file name here doesn't matter, it will always be mapped to the correct Manifest file.
     // use empty epoch here so that it will be recognized as manifest file type
-    auto local_manifest_file = cenv_impl->RemapFilename(
+    auto [local_manifest_file, remote_manifest_file] = cenv_impl->RemapFilename(
         ManifestFileWithEpoch(local_dbname, "" /* epoch */));
 
     if (manifest_file_version != nullptr) {
       // Only fetch the latest Manifest file from cloud when we ask for the version number.
-      auto remote_manifest_file =
-          cenv_impl->GetSrcObjectPath() + "/" + basename(local_manifest_file);
+      auto remote_manifest_full_path =
+          cenv_impl->GetSrcObjectPath() + "/" + basename(remote_manifest_file);
 
       s = cloud_storage_provider->GetCloudObjectAndVersion(
-          cenv_impl->GetSrcBucketName(), remote_manifest_file,
+          cenv_impl->GetSrcBucketName(), remote_manifest_full_path,
           local_manifest_file, manifest_file_version);
       if (!s.ok()) {
         return s;

@@ -203,10 +203,17 @@ class CloudEnvImpl : public CloudEnv {
 
   // Transfers the filename from RocksDB's domain to the physical domain, based
   // on information stored in CLOUDMANIFEST.
-  // For example, it will map 00010.sst to 00010.sst-[epoch] where [epoch] is
-  // an epoch during which that file was created.
-  // Files both in S3 and in the local directory have this [epoch] suffix.
-  std::string RemapFilename(const std::string& logical_path) const override;
+  //
+  // After remapping, it's possible that local fname != remote fname
+  //
+  // For example,
+  // - For sst file, it will map 00010.sst to 00010.sst-[epoch](both locally and
+  // remotely) where [epoch] is an epoch during which that file was created.
+  // - For manifest file, when `include_epoch_in_manifest_filename=false`,
+  // "MANIFEST-NUM" file will be mapped to MANIFEST locally and MANIFEST-epoch
+  // remotely.
+  RemappedFilenames RemapFilename(
+      const std::string& logical_path) const override;
 
   // This will delete all files in dest bucket and locally whose epochs are
   // invalid. For example, if we find 00010.sst-[epochX], but the real mapping
@@ -289,7 +296,8 @@ class CloudEnvImpl : public CloudEnv {
   Status ExistsCloudObject(const std::string& fname);
 
   // Gets the cloud object fname from the dest or src bucket
-  Status GetCloudObject(const std::string& fname);
+  Status GetCloudObject(const std::string& remote_fname,
+                        const std::string& local_fname);
 
   // Gets the size of the named cloud object from the dest or src bucket
   Status GetCloudObjectSize(const std::string& fname, uint64_t* remote_size);
