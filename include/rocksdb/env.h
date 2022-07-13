@@ -703,7 +703,8 @@ class SequentialFile {
   // first result->size() < n.
   //
   // REQUIRES: External synchronization
-  virtual Status Read(size_t n, Slice* result, char* scratch) = 0;
+  virtual Status Read(size_t n, Slice* result, char* scratch,
+                      uintptr_t user_data = 0) = 0;
 
   // Skip "n" bytes from the file. This is guaranteed to be no
   // slower that reading the same data, but may be faster.
@@ -783,8 +784,8 @@ class RandomAccessFile {
   //
   // Safe for concurrent use by multiple threads.
   // If Direct I/O enabled, offset, n, and scratch should be aligned properly.
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const = 0;
+  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+                      uintptr_t user_data = 0) const = 0;
 
   // Readahead the file starting from offset by n bytes for caching.
   virtual Status Prefetch(uint64_t /*offset*/, size_t /*n*/) {
@@ -798,11 +799,13 @@ class RandomAccessFile {
   // individual requests will be ignored and return status will be assumed
   // for all read requests. The function return status is only meant for
   // any errors that occur before even processing specific read requests
-  virtual Status MultiRead(ReadRequest* reqs, size_t num_reqs) {
+  virtual Status MultiRead(ReadRequest* reqs, size_t num_reqs,
+                           uintptr_t user_data = 0) {
     assert(reqs != nullptr);
     for (size_t i = 0; i < num_reqs; ++i) {
       ReadRequest& req = reqs[i];
-      req.status = Read(req.offset, req.len, &req.result, req.scratch);
+      req.status =
+          Read(req.offset, req.len, &req.result, req.scratch, user_data);
     }
     return Status::OK();
   }
@@ -1651,8 +1654,9 @@ class SequentialFileWrapper : public SequentialFile {
  public:
   explicit SequentialFileWrapper(SequentialFile* target) : target_(target) {}
 
-  Status Read(size_t n, Slice* result, char* scratch) override {
-    return target_->Read(n, result, scratch);
+  Status Read(size_t n, Slice* result, char* scratch,
+              uintptr_t user_data = 0) override {
+    return target_->Read(n, result, scratch, user_data);
   }
   Status Skip(uint64_t n) override { return target_->Skip(n); }
   bool use_direct_io() const override { return target_->use_direct_io(); }
@@ -1676,12 +1680,13 @@ class RandomAccessFileWrapper : public RandomAccessFile {
   explicit RandomAccessFileWrapper(RandomAccessFile* target)
       : target_(target) {}
 
-  Status Read(uint64_t offset, size_t n, Slice* result,
-              char* scratch) const override {
-    return target_->Read(offset, n, result, scratch);
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+              uintptr_t user_data = 0) const override {
+    return target_->Read(offset, n, result, scratch, user_data);
   }
-  Status MultiRead(ReadRequest* reqs, size_t num_reqs) override {
-    return target_->MultiRead(reqs, num_reqs);
+  Status MultiRead(ReadRequest* reqs, size_t num_reqs,
+                   uintptr_t user_data = 0) override {
+    return target_->MultiRead(reqs, num_reqs, user_data);
   }
   Status Prefetch(uint64_t offset, size_t n) override {
     return target_->Prefetch(offset, n);

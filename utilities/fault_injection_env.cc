@@ -115,14 +115,14 @@ TestRandomAccessFile::TestRandomAccessFile(
 }
 
 Status TestRandomAccessFile::Read(uint64_t offset, size_t n, Slice* result,
-                                  char* scratch) const {
+                                  char* scratch, uintptr_t user_data) const {
   assert(env_);
   if (!env_->IsFilesystemActive()) {
     return env_->GetError();
   }
 
   assert(target_);
-  return target_->Read(offset, n, result, scratch);
+  return target_->Read(offset, n, result, scratch, user_data);
 }
 
 Status TestRandomAccessFile::Prefetch(uint64_t offset, size_t n) {
@@ -135,7 +135,8 @@ Status TestRandomAccessFile::Prefetch(uint64_t offset, size_t n) {
   return target_->Prefetch(offset, n);
 }
 
-Status TestRandomAccessFile::MultiRead(ReadRequest* reqs, size_t num_reqs) {
+Status TestRandomAccessFile::MultiRead(ReadRequest* reqs, size_t num_reqs,
+                                       uintptr_t user_data) {
   assert(env_);
   if (!env_->IsFilesystemActive()) {
     const Status s = env_->GetError();
@@ -149,7 +150,7 @@ Status TestRandomAccessFile::MultiRead(ReadRequest* reqs, size_t num_reqs) {
   }
 
   assert(target_);
-  return target_->MultiRead(reqs, num_reqs);
+  return target_->MultiRead(reqs, num_reqs, user_data);
 }
 
 TestWritableFile::TestWritableFile(const std::string& fname,

@@ -37,10 +37,10 @@ CloudStorageReadableFileImpl::CloudStorageReadableFileImpl(
 
 // sequential access, read data at current offset in file
 Status CloudStorageReadableFileImpl::Read(size_t n, Slice* result,
-                                          char* scratch) {
+                                          char* scratch, uintptr_t user_data) {
   Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
       "[%s] CloudReadableFile reading %s %ld", Name(), fname_.c_str(), n);
-  Status s = Read(offset_, n, result, scratch);
+  Status s = Read(offset_, n, result, scratch, user_data);
 
   // If the read successfully returned some data, then update
   // offset_
@@ -52,7 +52,9 @@ Status CloudStorageReadableFileImpl::Read(size_t n, Slice* result,
 
 // random access, read data from specified offset in file
 Status CloudStorageReadableFileImpl::Read(uint64_t offset, size_t n,
-                                          Slice* result, char* scratch) const {
+                                          Slice* result, char* scratch,
+                                          __attribute__((unused))
+                                          uintptr_t user_data) const {
   Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
       "[%s] CloudReadableFile reading %s at offset %" PRIu64
       " size %" ROCKSDB_PRIszt,

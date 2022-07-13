@@ -13,11 +13,12 @@ class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
   CloudStorageReadableFileImpl(Logger* info_log, const std::string& bucket,
                                const std::string& fname, uint64_t size);
   // sequential access, read data at current offset in file
-  virtual Status Read(size_t n, Slice* result, char* scratch) override;
+  virtual Status Read(size_t n, Slice* result, char* scratch,
+                      uintptr_t user_data = 0) override;
 
   // random access, read data from specified offset in file
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const override;
+  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+                      uintptr_t user_data = 0) const override;
 
   virtual Status Skip(uint64_t n) override;
 

@@ -52,12 +52,13 @@ class TestRandomAccessFile : public RandomAccessFile {
   TestRandomAccessFile(std::unique_ptr<RandomAccessFile>&& target,
                        FaultInjectionTestEnv* env);
 
-  Status Read(uint64_t offset, size_t n, Slice* result,
-              char* scratch) const override;
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+              uintptr_t user_data = 0) const override;
 
   Status Prefetch(uint64_t offset, size_t n) override;
 
-  Status MultiRead(ReadRequest* reqs, size_t num_reqs) override;
+  Status MultiRead(ReadRequest* reqs, size_t num_reqs,
+                   uintptr_t user_data = 0) override;
 
  private:
   std::unique_ptr<RandomAccessFile> target_;

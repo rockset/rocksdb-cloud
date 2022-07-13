@@ -25,7 +25,8 @@ class CompositeSequentialFileWrapper : public SequentialFile {
       std::unique_ptr<FSSequentialFile>& target)
       : target_(std::move(target)) {}
 
-  Status Read(size_t n, Slice* result, char* scratch) override {
+  Status Read(size_t n, Slice* result, char* scratch,
+              __attribute__((unused)) uintptr_t user_data = 0) override {
     IOOptions io_opts;
     IODebugContext dbg;
     return target_->Read(n, io_opts, result, scratch, &dbg);
@@ -55,13 +56,14 @@ class CompositeRandomAccessFileWrapper : public RandomAccessFile {
       std::unique_ptr<FSRandomAccessFile>& target)
       : target_(std::move(target)) {}
 
-  Status Read(uint64_t offset, size_t n, Slice* result,
-              char* scratch) const override {
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+              __attribute__((unused)) uintptr_t user_data = 0) const override {
     IOOptions io_opts;
     IODebugContext dbg;
     return target_->Read(offset, n, io_opts, result, scratch, &dbg);
   }
-  Status MultiRead(ReadRequest* reqs, size_t num_reqs) override {
+  Status MultiRead(ReadRequest* reqs, size_t num_reqs,
+                   __attribute__((unused)) uintptr_t user_data = 0) override {
     IOOptions io_opts;
     IODebugContext dbg;
     std::vector<FSReadRequest> fs_reqs;

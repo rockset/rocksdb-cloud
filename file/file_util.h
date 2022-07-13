@@ -80,6 +80,7 @@ inline IOStatus PrepareIOFromReadOptions(const ReadOptions& ro,
   }
 
   opts.rate_limiter_priority = ro.rate_limiter_priority;
+  opts.fill_external_cache = ro.fill_external_cache;
   return IOStatus::OK();
 }
 

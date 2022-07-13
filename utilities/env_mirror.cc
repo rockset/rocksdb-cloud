@@ -21,9 +21,10 @@ class SequentialFileMirror : public SequentialFile {
   std::string fname;
   explicit SequentialFileMirror(std::string f) : fname(f) {}
 
-  Status Read(size_t n, Slice* result, char* scratch) override {
+  Status Read(size_t n, Slice* result, char* scratch,
+              uintptr_t user_data = 0) override {
     Slice aslice;
-    Status as = a_->Read(n, &aslice, scratch);
+    Status as = a_->Read(n, &aslice, scratch, user_data);
     if (as == Status::OK()) {
       char* bscratch = new char[n];
       Slice bslice;
@@ -32,7 +33,7 @@ class SequentialFileMirror : public SequentialFile {
 #endif
       size_t left = aslice.size();
       while (left) {
-        Status bs = b_->Read(left, &bslice, bscratch);
+        Status bs = b_->Read(left, &bslice, bscratch, user_data);
 #ifndef NDEBUG
         assert(as == bs);
         assert(memcmp(bscratch, scratch + off, bslice.size()) == 0);
@@ -43,7 +44,7 @@ class SequentialFileMirror : public SequentialFile {
       delete[] bscratch;
       *result = aslice;
     } else {
-      Status bs = b_->Read(n, result, scratch);
+      Status bs = b_->Read(n, result, scratch, user_data);
       assert(as == bs);
     }
     return as;
@@ -69,8 +70,8 @@ class RandomAccessFileMirror : public RandomAccessFile {
   std::string fname;
   explicit RandomAccessFileMirror(std::string f) : fname(f) {}
 
-  Status Read(uint64_t offset, size_t n, Slice* result,
-              char* scratch) const override {
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+              uintptr_t user_data = 0) const override {
     Status as = a_->Read(offset, n, result, scratch);
     if (as == Status::OK()) {
       char* bscratch = new char[n];
@@ -78,7 +79,7 @@ class RandomAccessFileMirror : public RandomAccessFile {
       size_t off = 0;
       size_t left = result->size();
       while (left) {
-        Status bs = b_->Read(offset + off, left, &bslice, bscratch);
+        Status bs = b_->Read(offset + off, left, &bslice, bscratch, user_data);
         assert(as == bs);
         assert(memcmp(bscratch, scratch + off, bslice.size()) == 0);
         off += bslice.size();
@@ -86,7 +87,7 @@ class RandomAccessFileMirror : public RandomAccessFile {
       }
       delete[] bscratch;
     } else {
-      Status bs = b_->Read(offset, n, result, scratch);
+      Status bs = b_->Read(offset, n, result, scratch, user_data);
       assert(as == bs);
     }
     return as;
