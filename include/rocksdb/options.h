@@ -1715,12 +1715,6 @@ struct ReadOptions {
   // Default: false
   bool async_io;
 
-  // This option will be forwarded to the file system layer where certain
-  // implementations use a secondary copy caches for resiliency.  This would
-  // help not to the change eviction order of existing items in the cache.
-  // Default: true
-  bool fill_external_cache;
-
   ReadOptions();
   ReadOptions(bool cksum, bool cache);
 };

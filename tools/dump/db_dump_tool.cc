@@ -152,7 +152,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
     return false;
   }
 
-  status = dumpfile->Read(8, &slice, scratch8);
+  status = dumpfile->Read(8, &slice, scratch8, 0);
   if (!status.ok() || slice.size() != 8 ||
       memcmp(slice.data(), magicstr, 8) != 0) {
     std::cerr << "File '" << undump_options.dump_location
@@ -160,7 +160,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
     return false;
   }
 
-  status = dumpfile->Read(8, &slice, scratch8);
+  status = dumpfile->Read(8, &slice, scratch8, 0);
   if (!status.ok() || slice.size() != 8 ||
       memcmp(slice.data(), versionstr, 8) != 0) {
     std::cerr << "File '" << undump_options.dump_location
@@ -168,7 +168,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
     return false;
   }
 
-  status = dumpfile->Read(4, &slice, scratch8);
+  status = dumpfile->Read(4, &slice, scratch8, 0);
   if (!status.ok() || slice.size() != 4) {
     std::cerr << "Unable to read info blob size." << std::endl;
     return false;
@@ -200,7 +200,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
     ROCKSDB_NAMESPACE::Slice keyslice;
     ROCKSDB_NAMESPACE::Slice valslice;
 
-    status = dumpfile->Read(4, &slice, scratch8);
+    status = dumpfile->Read(4, &slice, scratch8, 0);
     if (!status.ok() || slice.size() != 4) break;
     keysize = ROCKSDB_NAMESPACE::DecodeFixed32(slice.data());
     if (keysize > last_keysize) {
@@ -208,7 +208,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
       keyscratch = std::unique_ptr<char[]>(new char[last_keysize]);
     }
 
-    status = dumpfile->Read(keysize, &keyslice, keyscratch.get());
+    status = dumpfile->Read(keysize, &keyslice, keyscratch.get(), 0);
     if (!status.ok() || keyslice.size() != keysize) {
       std::cerr << "Key read failure: "
                 << (status.ok() ? "insufficient data" : status.ToString())
@@ -216,7 +216,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
       return false;
     }
 
-    status = dumpfile->Read(4, &slice, scratch8);
+    status = dumpfile->Read(4, &slice, scratch8, 0);
     if (!status.ok() || slice.size() != 4) {
       std::cerr << "Unable to read value size: "
                 << (status.ok() ? "insufficient data" : status.ToString())
@@ -229,7 +229,7 @@ bool DbUndumpTool::Run(const UndumpOptions& undump_options,
       valscratch = std::unique_ptr<char[]>(new char[last_valsize]);
     }
 
-    status = dumpfile->Read(valsize, &valslice, valscratch.get());
+    status = dumpfile->Read(valsize, &valslice, valscratch.get(), 0);
     if (!status.ok() || valslice.size() != valsize) {
       std::cerr << "Unable to read value: "
                 << (status.ok() ? "insufficient data" : status.ToString())

@@ -116,7 +116,7 @@ class LegacySequentialFileWrapper : public FSSequentialFile {
 
   IOStatus Read(size_t n, const IOOptions& /*options*/, Slice* result,
                 char* scratch, IODebugContext* /*dbg*/) override {
-    return status_to_io_status(target_->Read(n, result, scratch));
+    return status_to_io_status(target_->Read(n, result, scratch, 0));
   }
   IOStatus Skip(uint64_t n) override {
     return status_to_io_status(target_->Skip(n));
@@ -148,7 +148,7 @@ class LegacyRandomAccessFileWrapper : public FSRandomAccessFile {
   IOStatus Read(uint64_t offset, size_t n, const IOOptions& /*options*/,
                 Slice* result, char* scratch,
                 IODebugContext* /*dbg*/) const override {
-    return status_to_io_status(target_->Read(offset, n, result, scratch));
+    return status_to_io_status(target_->Read(offset, n, result, scratch, 0));
   }
 
   IOStatus MultiRead(FSReadRequest* fs_reqs, size_t num_reqs,
@@ -168,7 +168,7 @@ class LegacyRandomAccessFileWrapper : public FSRandomAccessFile {
 
       reqs.emplace_back(req);
     }
-    status = target_->MultiRead(reqs.data(), num_reqs);
+    status = target_->MultiRead(reqs.data(), num_reqs, 0);
     for (size_t i = 0; i < num_reqs; ++i) {
       fs_reqs[i].result = reqs[i].result;
       fs_reqs[i].status = status_to_io_status(std::move(reqs[i].status));

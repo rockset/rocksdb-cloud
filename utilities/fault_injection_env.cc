@@ -42,7 +42,7 @@ Status Truncate(Env* env, const std::string& filename, uint64_t length) {
 
   std::unique_ptr<char[]> scratch(new char[length]);
   ROCKSDB_NAMESPACE::Slice result;
-  s = orig_file->Read(length, &result, scratch.get());
+  s = orig_file->Read(length, &result, scratch.get(), 0);
 #ifdef OS_WIN
   orig_file.reset();
 #endif

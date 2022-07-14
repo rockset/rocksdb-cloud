@@ -112,10 +112,6 @@ struct IOOptions {
   // fsync, set this to force the fsync
   bool force_dir_fsync;
 
-  // This option will be forwarded to the Readable file
-  // Default: true
-  bool fill_external_cache;
-
   IOOptions() : IOOptions(false) {}
 
   explicit IOOptions(bool force_dir_fsync_)
@@ -123,8 +119,7 @@ struct IOOptions {
         prio(IOPriority::kIOLow),
         rate_limiter_priority(Env::IO_TOTAL),
         type(IOType::kUnknown),
-        force_dir_fsync(force_dir_fsync_),
-        fill_external_cache(true) {}
+        force_dir_fsync(force_dir_fsync_) {}
 };
 
 struct DirFsyncOptions {

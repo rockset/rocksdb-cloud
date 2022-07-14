@@ -704,7 +704,7 @@ class SequentialFile {
   //
   // REQUIRES: External synchronization
   virtual Status Read(size_t n, Slice* result, char* scratch,
-                      uintptr_t user_data = 0) = 0;
+                      uintptr_t user_data) = 0;
 
   // Skip "n" bytes from the file. This is guaranteed to be no
   // slower that reading the same data, but may be faster.
@@ -785,7 +785,7 @@ class RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   // If Direct I/O enabled, offset, n, and scratch should be aligned properly.
   virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
-                      uintptr_t user_data = 0) const = 0;
+                      uintptr_t user_data) const = 0;
 
   // Readahead the file starting from offset by n bytes for caching.
   virtual Status Prefetch(uint64_t /*offset*/, size_t /*n*/) {
@@ -800,7 +800,7 @@ class RandomAccessFile {
   // for all read requests. The function return status is only meant for
   // any errors that occur before even processing specific read requests
   virtual Status MultiRead(ReadRequest* reqs, size_t num_reqs,
-                           uintptr_t user_data = 0) {
+                           uintptr_t user_data) {
     assert(reqs != nullptr);
     for (size_t i = 0; i < num_reqs; ++i) {
       ReadRequest& req = reqs[i];
@@ -1655,7 +1655,7 @@ class SequentialFileWrapper : public SequentialFile {
   explicit SequentialFileWrapper(SequentialFile* target) : target_(target) {}
 
   Status Read(size_t n, Slice* result, char* scratch,
-              uintptr_t user_data = 0) override {
+              uintptr_t user_data) override {
     return target_->Read(n, result, scratch, user_data);
   }
   Status Skip(uint64_t n) override { return target_->Skip(n); }
@@ -1681,11 +1681,11 @@ class RandomAccessFileWrapper : public RandomAccessFile {
       : target_(target) {}
 
   Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
-              uintptr_t user_data = 0) const override {
+              uintptr_t user_data) const override {
     return target_->Read(offset, n, result, scratch, user_data);
   }
   Status MultiRead(ReadRequest* reqs, size_t num_reqs,
-                   uintptr_t user_data = 0) override {
+                   uintptr_t user_data) override {
     return target_->MultiRead(reqs, num_reqs, user_data);
   }
   Status Prefetch(uint64_t offset, size_t n) override {
