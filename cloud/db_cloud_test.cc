@@ -1884,7 +1884,7 @@ TEST_F(CloudTest, LiveFilesConsistentAfterApplyLocalCloudManifestDeltaTest) {
 TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   cloud_env_options_.cookie_on_open = "1";
   OpenDB();
-  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "world"));
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello1", "world1"));
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   std::string new_cookie = "2";
@@ -1892,18 +1892,45 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
       dbname_, new_cookie,
       CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
+  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
+
+  GetDBImpl()->NewDescriptorLogForNextManifestWrite();
 
   // following writes are not visible for old cookie
-  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "new_world"));
+  ASSERT_OK(db_->Put(WriteOptions(), "Hello2", "world2"));
   ASSERT_OK(db_->Flush(FlushOptions()));
 
   // reopen with cookie = 1, new updates after rolling are not visible
   CloseDB();
   cloud_env_options_.cookie_on_open = "1";
+  cloud_env_options_.dest_bucket.SetBucketName("");
+  cloud_env_options_.dest_bucket.SetObjectPath("");
   OpenDB();
   std::string value;
-  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
-  ASSERT_EQ(value, "world");
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello1", &value));
+  EXPECT_EQ(value, "world1");
+  EXPECT_NOK(db_->Get(ReadOptions(), "Hello2", &value));
+  CloseDB();
+
+  // reopen with cookie = 2, new updates should still be visible
+  CloseDB();
+  cloud_env_options_.cookie_on_open = "2";
+  OpenDB();
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello1", &value));
+  EXPECT_EQ(value, "world1");
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello2", &value));
+  EXPECT_EQ(value, "world2");
+  CloseDB();
+
+  // Make sure that the changes in cloud are correct
+  DestroyDir(dbname_);
+  cloud_env_options_.cookie_on_open = "2";
+  OpenDB();
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello1", &value));
+  EXPECT_EQ(value, "world1");
+  ASSERT_OK(db_->Get(ReadOptions(), "Hello2", &value));
+  EXPECT_EQ(value, "world2");
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

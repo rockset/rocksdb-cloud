@@ -1005,6 +1005,10 @@ class DBImpl : public DB {
   // is only for the special test of CancelledCompactions
   Status WaitForCompact(bool waitUnscheduled = false);
 
+  void NewDescriptorLogForNextManifestWrite() {
+    versions_->NewDescriptorLogForNextWrite();
+  }
+
 #ifndef NDEBUG
   // Compact any files in the named level that overlap [*begin, *end]
   Status TEST_CompactRange(int level, const Slice* begin, const Slice* end,
