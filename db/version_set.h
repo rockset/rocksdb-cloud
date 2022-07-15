@@ -1349,6 +1349,10 @@ class VersionSet {
   // The returned WalSet needs to be accessed with DB mutex held.
   const WalSet& GetWalSet() const { return wals_; }
 
+  void NewDescriptorLogForNextWrite() {
+    new_descriptor_log_for_next_write_.store(true, std::memory_order_relaxed);
+  }
+
   void TEST_CreateAndAppendVersion(ColumnFamilyData* cfd) {
     assert(cfd);
 
@@ -1460,6 +1464,7 @@ class VersionSet {
 
   // Opened lazily
   std::unique_ptr<log::Writer> descriptor_log_;
+  std::atomic_bool new_descriptor_log_for_next_write_{false};
 
   // generates a increasing version number for every new version
   uint64_t current_version_number_;
