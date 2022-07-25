@@ -1005,8 +1005,8 @@ class DBImpl : public DB {
   // is only for the special test of CancelledCompactions
   Status WaitForCompact(bool waitUnscheduled = false);
 
-  void NewDescriptorLogForNextManifestWrite() {
-    versions_->NewDescriptorLogForNextWrite();
+  void NewManifestOnNextUpdate() {
+    versions_->NewManifestOnNextUpdate();
   }
 
 #ifndef NDEBUG

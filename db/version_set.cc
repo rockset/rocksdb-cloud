@@ -4173,7 +4173,7 @@ void VersionSet::Reset() {
   obsolete_files_.clear();
   obsolete_manifests_.clear();
   wals_.Reset();
-  new_descriptor_log_for_next_write_.store(false, std::memory_order_relaxed);
+  new_manifest_on_next_update_.store(false, std::memory_order_relaxed);
 }
 
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
@@ -4423,7 +4423,7 @@ Status VersionSet::ProcessManifestWrites(
   assert(pending_manifest_file_number_ == 0);
   if (!descriptor_log_ ||
       manifest_file_size_ > db_options_->max_manifest_file_size ||
-      new_descriptor_log_for_next_write_.exchange(false, std::memory_order_relaxed)) {
+      new_manifest_on_next_update_.exchange(false, std::memory_order_relaxed)) {
     TEST_SYNC_POINT("VersionSet::ProcessManifestWrites:BeforeNewManifest");
     new_descriptor_log = true;
   } else {
