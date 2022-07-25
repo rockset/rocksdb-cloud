@@ -295,6 +295,11 @@ class CloudEnvImpl : public CloudEnv {
   // MANIFEST-current_epoch file to cloud
   //
   // REQUIRES: the file exists locally
+  Status UploadLocalCloudManifestAndManifest(const std::string& local_dbname,
+                                             const std::string& cookie);
+
+  // Upload local CLOUDMANIFEST-cookie file only. MANIFEST-current_epoch is not uploaded
+  // REQURIES: the file exists locally
   Status UploadLocalCloudManifest(const std::string& local_dbname, const std::string& cookie);
 
  protected:

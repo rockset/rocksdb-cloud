@@ -1987,7 +1987,7 @@ TEST_F(CloudTest, LiveFilesConsistentAfterApplyLocalCloudManifestDeltaTest) {
   ASSERT_OK(aenv_->FindAllLiveFiles(dbname_, &live_sst_files2, &manifest_file2));
 
   EXPECT_EQ(live_sst_files1, live_sst_files2);
-  EXPECT_EQ(manifest_file1, manifest_file2);
+  EXPECT_NE(manifest_file1, manifest_file2);
 
   CloseDB();
 }
@@ -2006,7 +2006,7 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
       dbname_, new_cookie,
       CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
-  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
+  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifestAndManifest(dbname_, new_cookie));
 
   GetDBImpl()->NewManifestOnNextUpdate();
 
@@ -2049,6 +2049,7 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
 
 // Test various cases of crashing in the middle during CloudManifestSwitch
 TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
+  cloud_env_options_.roll_cloud_manifest_on_open = false;
   cloud_env_options_.cookie_on_open = "1";
 
   SyncPoint::GetInstance()->SetCallBack(
@@ -2081,7 +2082,7 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
   SyncPoint::GetInstance()->DisableProcessing();
   SyncPoint::GetInstance()->ClearAllCallBacks();
   SyncPoint::GetInstance()->SetCallBack(
-      "CloudEnvImpl::UploadLocalCloudManifest:AfterUploadManifest",
+      "CloudEnvImpl::UploadLocalCloudManifestAndManifest:AfterUploadManifest",
       [](void* arg) {
         // Simulate the case of crashing in the middle of
         // UploadLocalCloudManifest
@@ -2094,7 +2095,7 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
       dbname_, new_cookie,
       CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
 
-  ASSERT_NOK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
+  ASSERT_NOK(GetCloudEnvImpl()->UploadLocalCloudManifestAndManifest(dbname_, new_cookie));
 
   ASSERT_NOK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
       GetCloudEnvImpl()->GetDestBucketName(),
@@ -2116,13 +2117,17 @@ TEST_F(CloudTest, RollNewEpochTest) {
   auto epoch2 = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
   EXPECT_OK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
       GetCloudEnvImpl()->GetDestBucketName(),
-      ManifestFileWithEpoch(GetCloudEnvImpl()->GetDestObjectPath(), epoch1)));
+      ManifestFileWithEpoch(GetCloudEnvImpl()->GetDestObjectPath(), epoch2)));
   CloseDB();
   EXPECT_NE(epoch1, epoch2);
 }
 
 // Test cloud_env_option: `upload_cloud_manifest_without_cookie_suffix`
 TEST_F(CloudTest, CookieBackwardsCompatibilityTest) {
+  cloud_env_options_.resync_on_open = true;
+  cloud_env_options_.roll_cloud_manifest_on_open = false;
+
+  // Case 1: CLOUDMANIFEST file is uploaded when opening a new db
   cloud_env_options_.cookie_on_open = "1";
   OpenDB();
   ASSERT_OK(db_->Put({}, "k", "v"));
@@ -2133,6 +2138,34 @@ TEST_F(CloudTest, CookieBackwardsCompatibilityTest) {
   cloud_env_options_.cookie_on_open = "";
   OpenDB();
   std::string value;
+  ASSERT_OK(db_->Get({}, "k", &value));
+  EXPECT_EQ(value, "v");
+  CloseDB();
+
+  // Case 2: CLOUDMANIFEST file is uploaded when opening existing DB
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  CloseDB();
+
+  cloud_env_options_.cookie_on_open = "";
+  OpenDB();
+  ASSERT_OK(db_->Get({}, "k", &value));
+  EXPECT_EQ(value, "v");
+  CloseDB();
+
+  // Case 3: CLOUDMANIFEST file is uploaded when Switching CM/M
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  std::string new_cookie = "2";
+  std::string new_epoch = "dca7f3e19212c4b3";
+  ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
+      dbname_, new_cookie,
+      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
+  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifestAndManifest(dbname_, new_cookie));
+  CloseDB();
+
+  cloud_env_options_.cookie_on_open = "";
+  OpenDB();
   ASSERT_OK(db_->Get({}, "k", &value));
   EXPECT_EQ(value, "v");
   CloseDB();

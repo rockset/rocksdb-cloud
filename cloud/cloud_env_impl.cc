@@ -1801,7 +1801,6 @@ Status CloudEnvImpl::CreateCloudManifest(const std::string& local_dbname) {
 // REQ: This is an existing database.
 Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   assert(cloud_env_options.roll_cloud_manifest_on_open);
-  auto oldEpoch = GetCloudManifest()->GetCurrentEpoch();
   // Find next file number. We use dummy MANIFEST filename, which should get
   // remapped into the correct MANIFEST filename through CloudManifest.
   // After this call we should also have a local file named
@@ -1816,12 +1815,8 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   // roll new epoch
   auto newEpoch = generateNewEpochId();
   // To make sure `RollNewEpoch` is backwards compatible, we don't change
-  // the cookie after applying CM delta
+  // the cookie when applying CM delta
   auto newCookie = cloud_env_options.cookie_on_open;
-  Log(InfoLogLevel::INFO_LEVEL, info_log_,
-      "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
-      "MANIFEST-%s",
-      maxFileNumber, oldEpoch.c_str(), newEpoch.c_str());
 
   st = ApplyLocalCloudManifestDelta(
       local_dbname,
@@ -1835,7 +1830,7 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   // and removing epochs that don't contain any live files.
 
   if (HasDestBucket()) {
-    st = UploadLocalCloudManifest(local_dbname, newCookie);
+    st = UploadLocalCloudManifestAndManifest(local_dbname, newCookie);
     if (!st.ok()) {
       return st;
     }
@@ -1843,12 +1838,14 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   return Status::OK();
 }
 
-Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
-                                              const std::string& cookie) {
+Status CloudEnvImpl::UploadLocalCloudManifestAndManifest(
+    const std::string& local_dbname, const std::string& cookie) {
   assert(HasDestBucket());
 
   std::string current_epoch = cloud_manifest_->GetCurrentEpoch();
-  // upload the manifest file
+  // We have to upload the manifest file first. Otherwise, if the process
+  // crashed in the middle, we'll endup with a CLOUDMANIFEST file pointing to
+  // MANIFEST file which doesn't exist in s3
   auto st = GetStorageProvider()->PutCloudObject(
       ManifestFileWithEpoch(local_dbname, current_epoch), GetDestBucketName(),
       ManifestFileWithEpoch(GetDestObjectPath(), current_epoch));
@@ -1857,13 +1854,19 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
   }
 
   TEST_SYNC_POINT_CALLBACK(
-      "CloudEnvImpl::UploadLocalCloudManifest:AfterUploadManifest", &st);
+      "CloudEnvImpl::UploadLocalCloudManifestAndManifest:AfterUploadManifest",
+      &st);
   if (!st.ok()) {
     return st;
   }
 
-  // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
-  st = GetStorageProvider()->PutCloudObject(
+  return UploadLocalCloudManifest(local_dbname, cookie);
+}
+
+Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
+                                              const std::string& cookie) {
+   // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
+  Status st = GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
       MakeCloudManifestFile(GetDestObjectPath(), cookie));
   if (!st.ok()) {
@@ -1871,7 +1874,8 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
   }
 
   // Uploaded as CLOUDMANIFEST to s3 to make sure we can quickly rollback
-  if (!cookie.empty() && cloud_env_options.upload_cloud_manifest_without_cookie_suffix) {
+  if (!cookie.empty() &&
+      cloud_env_options.upload_cloud_manifest_without_cookie_suffix) {
     st = GetStorageProvider()->PutCloudObject(
         MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
         MakeCloudManifestFile(GetDestObjectPath(), "" /* cookie */));
@@ -1879,6 +1883,7 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
       return st;
     }
   }
+
   return st;
 }
 
@@ -1888,6 +1893,10 @@ Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbnam
   Status st;
   std::string old_epoch = cloud_manifest_->GetCurrentEpoch();
   const auto& fs = GetBaseEnv()->GetFileSystem();
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
+      "MANIFEST-%s",
+      delta.file_num, old_epoch.c_str(), delta.epoch.c_str());
   // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
   // We have to move our old manifest to the new filename.
   // However, we don't move here, we copy. If we moved and crashed immediately
