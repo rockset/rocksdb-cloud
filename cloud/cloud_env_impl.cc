@@ -1815,41 +1815,27 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   }
   // roll new epoch
   auto newEpoch = generateNewEpochId();
-  GetCloudManifest()->AddEpoch(maxFileNumber, newEpoch);
+  // To make sure `RollNewEpoch` is backwards compatible, we don't change
+  // the cookie after applying CM delta
+  auto newCookie = cloud_env_options.cookie_on_open;
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
       "MANIFEST-%s",
       maxFileNumber, oldEpoch.c_str(), newEpoch.c_str());
-  // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
-  // We have to move our old manifest to the new filename.
-  // However, we don't move here, we copy. If we moved and crashed immediately
-  // after (before writing CLOUDMANIFEST), we'd corrupt our database. The old
-  // MANIFEST file will be cleaned up in DeleteInvisibleFiles().
-  const auto& fs = GetBaseEnv()->GetFileSystem();
-  st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, oldEpoch),
-                ManifestFileWithEpoch(local_dbname, newEpoch), 0, true, nullptr,
-                Temperature::kUnknown);
+
+  st = ApplyLocalCloudManifestDelta(
+      local_dbname,
+      newCookie,
+      CloudManifestDelta{maxFileNumber, newEpoch});
   if (!st.ok()) {
     return st;
   }
-  st = writeCloudManifest(GetCloudManifest(), CloudManifestFile(local_dbname));
-  if (!st.ok()) {
-    return st;
-  }
+
   // TODO(igor): Compact cloud manifest by looking at live files in the database
   // and removing epochs that don't contain any live files.
 
   if (HasDestBucket()) {
-    st = GetStorageProvider()->PutCloudObject(
-            ManifestFileWithEpoch(local_dbname, newEpoch), GetDestBucketName(),
-            ManifestFileWithEpoch(GetDestObjectPath(), newEpoch));
-    if (!st.ok()) {
-        return st;
-    }
-    // upload new cloud manifest
-    st = GetStorageProvider()->PutCloudObject(
-        CloudManifestFile(local_dbname), GetDestBucketName(),
-        CloudManifestFile(GetDestObjectPath()));
+    st = UploadLocalCloudManifest(local_dbname, newCookie);
     if (!st.ok()) {
       return st;
     }
@@ -1888,6 +1874,11 @@ Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbnam
   Status st;
   std::string old_epoch = cloud_manifest_->GetCurrentEpoch();
   const auto& fs = GetBaseEnv()->GetFileSystem();
+  // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
+  // We have to move our old manifest to the new filename.
+  // However, we don't move here, we copy. If we moved and crashed immediately
+  // after (before writing CLOUDMANIFEST), we'd corrupt our database. The old
+  // MANIFEST file will be cleaned up in DeleteInvisibleFiles().
   st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
                      ManifestFileWithEpoch(local_dbname, delta.epoch),
                      0 /* size */, true /* use_fsync */,
@@ -1905,7 +1896,7 @@ Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbnam
   }
 
   // Dump cloud_manifest into the CLOUDMANIFEST-new_cookie file
-  return writeCloudManifest(cloud_manifest_.get(),
+  return writeCloudManifest(GetCloudManifest(),
                             MakeCloudManifestFile(local_dbname, new_cookie));
 }
 

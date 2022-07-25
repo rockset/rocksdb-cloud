@@ -286,11 +286,6 @@ class CloudEnvImpl : public CloudEnv {
   // - Update in memory cloud manifest
   // - Persist the changes to disk by writing new CLOUDMANIFEST-new_cookie and
   // MANIFEST-delta.epoch files
-  //
-  // NOTE: If any step after(include itself) this, and before we write
-  // `kNewEpoch` with the delta, fails, we would have to reopen the db. Reason
-  // is the local cloudmanifest contains dirty delta generated during rolling
-  // and we have to reopen db to clean it up.
   Status ApplyLocalCloudManifestDelta(
     const std::string& local_dbname,
     const std::string& new_cookie,

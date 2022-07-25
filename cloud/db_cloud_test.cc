@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cinttypes>
 
+#include "cloud/cloud_env_impl.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
@@ -2101,6 +2102,22 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
 
   CloseDB();
   SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(CloudTest, RollNewEpochTest) {
+  OpenDB();
+  auto epoch1 = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
+  EXPECT_OK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
+      GetCloudEnvImpl()->GetDestBucketName(),
+      ManifestFileWithEpoch(GetCloudEnvImpl()->GetDestObjectPath(), epoch1)));
+  CloseDB();
+  OpenDB();
+  auto epoch2 = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
+  EXPECT_OK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
+      GetCloudEnvImpl()->GetDestBucketName(),
+      ManifestFileWithEpoch(GetCloudEnvImpl()->GetDestObjectPath(), epoch1)));
+  CloseDB();
+  EXPECT_NE(epoch1, epoch2);
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
