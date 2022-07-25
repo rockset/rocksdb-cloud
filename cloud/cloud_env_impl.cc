@@ -1863,9 +1863,23 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
   }
 
   // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
-  return GetStorageProvider()->PutCloudObject(
+  st = GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
       MakeCloudManifestFile(GetDestObjectPath(), cookie));
+  if (!st.ok()) {
+    return st;
+  }
+
+  // Uploaded as CLOUDMANIFEST to s3 to make sure we can quickly rollback
+  if (!cookie.empty() && cloud_env_options.upload_cloud_manifest_without_cookie_suffix) {
+    st = GetStorageProvider()->PutCloudObject(
+        MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
+        MakeCloudManifestFile(GetDestObjectPath(), "" /* cookie */));
+    if (!st.ok()) {
+      return st;
+    }
+  }
+  return st;
 }
 
 Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbname,

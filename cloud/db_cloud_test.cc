@@ -2054,7 +2054,8 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
   SyncPoint::GetInstance()->SetCallBack(
       "CloudEnvImpl::ApplyLocalCloudManifestDelta:AfterManifestCopy",
       [](void* arg) {
-        // Simulate the case of crash in the middle of ApplyLocalCloudManifestDelta
+        // Simulate the case of crash in the middle of
+        // ApplyLocalCloudManifestDelta
         *reinterpret_cast<Status*>(arg) = Status::Aborted("Aborted");
       });
 
@@ -2118,6 +2119,23 @@ TEST_F(CloudTest, RollNewEpochTest) {
       ManifestFileWithEpoch(GetCloudEnvImpl()->GetDestObjectPath(), epoch1)));
   CloseDB();
   EXPECT_NE(epoch1, epoch2);
+}
+
+// Test cloud_env_option: `upload_cloud_manifest_without_cookie_suffix`
+TEST_F(CloudTest, CookieBackwardsCompatibilityTest) {
+  cloud_env_options_.cookie_on_open = "1";
+  OpenDB();
+  ASSERT_OK(db_->Put({}, "k", "v"));
+  ASSERT_OK(db_->Flush({}));
+  CloseDB();
+
+  // roll back to empty cookie
+  cloud_env_options_.cookie_on_open = "";
+  OpenDB();
+  std::string value;
+  ASSERT_OK(db_->Get({}, "k", &value));
+  EXPECT_EQ(value, "v");
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
