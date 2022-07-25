@@ -17,10 +17,12 @@
 #include "db/db_impl/db_impl.h"
 #include "file/filename.h"
 #include "logging/logging.h"
+#include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/table.h"
+#include "test_util/sync_point.h"
 #include "test_util/testharness.h"
 #include "util/random.h"
 #include "util/string_util.h"
@@ -2005,7 +2007,7 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
       CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
   ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
 
-  GetDBImpl()->NewDescriptorLogForNextManifestWrite();
+  GetDBImpl()->NewManifestOnNextUpdate();
 
   // following writes are not visible for old cookie
   ASSERT_OK(db_->Put(WriteOptions(), "Hello2", "world2"));
@@ -2042,6 +2044,63 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   ASSERT_OK(db_->Get(ReadOptions(), "Hello2", &value));
   EXPECT_EQ(value, "world2");
   CloseDB();
+}
+
+// Test various cases of crashing in the middle during CloudManifestSwitch
+TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
+  cloud_env_options_.cookie_on_open = "1";
+
+  SyncPoint::GetInstance()->SetCallBack(
+      "CloudEnvImpl::ApplyLocalCloudManifestDelta:AfterManifestCopy",
+      [](void* arg) {
+        // Simulate the case of crash in the middle of ApplyLocalCloudManifestDelta
+        *reinterpret_cast<Status*>(arg) = Status::Aborted("Aborted");
+      });
+
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  // case 1: Crash in the middle of updating local manifest files
+  // our guarantee: no CLOUDMANIFEST_new_cookie locally and remotely
+  OpenDB();
+
+  std::string new_cookie = "2";
+  std::string new_epoch = "dca7f3e19212c4b3";
+
+  ASSERT_NOK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
+      dbname_, new_cookie,
+      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
+
+  CloseDB();
+
+  EXPECT_NOK(base_env_->FileExists(MakeCloudManifestFile(dbname_, new_cookie)));
+
+  // case 2: Crash in the middle of uploading local manifest files
+  // our guarantee: no CLOUDMANFIEST_cookie remotely
+  SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
+  SyncPoint::GetInstance()->SetCallBack(
+      "CloudEnvImpl::UploadLocalCloudManifest:AfterUploadManifest",
+      [](void* arg) {
+        // Simulate the case of crashing in the middle of
+        // UploadLocalCloudManifest
+        *reinterpret_cast<Status*>(arg) = Status::Aborted("Aborted");
+      });
+  SyncPoint::GetInstance()->EnableProcessing();
+  OpenDB();
+
+  ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
+      dbname_, new_cookie,
+      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
+
+  ASSERT_NOK(GetCloudEnvImpl()->UploadLocalCloudManifest(dbname_, new_cookie));
+
+  ASSERT_NOK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
+      GetCloudEnvImpl()->GetDestBucketName(),
+      MakeCloudManifestFile(GetCloudEnvImpl()->GetDestObjectPath(),
+                            new_cookie)));
+
+  CloseDB();
+  SyncPoint::GetInstance()->DisableProcessing();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

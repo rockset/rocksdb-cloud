@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Rockset.
+#include "test_util/sync_point.h"
 #ifndef ROCKSDB_LITE
 
 #include "cloud/cloud_env_impl.h"
@@ -1869,6 +1870,12 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
     return st;
   }
 
+  TEST_SYNC_POINT_CALLBACK(
+      "CloudEnvImpl::UploadLocalCloudManifest:AfterUploadManifest", &st);
+  if (!st.ok()) {
+    return st;
+  }
+
   // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
   return GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
@@ -1878,17 +1885,24 @@ Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
 Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbname,
     const std::string& new_cookie,
     const CloudManifestDelta& delta) {
+  Status st;
   std::string old_epoch = cloud_manifest_->GetCurrentEpoch();
   const auto& fs = GetBaseEnv()->GetFileSystem();
-  auto io_st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
+  st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
                      ManifestFileWithEpoch(local_dbname, delta.epoch),
                      0 /* size */, true /* use_fsync */,
                      nullptr /* io_tracer */, Temperature::kUnknown);
-  if (!io_st.ok()) {
-    return io_st;
+  if (!st.ok()) {
+    return st;
   }
 
   cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
+
+  TEST_SYNC_POINT_CALLBACK(
+      "CloudEnvImpl::ApplyLocalCloudManifestDelta:AfterManifestCopy", &st);
+  if (!st.ok()) {
+    return st;
+  }
 
   // Dump cloud_manifest into the CLOUDMANIFEST-new_cookie file
   return writeCloudManifest(cloud_manifest_.get(),
