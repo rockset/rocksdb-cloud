@@ -1840,7 +1840,10 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
 
 Status CloudEnvImpl::UploadLocalCloudManifestAndManifest(
     const std::string& local_dbname, const std::string& cookie) {
-  assert(HasDestBucket());
+  if (!HasDestBucket()) {
+    return Status::InvalidArgument(
+        "Dest bucket has to be specified when uploading manifest files");
+  }
 
   std::string current_epoch = cloud_manifest_->GetCurrentEpoch();
   // We have to upload the manifest file first. Otherwise, if the process
@@ -1865,6 +1868,10 @@ Status CloudEnvImpl::UploadLocalCloudManifestAndManifest(
 
 Status CloudEnvImpl::UploadLocalCloudManifest(const std::string& local_dbname,
                                               const std::string& cookie) {
+  if (!HasDestBucket()) {
+    return Status::InvalidArgument(
+        "Dest bucket has to be specified when uploading CloudManifest files");
+  }
    // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
   Status st = GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
