@@ -1949,8 +1949,8 @@ TEST_F(CloudTest, NonEmptyCookieTest) {
 
   auto cenv_impl = static_cast<CloudEnvImpl*>(aenv_.get());
   auto cloud_manifest_file = cenv_impl->CloudManifestFile(dbname_);
-  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
-                                                 cloud_manifest_file);
+  ASSERT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), cloud_manifest_file));
   EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
   CloseDB();
   DestroyDir(dbname_);
@@ -1958,8 +1958,8 @@ TEST_F(CloudTest, NonEmptyCookieTest) {
 
   ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
   ASSERT_EQ(value, "World");
-  aenv_->GetStorageProvider()->ExistsCloudObject(aenv_->GetSrcBucketName(),
-                                                 cloud_manifest_file);
+  ASSERT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), cloud_manifest_file));
   EXPECT_EQ(basename(cloud_manifest_file), "CLOUDMANIFEST-000001");
   CloseDB();
 }
@@ -2168,6 +2168,45 @@ TEST_F(CloudTest, CookieBackwardsCompatibilityTest) {
   OpenDB();
   ASSERT_OK(db_->Get({}, "k", &value));
   EXPECT_EQ(value, "v");
+  CloseDB();
+}
+
+TEST_F(CloudTest, NewCookieOnOpenTest) {
+  cloud_env_options_.cookie_on_open = "1";
+
+  // when opening new db, only cookie_on_open is used as CLOUDMANIFEST suffix
+  cloud_env_options_.new_cookie_on_open = "2";
+  OpenDB();
+  ASSERT_OK(db_->Put({}, "k1", "v1"));
+  ASSERT_OK(db_->Flush({}));
+
+  ASSERT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), MakeCloudManifestFile(dbname_, "1")));
+  // CLOUDMANIFEST-2 shouldn't exist since this is a new db
+  ASSERT_NOK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), MakeCloudManifestFile(dbname_, "2")));
+  CloseDB();
+
+  // reopen db, switch from CLOUDMANIFEST-1 to CLOUDMANIFEST-2
+  OpenDB();
+  std::string value;
+  ASSERT_OK(db_->Get({}, "k1", &value));
+  EXPECT_EQ(value, "v1");
+
+  ASSERT_OK(db_->Put({}, "k2", "v2"));
+  ASSERT_OK(db_->Flush({}));
+
+  // CLOUDMANIFEST-2 is the new cloud manifest
+  ASSERT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), MakeCloudManifestFile(dbname_, "2")));
+  CloseDB();
+
+  // reopen DB, but don't switch CLOUDMANIFEST
+  cloud_env_options_.cookie_on_open = "2";
+  cloud_env_options_.new_cookie_on_open = "2";
+  OpenDB();
+  ASSERT_OK(db_->Get({}, "k2", &value));
+  EXPECT_EQ(value, "v2");
   CloseDB();
 }
 

@@ -1816,7 +1816,7 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   auto newEpoch = generateNewEpochId();
   // To make sure `RollNewEpoch` is backwards compatible, we don't change
   // the cookie when applying CM delta
-  auto newCookie = cloud_env_options.cookie_on_open;
+  auto newCookie = cloud_env_options.new_cookie_on_open;
 
   st = ApplyLocalCloudManifestDelta(
       local_dbname,
@@ -1902,8 +1902,9 @@ Status CloudEnvImpl::ApplyLocalCloudManifestDelta(const std::string& local_dbnam
   const auto& fs = GetBaseEnv()->GetFileSystem();
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
-      "MANIFEST-%s",
-      delta.file_num, old_epoch.c_str(), delta.epoch.c_str());
+      "MANIFEST-%s, new cookie: %s",
+      delta.file_num, old_epoch.c_str(), delta.epoch.c_str(),
+      new_cookie.c_str());
   // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
   // We have to move our old manifest to the new filename.
   // However, we don't move here, we copy. If we moved and crashed immediately

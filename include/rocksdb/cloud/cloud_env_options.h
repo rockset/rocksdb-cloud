@@ -370,6 +370,20 @@ class CloudEnvOptions {
   // Default: true
   bool upload_cloud_manifest_without_cookie_suffix;
 
+  // Experimental option!
+  // The cookie we will switch to when we open the db and roll the new epoch.
+  //
+  // NOTE: This option will only take effect when db exists (i.e., not new db).
+  // If it's a new db, CLOUDMANIFEST file will be created with `cookie_on_open`.
+  //
+  // TODO(wei): This is a temporarly option to unblock leader/follower rollout,
+  // so that we can support follower taking over as new leader and having two
+  // leader running for short period of time. Remove it once leader/follower is
+  // ready
+  //
+  // Default: "", means new cloud manifest file won't have cookie suffix
+  std::string new_cookie_on_open;
+
   CloudEnvOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -389,7 +403,8 @@ class CloudEnvOptions {
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
       bool _roll_cloud_manifest_on_open = true,
       std::string _cookie_on_open = "",
-      bool _upload_cloud_manifest_without_cookie_suffix = true)
+      bool _upload_cloud_manifest_without_cookie_suffix = true,
+      std::string _new_cookie_on_open = "")
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -413,7 +428,9 @@ class CloudEnvOptions {
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
         roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
         cookie_on_open(std::move(_cookie_on_open)),
-        upload_cloud_manifest_without_cookie_suffix(_upload_cloud_manifest_without_cookie_suffix) {
+        upload_cloud_manifest_without_cookie_suffix(
+            _upload_cloud_manifest_without_cookie_suffix),
+        new_cookie_on_open(_new_cookie_on_open) {
     (void) _cloud_type;
   }
 
