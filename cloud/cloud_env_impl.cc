@@ -851,11 +851,15 @@ void CloudEnvImpl::StopPurger() {
 }
 
 Status CloudEnvImpl::LoadLocalCloudManifest(const std::string& dbname) {
+  return LoadLocalCloudManifest(dbname, cloud_env_options.cookie_on_open);
+}
+
+Status CloudEnvImpl::LoadLocalCloudManifest(const std::string& dbname, const std::string& cookie) {
   if (cloud_manifest_) {
     cloud_manifest_.reset();
   }
   return CloudEnvImpl::LoadLocalCloudManifest(
-      dbname, GetBaseEnv(), cloud_env_options.cookie_on_open, &cloud_manifest_);
+      dbname, GetBaseEnv(), cookie, &cloud_manifest_);
 }
 
 Status CloudEnvImpl::LoadLocalCloudManifest(
@@ -1788,12 +1792,16 @@ Status CloudEnvImpl::FetchCloudManifest(const std::string& local_dbname, const s
 }
 
 Status CloudEnvImpl::CreateCloudManifest(const std::string& local_dbname) {
+  return CreateCloudManifest(local_dbname, cloud_env_options.cookie_on_open);
+}
+
+Status CloudEnvImpl::CreateCloudManifest(const std::string& local_dbname, const std::string& cookie) {
   // No cloud manifest, create an empty one
   std::unique_ptr<CloudManifest> manifest;
   CloudManifest::CreateForEmptyDatabase(generateNewEpochId(), &manifest);
-  auto st = writeCloudManifest(manifest.get(), CloudManifestFile(local_dbname));
+  auto st = writeCloudManifest(manifest.get(), MakeCloudManifestFile(local_dbname, cookie));
   if (st.ok()) {
-    st = LoadLocalCloudManifest(local_dbname);
+    st = LoadLocalCloudManifest(local_dbname, cookie);
   }
   return st;
 }

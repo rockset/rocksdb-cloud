@@ -143,13 +143,8 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     if (read_only) {
       return Status::NotFound("CLOUDMANIFEST not found and read_only is set.");
     }
-    if (cenv->GetCloudEnvOptions().cookie_on_open !=
-        cenv->GetCloudEnvOptions().new_cookie_on_open) {
-      Log(InfoLogLevel::WARN_LEVEL, options.info_log,
-          "Switch CLOUDMANIFEST is not supported when opening new db. Only "
-          "cookie_on_open will be used");
-    }
-    st = cenv->CreateCloudManifest(local_dbname);
+    st = cenv->CreateCloudManifest(
+        local_dbname, cenv->GetCloudEnvOptions().new_cookie_on_open);
     if (!st.ok()) {
       return st;
     }
@@ -198,7 +193,7 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     // was already uploaded. It is at this point we consider the database
     // committed in the cloud.
     st = cenv->UploadLocalCloudManifest(
-        local_dbname, cenv->GetCloudEnvOptions().cookie_on_open);
+        local_dbname, cenv->GetCloudEnvOptions().new_cookie_on_open);
   }
 
   // now that the database is opened, all file sizes have been verified and we
