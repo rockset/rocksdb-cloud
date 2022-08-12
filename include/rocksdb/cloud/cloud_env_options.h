@@ -361,15 +361,6 @@ class CloudEnvOptions {
   // CLOUDMANIFEST)
   std::string cookie_on_open;
 
-  // If true, and cookie is not empty, besides uploading CLOUDMANIFEST-cookie to
-  // s3, we also upload CLOUDMANIFEST (no cookie suffix) to s3. This makes sure
-  // that we can quickly rollback if something unexpected happens.
-  //
-  // TODO(wei): This is a temporary option. Once we gain more confidence about cookie we
-  // should remove it
-  // Default: true
-  bool upload_cloud_manifest_without_cookie_suffix;
-
   // Experimental option!
   // The cookie we will switch to when we open the db and roll the new epoch.
   //
@@ -403,7 +394,6 @@ class CloudEnvOptions {
       std::shared_ptr<Cache> _sst_file_cache = nullptr,
       bool _roll_cloud_manifest_on_open = true,
       std::string _cookie_on_open = "",
-      bool _upload_cloud_manifest_without_cookie_suffix = true,
       std::string _new_cookie_on_open = "")
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
@@ -428,8 +418,6 @@ class CloudEnvOptions {
         use_direct_io_for_cloud_download(_use_direct_io_for_cloud_download),
         roll_cloud_manifest_on_open(_roll_cloud_manifest_on_open),
         cookie_on_open(std::move(_cookie_on_open)),
-        upload_cloud_manifest_without_cookie_suffix(
-            _upload_cloud_manifest_without_cookie_suffix),
         new_cookie_on_open(_new_cookie_on_open) {
     (void) _cloud_type;
   }

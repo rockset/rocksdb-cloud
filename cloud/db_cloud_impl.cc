@@ -143,6 +143,12 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     if (read_only) {
       return Status::NotFound("CLOUDMANIFEST not found and read_only is set.");
     }
+    if (cenv->GetCloudEnvOptions().cookie_on_open !=
+        cenv->GetCloudEnvOptions().new_cookie_on_open) {
+      Log(InfoLogLevel::WARN_LEVEL, options.info_log,
+          "Switch CLOUDMANIFEST is not supported when opening new db. Only "
+          "cookie_on_open will be used");
+    }
     st = cenv->CreateCloudManifest(local_dbname);
     if (!st.ok()) {
       return st;

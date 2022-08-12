@@ -2122,52 +2122,39 @@ TEST_F(CloudTest, RollNewEpochTest) {
   EXPECT_NE(epoch1, epoch2);
 }
 
-// Test cloud_env_option: `upload_cloud_manifest_without_cookie_suffix`
+// Test that we can rollback to empty cookie
 TEST_F(CloudTest, CookieBackwardsCompatibilityTest) {
   cloud_env_options_.resync_on_open = true;
-  cloud_env_options_.roll_cloud_manifest_on_open = false;
+  cloud_env_options_.roll_cloud_manifest_on_open = true;
 
-  // Case 1: CLOUDMANIFEST file is uploaded when opening a new db
-  cloud_env_options_.cookie_on_open = "1";
+  cloud_env_options_.cookie_on_open = "";
+  cloud_env_options_.new_cookie_on_open = "";
   OpenDB();
-  ASSERT_OK(db_->Put({}, "k", "v"));
+  ASSERT_OK(db_->Put({}, "k1", "v1"));
   ASSERT_OK(db_->Flush({}));
   CloseDB();
 
-  // roll back to empty cookie
+  // switch cookie
   cloud_env_options_.cookie_on_open = "";
+  cloud_env_options_.new_cookie_on_open = "1";
   OpenDB();
   std::string value;
-  ASSERT_OK(db_->Get({}, "k", &value));
-  EXPECT_EQ(value, "v");
+  ASSERT_OK(db_->Get({}, "k1", &value));
+  EXPECT_EQ(value, "v1");
+
+  ASSERT_OK(db_->Put({}, "k2", "v2"));
+  ASSERT_OK(db_->Flush({}));
   CloseDB();
 
-  // Case 2: CLOUDMANIFEST file is uploaded when opening existing DB
+  // switch back to empty cookie
   cloud_env_options_.cookie_on_open = "1";
+  cloud_env_options_.new_cookie_on_open = "";
   OpenDB();
-  CloseDB();
+  ASSERT_OK(db_->Get({}, "k1", &value));
+  EXPECT_EQ(value, "v1");
 
-  cloud_env_options_.cookie_on_open = "";
-  OpenDB();
-  ASSERT_OK(db_->Get({}, "k", &value));
-  EXPECT_EQ(value, "v");
-  CloseDB();
-
-  // Case 3: CLOUDMANIFEST file is uploaded when Switching CM/M
-  cloud_env_options_.cookie_on_open = "1";
-  OpenDB();
-  std::string new_cookie = "2";
-  std::string new_epoch = "dca7f3e19212c4b3";
-  ASSERT_OK(GetCloudEnvImpl()->ApplyLocalCloudManifestDelta(
-      dbname_, new_cookie,
-      CloudManifestDelta{GetDBImpl()->TEST_Current_Next_FileNo(), new_epoch}));
-  ASSERT_OK(GetCloudEnvImpl()->UploadLocalCloudManifestAndManifest(dbname_, new_cookie));
-  CloseDB();
-
-  cloud_env_options_.cookie_on_open = "";
-  OpenDB();
-  ASSERT_OK(db_->Get({}, "k", &value));
-  EXPECT_EQ(value, "v");
+  ASSERT_OK(db_->Get({}, "k2", &value));
+  EXPECT_EQ(value, "v2");
   CloseDB();
 }
 
