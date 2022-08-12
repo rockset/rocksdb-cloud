@@ -364,8 +364,8 @@ class CloudEnvOptions {
   // Experimental option!
   // The cookie we will switch to when we open the db and roll the new epoch.
   //
-  // NOTE: This option will only take effect when db exists (i.e., not new db).
-  // If it's a new db, CLOUDMANIFEST file will be created with `cookie_on_open`.
+  // NOTE: when opening a new db, CLOUDMANIFEST file will only be created with
+  // new_cookie_on_open
   //
   // TODO(wei): This is a temporarly option to unblock leader/follower rollout,
   // so that we can support follower taking over as new leader and having two
