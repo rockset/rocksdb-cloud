@@ -2217,6 +2217,23 @@ TEST_F(CloudTest, NewCookieOnOpenTest) {
   CloseDB();
 }
 
+TEST_F(CloudTest, ReopenBulkLeaf) {
+  cloud_env_options_.src_bucket.SetBucketName("");
+  cloud_env_options_.src_bucket.SetObjectPath("");
+  cloud_env_options_.dest_bucket.SetBucketName("");
+  cloud_env_options_.dest_bucket.SetObjectPath("");
+  cloud_env_options_.resync_on_open = true;
+
+  OpenDB();
+  CloseDB();
+
+  OpenDB();
+  CloseDB();
+}
+
+
+
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb
