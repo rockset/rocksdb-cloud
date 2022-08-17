@@ -22,7 +22,7 @@ class CloudSchedulerTest : public testing::Test {
   ~CloudSchedulerTest() {}
 
   std::shared_ptr<CloudScheduler> scheduler_;
-  void WaitForJobs(const std::vector<long> &jobs, uint32_t delaySeconds) {
+  void WaitForJobs(const std::vector<long> &jobs, uint32_t delayMicros) {
     bool running = true;
     while (running) {
       running = false;
@@ -33,7 +33,7 @@ class CloudSchedulerTest : public testing::Test {
         }
       }
       if (running) {
-        usleep(delaySeconds);
+        usleep(delayMicros);
       }
     }
   }
@@ -173,11 +173,8 @@ TEST_F(CloudSchedulerTest, TestLongRunningJobCancel) {
   ASSERT_EQ(status.load(), JobStatus::FINISHED);
 }
 
-class CloudSchedulerRaceTest: public testing::Test {
-};
-
 // Once cloud scheduler is destructed, jobs shouldn't be erased after it's scheduled
-TEST_F(CloudSchedulerRaceTest, SkipJobEraseOnceDestructedTest) {
+TEST(CloudSchedulerRaceTest, SkipJobEraseOnceDestructedTest) {
   // Verify that cloud scheduler can handle the race between LocalCloudScheduler destruction
   // and job cleanup after execution. 
   // Use SyncPoint to define related execution order:
