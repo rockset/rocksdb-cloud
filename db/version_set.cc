@@ -4381,11 +4381,12 @@ Status VersionSet::ProcessManifestWrites(
 #endif  // NDEBUG
 
   // Assign and verify ManifestUpdateSequences
+  bool replication_log_enabled = db_options_->IsReplicationLogEnabled();
   {
     Status s;
 
     for (auto& e : batch_edits) {
-      if (!db_options_->replication_log_listener &&
+      if (!replication_log_enabled &&
           !e->HasManifestUpdateSequence() && manifest_update_sequence_ == 0) {
         // No physical replication, skip
         continue;
@@ -4405,7 +4406,7 @@ Status VersionSet::ProcessManifestWrites(
           s = Status::Corruption(oss.str());
           break;
         }
-      } else if (db_options_->replication_log_listener) {
+      } else if (replication_log_enabled) {
         // No manifest update sequence, this is the leader, set it.
         e->SetManifestUpdateSequence(manifest_update_sequence_);
       }
@@ -4566,7 +4567,7 @@ Status VersionSet::ProcessManifestWrites(
         }
       }
 
-      if (s.ok() && db_options_->replication_log_listener) {
+      if (s.ok() && replication_log_enabled) {
         ReplicationLogRecord rlr;
         rlr.type = ReplicationLogRecord::kManifestWrite;
         s = SerializeReplicationLogManifestWrite(&rlr.contents, batch_edits);

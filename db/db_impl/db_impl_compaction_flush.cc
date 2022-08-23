@@ -2162,7 +2162,9 @@ Status DBImpl::AtomicFlushMemTables(
     }
     WaitForPendingWrites();
 
-    if (immutable_db_options_.replication_log_listener) {
+    bool replication_log_enabled = immutable_db_options_.IsReplicationLogEnabled();
+
+    if (replication_log_enabled) {
       // If replication_log_listener is installed the only thing we are allowed
       // to do is flush all column families.
       SelectColumnFamiliesForAtomicFlush(&cfds);
@@ -2180,7 +2182,7 @@ Status DBImpl::AtomicFlushMemTables(
 
     MemTableSwitchRecord mem_switch_record;
     std::string replication_sequence;
-    if (immutable_db_options_.replication_log_listener) {
+    if (replication_log_enabled) {
       mem_switch_record.next_log_num = versions_->NewFileNumber();
       replication_sequence = RecordMemTableSwitch(
         immutable_db_options_.replication_log_listener,
@@ -2193,7 +2195,7 @@ Status DBImpl::AtomicFlushMemTables(
         continue;
       }
       cfd->Ref();
-      if (immutable_db_options_.replication_log_listener) {
+      if (replication_log_enabled) {
         s = SwitchMemtableWithoutCreatingWAL(cfd, &context,
                                              mem_switch_record.next_log_num,
                                              replication_sequence);

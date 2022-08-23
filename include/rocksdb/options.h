@@ -505,25 +505,77 @@ class FlushSwitchAlwaysOn: public FlushSwitch {
     }
 };
 
-// A flush switch that's initially off, and can be turned on.
+
+// A switch that's initially off and can be turned on.
 // But it can never be turned off
-class FlushSwitchTurnOnOnce: public FlushSwitch {
+class TurnOnOnceSwitch {
   public:
-    FlushSwitchTurnOnOnce(): flush_on_(false) {}
-    bool IsFlushOn() const override {
-      return flush_on_.load(std::memory_order_relaxed);
+    TurnOnOnceSwitch(): is_on_(false) {}
+    bool IsOn() const {
+      return is_on_.load(std::memory_order_relaxed);
     }
 
-    Status TurnOn() override {
-      bool prev = flush_on_.exchange(true, std::memory_order_relaxed);
+    Status TurnOn() {
+      bool prev = is_on_.exchange(true, std::memory_order_relaxed);
       if (prev) {
-        return Status::Incomplete("Turning on flush multiple times");
+        return Status::Incomplete("Turning on switch multiple times is not allowed");
       } else {
         return Status::OK();
       }
     }
   private:
-    std::atomic_bool flush_on_;
+    std::atomic_bool is_on_;
+};
+
+// A flush switch that's initially off, and can be turned on.
+// But it can never be turned off
+class FlushSwitchTurnOnOnce: public FlushSwitch {
+  public:
+    bool IsFlushOn() const override {
+      return switch_.IsOn();
+    }
+
+    Status TurnOn() override {
+      return switch_.TurnOn();
+    }
+  private:
+    TurnOnOnceSwitch switch_;
+};
+
+class ReplicationLogListenerSwitch {
+  public:
+    virtual ~ReplicationLogListenerSwitch() = default;
+
+    virtual bool IsReplicationLogListenerOn() const = 0;
+
+    virtual Status TurnOn() = 0;
+};
+
+class ReplicationLogListenerSwitchTurnOnOnce: public ReplicationLogListenerSwitch {
+  public:
+    bool IsReplicationLogListenerOn() const override {
+      return switch_.IsOn();
+    }
+
+    Status TurnOn() override {
+      return switch_.TurnOn();
+    }
+  private:
+    TurnOnOnceSwitch switch_;
+};
+
+// TODO(wei): this is used for initial staging rollout, during which replication
+// log listener is always enabled on leader. We can remove this class later.
+class ReplicationLogListenerAlwaysOn: public ReplicationLogListenerSwitch {
+  public:
+    bool IsReplicationLogListenerOn() const override {
+      return true;
+    }
+
+    Status TurnOn() override {
+      return Status::Incomplete(
+          "Turning on replication log listener when it's always on is not expected");
+    }
 };
 
 struct DBOptions {
@@ -1480,12 +1532,28 @@ struct DBOptions {
   // inconsistency, e.g. deleted old data become visible again, etc.
   bool enforce_single_del_contracts = true;
 
+  // Experimental
+  //
   // FlushSwitch allows turning on flush if it's disabled initially.
   // Use `FlushSwitchTurnOnOnce` if you want to disable flush when opening db
   // and then turn it on sometime later.
   //
   // Default: flush is always enabled.
   std::shared_ptr<FlushSwitch> flush_switch = std::make_shared<FlushSwitchAlwaysOn>();
+
+  // Experimental
+  //
+  // Similar to FlushSwitch, ReplicationLogListener allows turning on
+  // replication log listener if it's disabled initially.
+  // Use `ReplicationLogListenerSwitchTurnOnOnce` if you want to disable
+  // replication log listenr when opening db and then turn it on sometime later.
+  //
+  // NOTE: when replication_log_listener_switch is set, replication_log_listener
+  // has to be set as well
+  //
+  // Default: null
+  std::shared_ptr<ReplicationLogListenerSwitch>
+      replication_log_listener_switch = nullptr;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

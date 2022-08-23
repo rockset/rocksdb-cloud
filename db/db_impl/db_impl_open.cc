@@ -296,6 +296,12 @@ Status DBImpl::ValidateOptions(const DBOptions& db_options) {
         "atomic_flush has to be set if replication_log_listener is set");
   }
 
+  if (db_options.replication_log_listener_switch && !db_options.replication_log_listener) {
+    return Status::InvalidArgument(
+        "replication_log_listener has to be set if "
+        "replication_log_listener_switch is set");
+  }
+
   if (db_options.use_direct_io_for_flush_and_compaction &&
       0 == db_options.writable_file_max_buffer_size) {
     return Status::InvalidArgument(

@@ -3250,6 +3250,9 @@ class ModelDB : public DB {
   Status TurnOnFlush() override {
     return Status::NotSupported("Not supported in Model DB");
   }
+  Status TurnOnReplicationLogListener() override {
+    return Status::NotSupported("Not supported in Model DB");
+  }
 
  private:
   class ModelIter : public Iterator {

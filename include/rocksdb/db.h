@@ -1283,6 +1283,22 @@ class DB {
   // be returned
   virtual Status TurnOnFlush() = 0;
 
+  // Enable replication log listener if it's disabled.
+  //
+  // REQUIRES: replication_log_listener is already registered
+  // REQUIRES: there is no ongoing writes
+  // NOTE: there could be gap in the log if there is ongoing writes while
+  // turning replication log listener. For example, suppose there is a memtable
+  // write which will trigger automatic flush,
+  // - receive memtable write, listener disabled
+  // - preprocess memtable write, listener enabled
+  // - memtable switch triggered, memtable switch is logged
+  // - But this memtable write is not logged since listener is disabled when we
+  // receive it
+  // Extra coordination is necessary if there could be ongoing writes
+  // when enabling replication log listener
+  virtual Status TurnOnReplicationLogListener() = 0;
+
   // Dynamically change column family options or table factory options in a
   // running DB, for the specified column family. Only options internally
   // marked as "mutable" can be changed. Options not listed in `opts_map` will

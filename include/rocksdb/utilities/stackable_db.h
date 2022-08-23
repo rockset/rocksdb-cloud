@@ -493,6 +493,10 @@ class StackableDB : public DB {
     return db_->TurnOnFlush();
   }
 
+  Status TurnOnReplicationLogListener() override {
+    return db_->TurnOnReplicationLogListener();
+  }
+
   using DB::SetOptions;
   virtual Status SetOptions(ColumnFamilyHandle* column_family_handle,
                             const std::unordered_map<std::string, std::string>&

@@ -58,6 +58,14 @@ class Listener : public ReplicationLogListener {
   State state_{OPEN};
 };
 
+class FollowerListener: public ReplicationLogListener {
+  std::string OnReplicationLogRecord(ReplicationLogRecord /*record*/) override {
+    // Follower replication log listener should never be called
+    assert(false);
+    return "";
+  }
+};
+
 class FollowerEnv : public EnvWrapper {
  public:
   FollowerEnv(std::string leader_path)
@@ -128,8 +136,6 @@ class ReplicationTest : public testing::Test {
     return follower_cfs_;
   }
 
-
-
   ColumnFamilyHandle* leaderCF(const std::string& name) const {
     auto pos = leader_cfs_.find(name);
     assert(pos != leader_cfs_.end());
@@ -151,7 +157,7 @@ class ReplicationTest : public testing::Test {
   }
   
   DB* openLeader() {
-    return openLeader(leaderOptions());
+    return openLeader(defaultOptions());
   }
   DB* openLeader(Options options);
   void closeLeader() {
@@ -160,7 +166,7 @@ class ReplicationTest : public testing::Test {
   }
 
   DB* openFollower() {
-    return openFollower(leaderOptions());
+    return openFollower(defaultFollowerOptions(defaultOptions()));
   }
   DB* openFollower(Options options);
 
@@ -169,7 +175,7 @@ class ReplicationTest : public testing::Test {
     follower_db_.reset();
   }
 
-  Options leaderOptions() const;
+  Options defaultOptions() const;
 
   // Returns the number of log records applied
   size_t catchUpFollower();
@@ -214,6 +220,9 @@ class ReplicationTest : public testing::Test {
     }
   }
 
+  // overwrite options with default follower options
+  Options defaultFollowerOptions(Options options);
+
  private:
   std::string test_dir_;
   FollowerEnv follower_env_;
@@ -228,7 +237,7 @@ class ReplicationTest : public testing::Test {
   ColumnFamilyMap follower_cfs_;
 };
 
-Options ReplicationTest::leaderOptions() const {
+Options ReplicationTest::defaultOptions() const {
   Options options;
   options.create_if_missing = true;
   options.atomic_flush = true;
@@ -241,6 +250,16 @@ Options ReplicationTest::leaderOptions() const {
   return options;
 }
 
+Options ReplicationTest::defaultFollowerOptions(Options options) {
+  options.env = &follower_env_;
+  options.disable_auto_compactions = true;
+  options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
+  options.replication_log_listener =
+      std::make_shared<FollowerListener>();
+  options.replication_log_listener_switch =
+      std::make_shared<ReplicationLogListenerSwitchTurnOnOnce>();
+  return options;
+}
 
 DB* ReplicationTest::openLeader(Options options) {
   bool firstOpen = log_records_.empty();
@@ -256,6 +275,9 @@ DB* ReplicationTest::openLeader(Options options) {
   auto listener =
       std::make_shared<Listener>(&log_records_mutex_, &log_records_);
   options.replication_log_listener = listener;
+  options.replication_log_listener_switch =
+      std::make_shared<ReplicationLogListenerSwitchTurnOnOnce>();
+  options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
 
   listener->setState(firstOpen ? Listener::TAILING : Listener::OPEN);
 
@@ -272,6 +294,8 @@ DB* ReplicationTest::openLeader(Options options) {
   leader_db_.reset(db);
   // Follower will sometimes need to access deleted files
   db->DisableFileDeletions();
+  db->TurnOnReplicationLogListener();
+  db->TurnOnFlush();
 
   for (auto& h : handles) {
     bool inserted = leader_cfs_.try_emplace(h->GetName(), h).second;
@@ -303,10 +327,6 @@ DB* ReplicationTest::openFollower(Options options) {
   if (!s.ok()) {
     cf_names.push_back(kDefaultColumnFamilyName);
   }
-
-  options.env = &follower_env_;
-  options.disable_auto_compactions = true;
-  options.write_buffer_size = 100 << 20;
 
   std::vector<ColumnFamilyDescriptor> column_families;
   for (auto& name : cf_names) {
@@ -360,7 +380,7 @@ size_t ReplicationTest::catchUpFollower() {
 }
 
 void ReplicationTest::createColumnFamily(std::string name) {
-  ColumnFamilyOptions options(leaderOptions());
+  ColumnFamilyOptions options(defaultOptions());
   ColumnFamilyHandle* h;
   auto s = leader_db_->CreateColumnFamily(options, name, &h);
   assert(s.ok());
@@ -581,11 +601,11 @@ TEST_F(ReplicationTest, MultiColumnFamily) {
 
 // Test that we never switch empty memtables on both leader and follower
 TEST_F(ReplicationTest, SwitchEmptyMemTable) {
-  auto openOptions = leaderOptions();
+  auto openOptions = defaultOptions();
   openOptions.max_write_buffer_number = 3;
 
   auto leader = openLeader(openOptions);
-  openFollower(openOptions);
+  openFollower(defaultFollowerOptions(openOptions));
 
   auto leaderFull = static_cast_with_check<DBImpl>(leader);
   leaderFull->PauseBackgroundWork();
@@ -650,7 +670,7 @@ class TestEventListener: public EventListener {
 // flush the memtables one by one. Whenever a memtable is flushed, we catch the
 // event and check the next log number consistency between leader and follower
 TEST_F(ReplicationTest, NextLogNumConsistency) {
-  auto leaderOpenOptions = leaderOptions();
+  auto leaderOpenOptions = defaultOptions();
 
   // We need to maintain at most 3 memtables(1 active, 2 unflushed)
   leaderOpenOptions.max_write_buffer_number = 3;
@@ -674,7 +694,7 @@ TEST_F(ReplicationTest, NextLogNumConsistency) {
   eventListener->seq2 = leader->GetLatestSequenceNumber();
   leader->Flush(flushOpts);
 
-  auto followerOpenOptions = leaderOptions();
+  auto followerOpenOptions = defaultFollowerOptions(defaultOptions());
   followerOpenOptions.max_write_buffer_number = 3;
 
   openFollower(followerOpenOptions);
@@ -767,6 +787,55 @@ TEST_F(ReplicationTest, Stress) {
   catchUpFollower();
 
   verify_equal();
+}
+
+TEST_F(ReplicationTest, TurnOnReplicationLogListenerTest) {
+  // a replication log listener implementation used to verify that replication
+  // log listener can be turned on
+  class CustomReplicationLogListener : public ReplicationLogListener {
+   public:
+    std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
+      MutexLock lk(&log_records_mutex_);
+      std::string replication_sequence = std::to_string(log_records_.size());
+      log_records_.emplace_back(std::move(record), replication_sequence);
+      return replication_sequence;
+    }
+
+    size_t numRecords() const {
+      MutexLock lk(&log_records_mutex_);
+      return log_records_.size();
+    }
+   private:
+    mutable port::Mutex log_records_mutex_;
+    LogRecordsVector log_records_;
+  };
+  auto followerOptions = defaultFollowerOptions(defaultOptions());
+  followerOptions.env = Env::Default(); // opening follower in a standalone env
+  auto followerListener = std::make_shared<CustomReplicationLogListener>();
+  followerOptions.replication_log_listener = followerListener;
+  auto follower = openFollower(followerOptions);
+  follower->TurnOnFlush();
+
+  // memtable write
+  ASSERT_OK(follower->Put(wo(), "key1", "val1"));
+  // replication log listener not turned on yet
+  EXPECT_EQ(followerListener->numRecords(), 0);
+
+  // flush and wait until finish
+  // memtable switch and manifest write
+  ASSERT_OK(follower->Flush(FlushOptions()));
+
+  // replication log listener not turned on yet
+  EXPECT_EQ(followerListener->numRecords(), 0);
+
+  follower->TurnOnReplicationLogListener();
+  // memtable write
+  ASSERT_OK(follower->Put(wo(), "key2", "val2"));
+  EXPECT_EQ(followerListener->numRecords(), 1);
+  // flush and wait until finish
+  // memtable switch and manifest write
+  ASSERT_OK(follower->Flush(FlushOptions()));
+  EXPECT_EQ(followerListener->numRecords(), 3);
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

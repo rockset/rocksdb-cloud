@@ -1285,6 +1285,12 @@ Status DBImpl::TurnOnFlush() {
   return immutable_db_options_.flush_switch->TurnOn();
 }
 
+Status DBImpl::TurnOnReplicationLogListener() {
+  // replication log listener should be specified
+  assert(immutable_db_options_.replication_log_listener);
+  return immutable_db_options_.replication_log_listener_switch->TurnOn();
+}
+
 Status DBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& options_map) {

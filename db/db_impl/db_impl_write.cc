@@ -269,6 +269,8 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
 
   write_thread_.JoinBatchGroup(&w);
+  bool replication_log_enabled = immutable_db_options_.IsReplicationLogEnabled();
+
   if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) {
     // we are a non-leader in a parallel group
 
@@ -462,7 +464,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     const SequenceNumber current_sequence = last_sequence + 1;
     last_sequence += seq_inc;
 
-    if (status.ok() && immutable_db_options_.replication_log_listener) {
+    if (status.ok() && replication_log_enabled) {
       WriteBatch wb;
       bool first = true;
       for (auto writer : write_group) {
@@ -1629,7 +1631,8 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
 
   MemTableSwitchRecord mem_switch_record;
   std::string replication_sequence;
-  if (immutable_db_options_.replication_log_listener) {
+  bool replication_log_enabled = immutable_db_options_.IsReplicationLogEnabled();
+  if (replication_log_enabled) {
     mem_switch_record.next_log_num = versions_->NewFileNumber();
     replication_sequence = RecordMemTableSwitch(
         immutable_db_options_.replication_log_listener, mem_switch_record);
@@ -1644,7 +1647,7 @@ Status DBImpl::HandleWriteBufferManagerFlush(WriteContext* write_context) {
       continue;
     }
     cfd->Ref();
-    if (immutable_db_options_.replication_log_listener) {
+    if (replication_log_enabled) {
       status = SwitchMemtableWithoutCreatingWAL(cfd, write_context,
                                                 mem_switch_record.next_log_num,
                                                 replication_sequence);
@@ -1906,7 +1909,8 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   MemTableSwitchRecord mem_switch_record;
   std::string replication_sequence;
-  if (immutable_db_options_.replication_log_listener) {
+  bool replication_log_enabled = immutable_db_options_.IsReplicationLogEnabled();
+  if (replication_log_enabled) {
     mem_switch_record.next_log_num = versions_->NewFileNumber();
     replication_sequence = RecordMemTableSwitch(
       immutable_db_options_.replication_log_listener,
@@ -1915,7 +1919,7 @@ Status DBImpl::ScheduleFlushes(WriteContext* context) {
 
   for (auto& cfd : cfds) {
     if (!cfd->mem()->IsEmpty()) {
-      if (immutable_db_options_.replication_log_listener) {
+      if (replication_log_enabled) {
         status = SwitchMemtableWithoutCreatingWAL(
             cfd, context, mem_switch_record.next_log_num, replication_sequence);
       } else {
@@ -2029,7 +2033,7 @@ Status DBImpl::SwitchMemtableWithoutCreatingWAL(
 Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   // SwitchMemtableWithoutCreatingWAL should be used when
   // replication_log_listener is set
-  assert(!immutable_db_options_.replication_log_listener);
+  assert(!immutable_db_options_.IsReplicationLogEnabled());
   mutex_.AssertHeld();
   log::Writer* new_log = nullptr;
   MemTable* new_mem = nullptr;

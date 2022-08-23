@@ -111,11 +111,13 @@ struct ImmutableDBOptions {
   std::shared_ptr<CompactionService> compaction_service;
   bool enforce_single_del_contracts;
   std::shared_ptr<FlushSwitch> flush_switch;
+  std::shared_ptr<ReplicationLogListenerSwitch> replication_log_listener_switch;
 
   bool IsWalDirSameAsDBPath() const;
   bool IsWalDirSameAsDBPath(const std::string& path) const;
   const std::string& GetWalDir() const;
   const std::string& GetWalDir(const std::string& path) const;
+  bool IsReplicationLogEnabled() const;
 };
 
 struct MutableDBOptions {

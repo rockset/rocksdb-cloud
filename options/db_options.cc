@@ -773,7 +773,8 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       lowest_used_cache_tier(options.lowest_used_cache_tier),
       compaction_service(options.compaction_service),
       enforce_single_del_contracts(options.enforce_single_del_contracts),
-      flush_switch(options.flush_switch) {
+      flush_switch(options.flush_switch),
+      replication_log_listener_switch(options.replication_log_listener_switch) {
   fs = env->GetFileSystem();
   clock = env->GetSystemClock().get();
   logger = info_log.get();
@@ -985,6 +986,11 @@ const std::string& ImmutableDBOptions::GetWalDir(
   } else {
     return wal_dir;
   }
+}
+
+bool ImmutableDBOptions::IsReplicationLogEnabled() const {
+  return replication_log_listener && replication_log_listener_switch &&
+         replication_log_listener_switch->IsReplicationLogListenerOn();
 }
 
 MutableDBOptions::MutableDBOptions()

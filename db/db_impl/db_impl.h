@@ -338,6 +338,7 @@ class DBImpl : public DB {
   Status GetPersistedReplicationSequence(std::string* out) override;
   Status GetManifestUpdateSequence(uint64_t* out) override;
   Status TurnOnFlush() override;
+  Status TurnOnReplicationLogListener() override;
 
   using DB::SetOptions;
   Status SetOptions(
