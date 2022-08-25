@@ -960,6 +960,7 @@ Status CloudEnvImpl::DeleteInvisibleFiles(const std::string& dbname,
   }
   std::vector<std::string> children;
   s = GetBaseEnv()->GetChildren(dbname, &children);
+  TEST_SYNC_POINT_CALLBACK("CloudEnvImpl::DeleteInvisibleFiles:AfterListLocalFiles", &s);
   if (!s.ok()) {
     return s;
   }

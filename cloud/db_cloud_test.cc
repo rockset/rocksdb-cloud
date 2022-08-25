@@ -2113,6 +2113,7 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
 
   CloseDB();
   SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 
 TEST_F(CloudTest, RollNewEpochTest) {
@@ -2313,6 +2314,7 @@ TEST_F(CloudTest, FileDeletionTest) {
   CloseDB();
 
   SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
 }
 
 // verify that two writers with different cookies can write concurrently
@@ -2426,6 +2428,98 @@ TEST_F(CloudTest, TwoConcurrentWritersCookieNotEmpty) {
   ASSERT_OK(db2->Get({}, "k3", &v));
   EXPECT_EQ(v, "v3");
   closeDB2();
+}
+
+// if file deletion fails, db should still be reopend
+TEST_F(CloudTest, FileDeletionFailureIgnoredTest) {
+  std::string manifest_file_path;
+  OpenDB();
+  auto epoch = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
+  manifest_file_path = ManifestFileWithEpoch(dbname_, epoch);
+  ASSERT_OK(db_->Put({}, "k1", "v1"));
+  ASSERT_OK(db_->Flush({}));
+  CloseDB();
+
+  // bump the manifest epoch so that next time opening it, manifest file will be deleted
+  OpenDB();
+  CloseDB();
+
+  // return error during file deletion
+  SyncPoint::GetInstance()->SetCallBack(
+      "CloudEnvImpl::DeleteInvisibleFiles:AfterListLocalFiles", [](void* arg) {
+        auto st = reinterpret_cast<Status*>(arg);
+        *st =
+            Status::Aborted("Manual abortion to simulate file listing failure");
+      });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  OpenDB();
+  std::string v;
+  ASSERT_OK(db_->Get({}, "k1", &v));
+  EXPECT_EQ(v, "v1");
+  // Due to the Aborted error we generated, the manifest file which should have
+  // been deleted still exists.
+  EXPECT_OK(aenv_->GetBaseEnv()->FileExists(manifest_file_path));
+  CloseDB();
+  SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
+
+  // reopen the db should delete the obsolete manifest file after we cleanup syncpoint
+  OpenDB();
+  EXPECT_NOK(aenv_->GetBaseEnv()->FileExists(manifest_file_path));
+  CloseDB();
+}
+
+// verify that as long as CloudEnv is destructed, the file delection jobs
+// waiting in the queue will be canceled
+TEST_F(CloudTest, FileDeletionJobsCanceledWhenCloudEnvDestructed) {
+  std::string manifest_file_path;
+  OpenDB();
+  auto epoch = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
+  manifest_file_path = ManifestFileWithEpoch(dbname_, epoch);
+  CloseDB();
+
+  // bump epoch of manifest file so next open will delete previous manifest file
+  OpenDB();
+  CloseDB();
+
+  // Setup syncpoint dependency to prevent cloud scheduler from executing file
+  // deletion job in the queue until CloudEnv is destructed
+  SyncPoint::GetInstance()->LoadDependency(
+      {{"CloudTest::FileDeletionJobsCanceledWhenCloudEnvDestructed:"
+        "AfterCloudEnvDestruction",
+        "CloudSchedulerImpl::DoWork:BeforeGetJob"}});
+  SyncPoint::GetInstance()->EnableProcessing();
+  OpenDB();
+  CloseDB();
+
+  // delete CloudEnv will cancel all file deletion jobs in the queue
+  aenv_.reset();
+
+  // jobs won't be executed until after this point. But the file deletion job
+  // in the queue should have already been canceled
+  TEST_SYNC_POINT(
+      "CloudTest::FileDeletionJobsCanceledWhenCloudEnvDestructed:"
+      "AfterCloudEnvDestruction");
+
+  SyncPoint::GetInstance()->DisableProcessing();
+
+  // recreate cloud env to check s3 file existence
+  CreateCloudEnv();
+
+  // wait for a while so that the rest uncanceled jobs are indeed executed by
+  // cloud scheduler.
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // the old manifest file is still there!
+  EXPECT_OK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), manifest_file_path));
+
+  // reopen db to delete the old manifest file
+  OpenDB();
+  EXPECT_NOK(aenv_->GetStorageProvider()->ExistsCloudObject(
+      aenv_->GetSrcBucketName(), manifest_file_path));
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
