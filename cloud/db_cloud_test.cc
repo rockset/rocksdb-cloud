@@ -2522,6 +2522,22 @@ TEST_F(CloudTest, FileDeletionJobsCanceledWhenCloudEnvDestructed) {
   CloseDB();
 }
 
+TEST_F(CloudTest, OpenWithEmptySrcBucketAndStaleLocalData) {
+  OpenDB();
+  auto epoch = GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch();
+  CloseDB();
+
+  ASSERT_OK(aenv_->GetStorageProvider()->DeleteCloudObject(
+      aenv_->GetSrcBucketName(),
+      MakeCloudManifestFile(aenv_->GetSrcObjectPath(), "")));
+
+  ASSERT_OK(aenv_->GetStorageProvider()->DeleteCloudObject(
+      aenv_->GetSrcBucketName(),
+      ManifestFileWithEpoch(aenv_->GetSrcObjectPath(), epoch)));
+  OpenDB();
+  CloseDB();
+}
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb
