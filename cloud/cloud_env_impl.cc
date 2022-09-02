@@ -936,9 +936,10 @@ Status CloudEnvImpl::DeleteInvisibleFiles(const std::string& dbname,
       }
 
       if (cookie != new_cookie && fname_cookie == new_cookie) {
-        // We switch to an existing non-empty cookie when opening db. This is
-        // ok, since CLOUDMANIFEST-new_cookie won't be deleted from cloud, but
-        // it's not expected.
+        // This means we try to switch to an non-empty cookie which has been
+        // used in the past(since there is some CM file in s3) when opening db.
+        // This is ok, since CLOUDMANIFEST-new_cookie won't be deleted from
+        // cloud, but it's not expected.
         Log(InfoLogLevel::WARN_LEVEL, info_log_,
             "Trying to open db with new_cookie: %s which already exists in "
             "cloud",
