@@ -154,7 +154,7 @@ struct MutableCFOptions {
         sample_for_compression(
             options.sample_for_compression),  // TODO: is 0 fine here?
         compression_per_level(options.compression_per_level),
-        disable_flush(options.disable_flush) {
+        disable_auto_flush(options.disable_auto_flush) {
     RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
 
@@ -198,7 +198,7 @@ struct MutableCFOptions {
         bottommost_compression(kDisableCompressionOption),
         bottommost_temperature(Temperature::kUnknown),
         sample_for_compression(0),
-        disable_flush(false) {}
+        disable_auto_flush(false) {}
 
   explicit MutableCFOptions(const Options& options);
 
@@ -278,7 +278,7 @@ struct MutableCFOptions {
   // Per-level target file size.
   std::vector<uint64_t> max_file_size;
 
-  bool disable_flush;
+  bool disable_auto_flush;
 };
 
 uint64_t MultiplyCheckOverflow(uint64_t op1, double op2);

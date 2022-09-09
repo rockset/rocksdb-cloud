@@ -500,8 +500,8 @@ static std::unordered_map<std::string, OptionTypeInfo>
                      name, value, addr);
                }
              })},
-        {"disable_flush",
-         {offsetof(struct MutableCFOptions, disable_flush),
+        {"disable_auto_flush",
+         {offsetof(struct MutableCFOptions, disable_auto_flush),
           OptionType::kBoolean, OptionVerificationType::kNormal,
           OptionTypeFlags::kMutable}}
         // End special case properties

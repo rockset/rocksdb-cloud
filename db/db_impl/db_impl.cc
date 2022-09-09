@@ -5579,19 +5579,9 @@ Status DBImpl::GetCreationTimeOfOldestFile(uint64_t* creation_time) {
 }
 #endif  // ROCKSDB_LITE
 
-ColumnFamilyData* DBImpl::GetAnyCFWithFlushDisabled() const {
+ColumnFamilyData* DBImpl::GetAnyCFWithAutoFlushDisabled() const {
   for (auto cfd: *versions_->GetColumnFamilySet()) {
-    if (!cfd->IsDropped() && cfd->GetLatestMutableCFOptions()->disable_flush) {
-      return cfd;
-    }
-  }
-  return nullptr;
-}
-
-ColumnFamilyData* DBImpl::GetAnyCFWithFlushDisabled(
-    const autovector<ColumnFamilyData*>& cfds) const {
-  for (auto cfd: cfds) {
-    if (!cfd->IsDropped() && cfd->GetLatestMutableCFOptions()->disable_flush) {
+    if (!cfd->IsDropped() && cfd->GetLatestMutableCFOptions()->disable_auto_flush) {
       return cfd;
     }
   }

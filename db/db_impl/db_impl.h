@@ -2172,13 +2172,7 @@ class DBImpl : public DB {
   // Return any column family (not dropped) with flush disabled
   //
   // REQUIRES: mutex_ locked
-  ColumnFamilyData* GetAnyCFWithFlushDisabled() const;
-
-  // Return any column family in cfds with flush disabled
-  //
-  // REQUIRES: mutex_ locked
-  ColumnFamilyData* GetAnyCFWithFlushDisabled(
-      const autovector<ColumnFamilyData*>& cfds) const;
+  ColumnFamilyData* GetAnyCFWithAutoFlushDisabled() const;
 
   // Lock over the persistent DB state.  Non-nullptr iff successfully acquired.
   FileLock* db_lock_;

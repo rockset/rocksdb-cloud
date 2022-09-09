@@ -1998,12 +1998,6 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
     WriteContext context;
     InstrumentedMutexLock guard_lock(&mutex_);
 
-    if (cfd->GetLatestMutableCFOptions()->disable_flush) {
-      ROCKS_LOG_ERROR(immutable_db_options_.info_log,
-                      "FlushMemtables called for CF: %d when flush disabled", cfd->GetID());
-      return Status::Incomplete("flush disabled");
-    }
-
     WriteThread::Writer w;
     WriteThread::Writer nonmem_w;
     if (!writes_stopped) {
@@ -2158,9 +2152,7 @@ Status DBImpl::AtomicFlushMemTables(
     }
     WaitForPendingWrites();
 
-    ColumnFamilyData* cfd_flush_disabled = nullptr;
     if (immutable_db_options_.replication_log_listener) {
-      cfd_flush_disabled = GetAnyCFWithFlushDisabled();
       // If replication_log_listener is installed the only thing we are
       // allowed to do is flush all column families.
       SelectColumnFamiliesForAtomicFlush(&cfds);
@@ -2174,16 +2166,6 @@ Status DBImpl::AtomicFlushMemTables(
           cfds.emplace_back(cfd);
         }
       }
-      cfd_flush_disabled = GetAnyCFWithFlushDisabled(cfds);
-    }
-
-    // If any CF has flush disabled, atomic flush request is rejected
-    if (cfd_flush_disabled) {
-      ROCKS_LOG_ERROR(
-          immutable_db_options_.info_log,
-          "AtomicFlushMemtables called for CF: %d when flush disabled",
-          cfd_flush_disabled->GetID());
-      return Status::Incomplete("flush disabled");
     }
 
     MemTableSwitchRecord mem_switch_record;
@@ -2630,9 +2612,6 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
     assert(flush_req.size() == 1);
     ColumnFamilyData* cfd = flush_req[0].first;
     assert(cfd);
-    // Since we don't support disabling flush on running db, there should never
-    // be any flush request to be scheduled
-    assert(!cfd->GetLatestMutableCFOptions()->disable_flush);
     // Note: SchedulePendingFlush is always preceded
     // with an imm()->FlushRequested() call. However,
     // we want to make this code snipper more resilient to
@@ -2654,9 +2633,6 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
   } else {
     for (auto& iter : flush_req) {
       ColumnFamilyData* cfd = iter.first;
-      // Since we don't support disabling flush on running db, there should
-      // never be any flush request to be scheduled
-      assert(!cfd->GetLatestMutableCFOptions()->disable_flush);
       cfd->Ref();
       cfd->SetFlushReason(flush_reason);
     }

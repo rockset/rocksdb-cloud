@@ -509,8 +509,8 @@ class MemTable {
   // Returns a heuristic flush decision
   bool ShouldFlushNow();
 
-  // Enable flush if it's previously disabled
-  void EnableFlush();
+  // Enable auto flush if it's previously disabled
+  void EnableAutoFlush();
 
  private:
   enum FlushStateEnum { FLUSH_NOT_REQUESTED, FLUSH_REQUESTED, FLUSH_SCHEDULED };
@@ -596,7 +596,7 @@ class MemTable {
   // Gets refreshed inside `ApproximateMemoryUsage()` or `ShouldFlushNow`
   std::atomic<uint64_t> approximate_memory_usage_;
 
-  std::atomic_bool disable_flush_;
+  std::atomic_bool disable_auto_flush_;
 
 #ifndef ROCKSDB_LITE
   // Flush job info of the current memtable.

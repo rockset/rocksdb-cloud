@@ -318,11 +318,12 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // Default: nullptr
   std::shared_ptr<SstPartitionerFactory> sst_partitioner_factory = nullptr;
 
-  // Disable flush. Both manual and automatic flush will be disabled
+  // Disable automatic flush(exceed `write_buffer_size` limit). Manual flush
+  // (including exceeding `db_write_buffer_size` limit) can still be issued
   //
   // Dynamically changeable through SetOptions() API
-  // Default: false, flush is enabled
-  bool disable_flush = false;
+  // Default: false, auto flush is enabled
+  bool disable_auto_flush = false;
 
   // Create ColumnFamilyOptions with default values for all fields
   ColumnFamilyOptions();

@@ -112,7 +112,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       oldest_key_time_(std::numeric_limits<uint64_t>::max()),
       atomic_flush_seqno_(kMaxSequenceNumber),
       approximate_memory_usage_(0),
-      disable_flush_(mutable_cf_options.disable_flush) {
+      disable_auto_flush_(mutable_cf_options.disable_auto_flush) {
   UpdateFlushState();
   // something went wrong if we need to flush before inserting anything
   assert(!ShouldScheduleFlush());
@@ -211,9 +211,9 @@ bool MemTable::ShouldFlushNow() {
   return arena_.AllocatedAndUnused() < kArenaBlockSize / 4;
 }
 
-void MemTable::EnableFlush() {
+void MemTable::EnableAutoFlush() {
   bool flush_previously_disabled =
-      disable_flush_.exchange(false, std::memory_order_relaxed);
+      disable_auto_flush_.exchange(false, std::memory_order_relaxed);
   if (!flush_previously_disabled) {
     ROCKS_LOG_WARN(moptions_.info_log,
                    "EnableFlush called when flush is already enabled");
@@ -223,7 +223,7 @@ void MemTable::EnableFlush() {
 void MemTable::UpdateFlushState() {
   auto state = flush_state_.load(std::memory_order_relaxed);
   if (state == FLUSH_NOT_REQUESTED && ShouldFlushNow()) {
-    if (disable_flush_) {
+    if (disable_auto_flush_.load(std::memory_order_relaxed)) {
       return;
     }
     // ignore CAS failure, because that means somebody else requested
