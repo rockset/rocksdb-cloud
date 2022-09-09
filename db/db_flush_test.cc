@@ -2794,10 +2794,10 @@ TEST_P(DBAtomicFlushTest, BgThreadNoWaitAfterManifestError) {
 TEST_F(DBFlushTest, DisableFlushWhenExceedDBWriteBufferSize) {
     // case1 : write buffer full
     Options options;
-    options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
     options.env = env_;
     options.db_write_buffer_size = 100;
     options.write_buffer_size = 10 << 20;
+    options.disable_flush = true;
     Reopen(options);
 
     auto versions = dbfull()->GetVersionSet();
@@ -2815,7 +2815,7 @@ TEST_F(DBFlushTest, DisableFlushWhenExceedDBWriteBufferSize) {
 
     EXPECT_EQ(mem_id,
               versions->GetColumnFamilySet()->GetDefault()->mem()->GetID());
-    ASSERT_OK(db_->TurnOnFlush());
+    ASSERT_OK(db_->SetOptions({{"disable_flush", "false"}}));
     // This write will trigger `HandleWriteBufferManagerFlush`
     ASSERT_OK(Put("k3", "v3"));
     EXPECT_NE(mem_id,
@@ -2826,11 +2826,11 @@ TEST_F(DBFlushTest, DisableFlushWhenExceedDBWriteBufferSize) {
 TEST_F(DBFlushTest, DisableFlushWhenSwitchWAL) {
   // case2 : SwitchWAL
   Options options;
-  options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
   options.env = env_;
   options.db_write_buffer_size = 0;
   options.write_buffer_size = 10 << 20;
   options.max_total_wal_size = 1;
+  options.disable_flush = true;
   Reopen(options);
   // switchWAL will only be triggered with more than 1 CF
   CreateColumnFamilies({"cf1"}, options);
@@ -2838,7 +2838,9 @@ TEST_F(DBFlushTest, DisableFlushWhenSwitchWAL) {
   auto versions = dbfull()->GetVersionSet();
   auto default_cf = versions->GetColumnFamilySet()
                 ->GetDefault();
+  auto cf1 = versions->GetColumnFamilySet()->GetColumnFamily("cf1");
   auto mem_table_id = default_cf->mem()->GetID();
+  auto cf1_memtable_id = cf1->mem()->GetID();
 
   // This write will cause log size to exceed limit
   EXPECT_OK(Put("k1", "v1"));
@@ -2852,12 +2854,23 @@ TEST_F(DBFlushTest, DisableFlushWhenSwitchWAL) {
   PinnableSlice value;
   EXPECT_NOK(Get("k2", &value));
 
-  ASSERT_OK(db_->TurnOnFlush());
+  ASSERT_OK(db_->SetOptions({{"disable_flush", "false"}}));
 
-  // this write will trigger SwitchWAL
+  // this write will trigger SwitchWAL, but since CF1 still has flush
+  // disabled, switchWAL is not triggered
+  EXPECT_NOK(Put("k2", "v2"));
+
+  EXPECT_EQ(mem_table_id, default_cf->mem()->GetID());
+
+  // update cf1 disable_flush setting
+  ASSERT_OK(db_->SetOptions(handles_[0], {{"disable_flush", "false"}}));
+
+  // this write will trigger SwitchWAL and flush
   EXPECT_OK(Put("k2", "v2"));
 
   EXPECT_NE(mem_table_id, default_cf->mem()->GetID());
+  // cf1 is also flushed since the log number is old enough 
+  EXPECT_NE(cf1_memtable_id, cf1->mem()->GetID());
 
   Close();
 }
@@ -2865,13 +2878,13 @@ TEST_F(DBFlushTest, DisableFlushWhenSwitchWAL) {
 TEST_F(DBFlushTest, DisableFlushWhenManualFlush) {
   // case3 : manual flush
   Options options;
-  options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
   options.env = env_;
+  options.disable_flush = true;
   Reopen(options);
   ASSERT_OK(Put("k1", "v1"));
   EXPECT_NOK(Flush({}));
 
-  ASSERT_OK(db_->TurnOnFlush());
+  ASSERT_OK(db_->SetOptions({{"disable_flush", "false"}}));
 
   EXPECT_OK(Flush({}));
   Close();
@@ -2880,7 +2893,7 @@ TEST_F(DBFlushTest, DisableFlushWhenManualFlush) {
 TEST_F(DBFlushTest, DisableFlushWhenExceedWriteBufferSize) {
   // case4 : single memtable size limit
   Options options;
-  options.flush_switch = std::make_shared<FlushSwitchTurnOnOnce>();
+  options.disable_flush = true;
   options.env = env_;
   // minimum write buffer size we can set is 65536
   options.write_buffer_size = 65536;
@@ -2900,12 +2913,12 @@ TEST_F(DBFlushTest, DisableFlushWhenExceedWriteBufferSize) {
   EXPECT_EQ(mem_table_id, default_cf->mem()->GetID());
 
   // Turn on flush
-  ASSERT_OK(db_->TurnOnFlush());
+  ASSERT_OK(db_->SetOptions({{"disable_flush", "false"}}));
 
   // this write should update the flush state and schedule work in flush scheduler
   ASSERT_OK(Put("new_k1", "new_v1"));
 
-  // this should will cause the flush to be scheduled
+  // this write will cause the flush to be scheduled
   ASSERT_OK(Put("new_k2", "new_v2"));
 
   // verify that memtable is switched

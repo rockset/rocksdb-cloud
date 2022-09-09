@@ -1293,6 +1293,17 @@ void ColumnFamilyData::InstallSuperVersion(
         mutable_cf_options.write_buffer_size) {
       mem_->UpdateWriteBufferSize(mutable_cf_options.write_buffer_size);
     }
+    if (old_superversion->mutable_cf_options.disable_flush != mutable_cf_options.disable_flush) {
+      // Disabling flush on running db is not supported due to bunch of checks we added to
+      // catch unexpected flush.this t's easy to support it later if we want to
+      if (mutable_cf_options.disable_flush) {
+        ROCKS_LOG_ERROR(ioptions_.info_log,
+                        "Disabling flush on running db is not supported");
+      }
+      assert(!mutable_cf_options.disable_flush);
+      mem_->EnableFlush();
+    }
+
     if (old_superversion->write_stall_condition !=
         new_superversion->write_stall_condition) {
       sv_context->PushWriteStallNotification(

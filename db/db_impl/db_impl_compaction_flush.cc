@@ -1981,11 +1981,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
   // This method should not be called if atomic_flush is true.
   assert(!immutable_db_options_.atomic_flush);
   assert(!immutable_db_options_.replication_log_listener);
-  if (!immutable_db_options_.flush_switch->IsFlushOn()) {
-    ROCKS_LOG_ERROR(immutable_db_options_.info_log,
-                    "FlushMemtables called when flush disabled");
-    return Status::Incomplete("flush disabled");
-  }
+
   Status s;
   if (!flush_options.allow_write_stall) {
     bool flush_needed = true;
@@ -2001,6 +1997,12 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
   {
     WriteContext context;
     InstrumentedMutexLock guard_lock(&mutex_);
+
+    if (cfd->GetLatestMutableCFOptions()->disable_flush) {
+      ROCKS_LOG_ERROR(immutable_db_options_.info_log,
+                      "FlushMemtables called for CF: %d when flush disabled", cfd->GetID());
+      return Status::Incomplete("flush disabled");
+    }
 
     WriteThread::Writer w;
     WriteThread::Writer nonmem_w;
@@ -2124,12 +2126,6 @@ Status DBImpl::AtomicFlushMemTables(
     const autovector<ColumnFamilyData*>& column_family_datas,
     const FlushOptions& flush_options, FlushReason flush_reason,
     bool writes_stopped) {
-  if (!immutable_db_options_.flush_switch->IsFlushOn()) {
-    ROCKS_LOG_ERROR(immutable_db_options_.info_log,
-                    "AtomicFlushMemtables called when flush disabled");
-    return Status::Incomplete("Flush disabled");
-  }
-
   Status s;
   if (!flush_options.allow_write_stall) {
     int num_cfs_to_flush = 0;
@@ -2162,9 +2158,11 @@ Status DBImpl::AtomicFlushMemTables(
     }
     WaitForPendingWrites();
 
+    ColumnFamilyData* cfd_flush_disabled = nullptr;
     if (immutable_db_options_.replication_log_listener) {
-      // If replication_log_listener is installed the only thing we are allowed
-      // to do is flush all column families.
+      cfd_flush_disabled = GetAnyCFWithFlushDisabled();
+      // If replication_log_listener is installed the only thing we are
+      // allowed to do is flush all column families.
       SelectColumnFamiliesForAtomicFlush(&cfds);
     } else {
       for (auto cfd : column_family_datas) {
@@ -2176,6 +2174,16 @@ Status DBImpl::AtomicFlushMemTables(
           cfds.emplace_back(cfd);
         }
       }
+      cfd_flush_disabled = GetAnyCFWithFlushDisabled(cfds);
+    }
+
+    // If any CF has flush disabled, atomic flush request is rejected
+    if (cfd_flush_disabled) {
+      ROCKS_LOG_ERROR(
+          immutable_db_options_.info_log,
+          "AtomicFlushMemtables called for CF: %d when flush disabled",
+          cfd_flush_disabled->GetID());
+      return Status::Incomplete("flush disabled");
     }
 
     MemTableSwitchRecord mem_switch_record;
@@ -2613,12 +2621,6 @@ ColumnFamilyData* DBImpl::PickCompactionFromQueue(
 void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
                                   FlushReason flush_reason) {
   mutex_.AssertHeld();
-  // If flush is disabled at this time, we must have missed some code path
-  // to check whether flush is enabled
-  // NOTE: this assert check is based on the assumption that we never disable
-  // flush on a running db. Otherwise, this check might fail if some flush is
-  // scheduled right before we disable flush.
-  assert(immutable_db_options_.flush_switch->IsFlushOn());
   if (flush_req.empty()) {
     return;
   }
@@ -2628,6 +2630,9 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
     assert(flush_req.size() == 1);
     ColumnFamilyData* cfd = flush_req[0].first;
     assert(cfd);
+    // Since we don't support disabling flush on running db, there should never
+    // be any flush request to be scheduled
+    assert(!cfd->GetLatestMutableCFOptions()->disable_flush);
     // Note: SchedulePendingFlush is always preceded
     // with an imm()->FlushRequested() call. However,
     // we want to make this code snipper more resilient to
@@ -2649,6 +2654,9 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
   } else {
     for (auto& iter : flush_req) {
       ColumnFamilyData* cfd = iter.first;
+      // Since we don't support disabling flush on running db, there should
+      // never be any flush request to be scheduled
+      assert(!cfd->GetLatestMutableCFOptions()->disable_flush);
       cfd->Ref();
       cfd->SetFlushReason(flush_reason);
     }

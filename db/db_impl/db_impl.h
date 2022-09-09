@@ -337,7 +337,6 @@ class DBImpl : public DB {
       ApplyReplicationLogRecordInfo* info) override;
   Status GetPersistedReplicationSequence(std::string* out) override;
   Status GetManifestUpdateSequence(uint64_t* out) override;
-  Status TurnOnFlush() override;
 
   using DB::SetOptions;
   Status SetOptions(
@@ -2169,6 +2168,17 @@ class DBImpl : public DB {
 
   Status IncreaseFullHistoryTsLowImpl(ColumnFamilyData* cfd,
                                       std::string ts_low);
+
+  // Return any column family (not dropped) with flush disabled
+  //
+  // REQUIRES: mutex_ locked
+  ColumnFamilyData* GetAnyCFWithFlushDisabled() const;
+
+  // Return any column family in cfds with flush disabled
+  //
+  // REQUIRES: mutex_ locked
+  ColumnFamilyData* GetAnyCFWithFlushDisabled(
+      const autovector<ColumnFamilyData*>& cfds) const;
 
   // Lock over the persistent DB state.  Non-nullptr iff successfully acquired.
   FileLock* db_lock_;
