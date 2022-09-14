@@ -1105,7 +1105,8 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
     write_thread_.EnterUnbatched(&w, &mutex_);
 
     switch (record.type) {
-      case ReplicationLogRecord::kMemtableWrite: {
+      case ReplicationLogRecord::kMemtableWrite:
+      case ReplicationLogRecord::kMemtableWriteWithMetadata: {
         mutex_.Unlock();
         WriteBatch batch;
         s = WriteBatchInternal::SetContents(&batch, std::move(record.contents));

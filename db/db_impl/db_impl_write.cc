@@ -479,7 +479,8 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
       ReplicationLogRecord rlr;
       rlr.contents = WriteBatchInternal::StealContents(&wb);
-      rlr.type = ReplicationLogRecord::kMemtableWrite;
+      rlr.metadata = write_options.repl_record_metadata;
+      rlr.type = ReplicationLogRecord::kMemtableWriteWithMetadata;
       immutable_db_options_.replication_log_listener->OnReplicationLogRecord(
           std::move(rlr));
     }

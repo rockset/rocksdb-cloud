@@ -439,9 +439,18 @@ class CompactionService : public Customizable {
 };
 
 struct ReplicationLogRecord {
-  enum Type { kMemtableWrite, kMemtableSwitch, kManifestWrite };
+  enum Type {
+    kMemtableWrite,
+    kMemtableSwitch,
+    kManifestWrite,
+    kMemtableWriteWithMetadata
+  };
   Type type;
+  // serialized content from rocksdb for each record type
   std::string contents;
+  // metadata is only used with `kMemtableWriteWithMetadata`, which represents
+  // the metadata passed from `WriteOptions` by the caller of `Write` API
+  std::string metadata;
 };
 
 // ReplicationLogListener provides a mechanism to implement physical replication
@@ -1802,6 +1811,10 @@ struct WriteOptions {
   // Default: `Env::IO_TOTAL`
   Env::IOPriority rate_limiter_priority;
 
+  // metadata to be replicated with `replication_log_listener`
+  // See comments for `ReplicationLogListener`
+  std::string repl_record_metadata;
+
   WriteOptions()
       : sync(false),
         disableWAL(false),
@@ -1810,7 +1823,8 @@ struct WriteOptions {
         low_pri(false),
         pre_release_callback(nullptr),
         memtable_insert_hint_per_batch(false),
-        rate_limiter_priority(Env::IO_TOTAL) {}
+        rate_limiter_priority(Env::IO_TOTAL),
+        repl_record_metadata("") {}
 };
 
 // Options that control flush operations
