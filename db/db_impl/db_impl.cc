@@ -1091,6 +1091,53 @@ Status DeserializeReplicationLogManifestWrite(Slice* src,
   }
   return Status::OK();
 }
+
+std::string DescribeVersionEdit(const VersionEdit& e, ColumnFamilyData* cfd) {
+  std::ostringstream oss;
+  if (cfd && !e.IsColumnFamilyDrop()) {
+    oss << "[" << cfd->GetName() << "] ";
+  }
+  oss << "Applying manifest update seq=" << e.GetManifestUpdateSequence()
+      << ": ";
+
+  if (!e.GetNewFiles().empty()) {
+    oss << "New files: [";
+    bool first = true;
+    for (auto& f : e.GetNewFiles()) {
+      if (!first) {
+        oss << ", ";
+      }
+      first = false;
+      oss << f.second.fd.GetNumber();
+    }
+    oss << "] ";
+  }
+  if (!e.GetDeletedFiles().empty()) {
+    oss << "Deleted files: [";
+    bool first = true;
+    for (auto& f : e.GetDeletedFiles()) {
+      if (!first) {
+        oss << ", ";
+      }
+      first = false;
+      oss << f.second;
+    }
+    oss << "] ";
+  }
+  if (e.IsColumnFamilyAdd()) {
+    oss << "Creating column family " << e.GetAddColumnFamily() << " ";
+  } else if (e.IsColumnFamilyDrop() && cfd) {
+    oss << "Dropping column family " << cfd->GetName() << " " ;
+  }
+
+  uint64_t r;
+  if (e.GetNextFileNumber(&r)) {
+    oss << "NextFileNumber: " << r << " ";
+  }
+
+  return oss.str();
+}
+
 }  // namespace
 
 Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
@@ -1137,8 +1184,15 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         WriteContext write_context;
         MemTableSwitchRecord mem_switch_record;
         Slice contents_slice(record.contents);
-        DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
-
+        s = DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
+        if (!s.ok()) {
+          return s;
+        }
+        ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                       "Applying memtable switch with next log file: %" PRIu64
+                       ", replication sequence (hex): %s",
+                       mem_switch_record.next_log_num,
+                       Slice(replication_sequence).ToString(true).c_str());
         autovector<ColumnFamilyData*> cfds;
         SelectColumnFamiliesForAtomicFlush(&cfds);
 
@@ -1162,7 +1216,10 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
       case ReplicationLogRecord::kManifestWrite: {
         Slice src = record.contents;
         autovector<VersionEdit> edits;
-        DeserializeReplicationLogManifestWrite(&src, &edits);
+        s = DeserializeReplicationLogManifestWrite(&src, &edits);
+        if (!s.ok()) {
+            break;
+        }
 
         auto mutable_options =
             default_cf_handle_->cfd()->GetLatestMutableCFOptions();
@@ -1211,6 +1268,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             cfd = versions_->GetColumnFamilySet()->GetColumnFamily(
                 e.GetColumnFamily());
           }
+
           if (e.IsColumnFamilyAdd()) {
             single_column_family_mode_ = false;
             added_column_families.push_back(e.GetColumnFamily());
@@ -1219,11 +1277,15 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           } else if (e.IsColumnFamilyDrop()) {
             info->deleted_column_families.push_back(e.GetColumnFamily());
           }
+
           cfds.push_back(cfd);
           mutable_cf_options_list.push_back(mutable_options);
           autovector<VersionEdit*> el;
           el.push_back(&e);
           edit_lists.push_back(std::move(el));
+
+          ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s",
+                         DescribeVersionEdit(e, cfd).c_str());
         }
         s = versions_->LogAndApply(cfds, mutable_cf_options_list, edit_lists,
                                    &mutex_, directories_.GetDbDir(),
@@ -1266,6 +1328,51 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
 
   job_context.Clean();
 
+  return s;
+}
+
+Status DBImpl::GetReplicationRecordDebugString(
+    const ReplicationLogRecord& record, std::string* out) const {
+  std::ostringstream oss;
+
+  auto s = Status::OK();
+  switch (record.type) {
+    case ReplicationLogRecord::kMemtableWrite: {
+      if (record.contents.size() < 8) {
+        s = Status::Corruption("corrupted kMemtableWrite record");
+        break;
+      }
+      auto seq = DecodeFixed64(record.contents.data());
+      oss << "kMemtableWrite " << record.contents.size() << " bytes, sequence=" << seq;
+      break;
+    }
+    case ReplicationLogRecord::kMemtableSwitch: {
+      WriteContext write_context;
+      MemTableSwitchRecord mem_switch_record;
+      Slice contents_slice(record.contents);
+      s = DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
+      if (!s.ok()) {
+        return s;
+      }
+      oss << "kMemtableSwitch next_log_num=" << mem_switch_record.next_log_num;
+      break;
+    }
+    case ReplicationLogRecord::kManifestWrite: {
+      Slice src = record.contents;
+      autovector<VersionEdit> edits;
+      s = DeserializeReplicationLogManifestWrite(&src, &edits);
+      if (!s.ok()) {
+        return s;
+      }
+      oss << "kManifestWrite with " << edits.size() << " updates:\n";
+      for (auto& e : edits) {
+        oss << e.DebugString(true);
+      }
+      break;
+    }
+  }
+
+  *out = oss.str();
   return s;
 }
 
