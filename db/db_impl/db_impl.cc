@@ -1164,16 +1164,18 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           oss << "Gap in sequence numbers, expected="
               << versions_->LastSequence() + 1
               << " got=" << WriteBatchInternal::Sequence(&batch);
-          return Status::Corruption(oss.str());
+          s = Status::Corruption(oss.str());
         }
 
-        SequenceNumber next_seq;
-        s = WriteBatchInternal::InsertInto(
-            &batch, column_family_memtables_.get(), &flush_scheduler_,
-            &trim_history_scheduler_,
-            true /* ignore_missing_column_families_ */, 0 /* log_number */,
-            this, false /* concurrent_memtable_writes */, &next_seq,
-            nullptr /* has_valid_writes */, seq_per_batch_, batch_per_txn_);
+        SequenceNumber next_seq{0};
+        if (s.ok()) {
+          s = WriteBatchInternal::InsertInto(
+              &batch, column_family_memtables_.get(), &flush_scheduler_,
+              &trim_history_scheduler_,
+              true /* ignore_missing_column_families_ */, 0 /* log_number */,
+              this, false /* concurrent_memtable_writes */, &next_seq,
+              nullptr /* has_valid_writes */, seq_per_batch_, batch_per_txn_);
+        }
         if (s.ok()) {
           versions_->SetLastSequence(next_seq - 1);
         }
@@ -1186,7 +1188,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         Slice contents_slice(record.contents);
         s = DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
         if (!s.ok()) {
-          return s;
+          break;
         }
         ROCKS_LOG_INFO(immutable_db_options_.info_log,
                        "Applying memtable switch with next log file: %" PRIu64
@@ -1214,9 +1216,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         break;
       }
       case ReplicationLogRecord::kManifestWrite: {
-        Slice src = record.contents;
+        Slice contents_slice(record.contents);
         autovector<VersionEdit> edits;
-        s = DeserializeReplicationLogManifestWrite(&src, &edits);
+        s = DeserializeReplicationLogManifestWrite(&contents_slice, &edits);
         if (!s.ok()) {
             break;
         }
@@ -1235,8 +1237,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         uint64_t latest_applied_update_sequence = 0;
         for (auto& e : edits) {
           if (!e.HasManifestUpdateSequence()) {
-            return Status::InvalidArgument(
+            s = Status::InvalidArgument(
                 "Manifest write doesn't have a ManifestUpdateSequence");
+            break;
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
@@ -1249,7 +1252,8 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             oss << "Gap in ManifestUpdateSequence, expected="
                 << current_update_sequence
                 << " got=" << e.GetManifestUpdateSequence();
-            return Status::Corruption(oss.str());
+            s = Status::Corruption(oss.str());
+            break;
           }
 
           if (e.HasLogNumber()) {
@@ -1268,7 +1272,6 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             cfd = versions_->GetColumnFamilySet()->GetColumnFamily(
                 e.GetColumnFamily());
           }
-
           if (e.IsColumnFamilyAdd()) {
             single_column_family_mode_ = false;
             added_column_families.push_back(e.GetColumnFamily());
@@ -1277,7 +1280,6 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           } else if (e.IsColumnFamilyDrop()) {
             info->deleted_column_families.push_back(e.GetColumnFamily());
           }
-
           cfds.push_back(cfd);
           mutable_cf_options_list.push_back(mutable_options);
           autovector<VersionEdit*> el;
@@ -1287,12 +1289,15 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s",
                          DescribeVersionEdit(e, cfd).c_str());
         }
+        if (!s.ok()) {
+          break;
+        }
         s = versions_->LogAndApply(cfds, mutable_cf_options_list, edit_lists,
                                    &mutex_, directories_.GetDbDir(),
                                    false /* new_descriptor_log */,
                                    cf_options.get());
         if (!s.ok()) {
-          return s;
+          break;
         }
         for (auto cfd : cfds) {
           if (!cfd) {
@@ -1352,27 +1357,29 @@ Status DBImpl::GetReplicationRecordDebugString(
       Slice contents_slice(record.contents);
       s = DeserializeMemTableSwitchRecord(&contents_slice, &mem_switch_record);
       if (!s.ok()) {
-        return s;
+        break;
       }
       oss << "kMemtableSwitch next_log_num=" << mem_switch_record.next_log_num;
       break;
     }
     case ReplicationLogRecord::kManifestWrite: {
-      Slice src = record.contents;
+      Slice contents_slice(record.contents);
       autovector<VersionEdit> edits;
-      s = DeserializeReplicationLogManifestWrite(&src, &edits);
+      s = DeserializeReplicationLogManifestWrite(&contents_slice, &edits);
       if (!s.ok()) {
-        return s;
+        break;
       }
       oss << "kManifestWrite with " << edits.size() << " updates:\n";
-      for (auto& e : edits) {
+      for (const auto& e : edits) {
         oss << e.DebugString(true);
       }
       break;
     }
   }
 
-  *out = oss.str();
+  if (s.ok()) {
+    *out = oss.str();
+  }
   return s;
 }
 
