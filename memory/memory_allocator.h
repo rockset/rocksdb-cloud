@@ -17,7 +17,7 @@ struct CustomDeleter {
     if (allocator) {
       allocator->Deallocate(reinterpret_cast<void*>(ptr));
     } else {
-      delete[] ptr;
+      free(reinterpret_cast<void*>(ptr));
     }
   }
 
@@ -32,7 +32,8 @@ inline CacheAllocationPtr AllocateBlock(size_t size,
     auto block = reinterpret_cast<char*>(allocator->Allocate(size));
     return CacheAllocationPtr(block, allocator);
   }
-  return CacheAllocationPtr(new char[size]);
+  void* block = malloc(size);
+  return CacheAllocationPtr(reinterpret_cast<char*>(block));
 }
 
 }  // namespace ROCKSDB_NAMESPACE
