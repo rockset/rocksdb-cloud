@@ -161,7 +161,9 @@ class CloudEnvImpl : public CloudEnv {
   Status GetDbidList(const std::string& bucket, DbidList* dblist) override;
   Status DeleteDbid(const std::string& bucket,
                     const std::string& dbid) override;
-
+  // delete all local files except `excluded_files`
+  Status DeleteLocalFiles(const std::string& local_dbname,
+        const std::vector<std::string>& excluded_files = {});
   Status SanitizeDirectory(const DBOptions& options,
                            const std::string& clone_name, bool read_only);
   Status LoadCloudManifest(const std::string& local_dbname, bool read_only);

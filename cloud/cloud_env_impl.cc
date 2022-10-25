@@ -1691,53 +1691,8 @@ Status CloudEnvImpl::SanitizeDirectory(const DBOptions& options,
   Log(InfoLogLevel::ERROR_LEVEL, info_log_,
       "[cloud_env_impl] SanitizeDirectory local directory %s cleanup needed",
       local_name.c_str());
-
-  // Delete all local files
-  std::vector<Env::FileAttributes> result;
-  st = env->GetChildrenFileAttributes(local_name, &result);
-  if (!st.ok() && !st.IsNotFound()) {
-    return st;
-  }
-  for (auto file : result) {
-    if (file.name == "." || file.name == "..") {
-      continue;
-    }
-    if (file.name.find("LOG") == 0) {  // keep LOG files
-      continue;
-    }
-    std::string pathname = local_name + "/" + file.name;
-    bool is_dir;
-    st = env->IsDirectory(pathname, &is_dir);
-    if (!st.ok()) {
-      Log(InfoLogLevel::WARN_LEVEL, info_log_,
-          "[cloud_env_impl] IsDirectory fails for %s %s", pathname.c_str(),
-          st.ToString().c_str());
-      // file checking failure ignored
-      continue;
-    }
-
-    // Directories are ignored
-    if (is_dir) {
-      Log(InfoLogLevel::INFO_LEVEL, info_log_,
-          "[cloud_env_impl] Not deleting: %s since it's a directory",
-          pathname.c_str());
-      continue;
-    }
-
-    st = env->DeleteFile(pathname);
-    TEST_SYNC_POINT_CALLBACK("CloudEnvImpl::SanitizeDirectory:AfterDeleteFile", &st);
-    if (!st.ok()) {
-      Log(InfoLogLevel::WARN_LEVEL, info_log_,
-          "[cloud_env_impl] DeleteFile: %s fails %s", pathname.c_str(),
-          st.ToString().c_str());
-      // local file cleaning up failure will be ignored
-      continue;
-    }
-    Log(InfoLogLevel::INFO_LEVEL, info_log_,
-        "[cloud_env_impl] SanitizeDirectory cleaned-up: '%s'",
-        pathname.c_str());
-  }
-
+  
+  st = DeleteLocalFiles(local_name);
   if (!st.ok()) {
     // ignore all the errors generated during cleaning up
     st = Status::OK();
@@ -1806,6 +1761,65 @@ Status CloudEnvImpl::SanitizeDirectory(const DBOptions& options,
   }
 
   return Status::OK();
+}
+
+Status CloudEnvImpl::DeleteLocalFiles(
+    const std::string& local_name,
+    const std::vector<std::string>& excluded_files) {
+  Env* env = GetBaseEnv();
+
+  // Delete all local files
+  std::vector<Env::FileAttributes> result;
+  auto st = env->GetChildrenFileAttributes(local_name, &result);
+  if (!st.ok() && !st.IsNotFound()) {
+    return st;
+  }
+  for (auto file : result) {
+    if (file.name == "." || file.name == "..") {
+      continue;
+    }
+    if (file.name.find("LOG") == 0) {  // keep LOG files
+      continue;
+    }
+    for (auto& excluded_file: excluded_files) {
+      if (file.name == excluded_file) {
+        continue;
+      }
+    }
+
+    std::string pathname = local_name + "/" + file.name;
+    bool is_dir;
+    st = env->IsDirectory(pathname, &is_dir);
+    if (!st.ok()) {
+      Log(InfoLogLevel::WARN_LEVEL, info_log_,
+          "[cloud_env_impl] IsDirectory fails for %s %s", pathname.c_str(),
+          st.ToString().c_str());
+      // file checking failure ignored
+      continue;
+    }
+
+    // Directories are ignored
+    if (is_dir) {
+      Log(InfoLogLevel::INFO_LEVEL, info_log_,
+          "[cloud_env_impl] Not deleting: %s since it's a directory",
+          pathname.c_str());
+      continue;
+    }
+
+    st = env->DeleteFile(pathname);
+    TEST_SYNC_POINT_CALLBACK("CloudEnvImpl::DeleteLocalFiles:AfterDeleteFile", &st);
+    if (!st.ok()) {
+      Log(InfoLogLevel::WARN_LEVEL, info_log_,
+          "[cloud_env_impl] DeleteFile: %s fails %s", pathname.c_str(),
+          st.ToString().c_str());
+      // local file cleaning up failure will be ignored
+      continue;
+    }
+    Log(InfoLogLevel::INFO_LEVEL, info_log_,
+        "[cloud_env_impl] SanitizeDirectory cleaned-up: '%s'",
+        pathname.c_str());
+  }
+  return st;
 }
 
 Status CloudEnvImpl::FetchCloudManifest(const std::string& local_dbname) {
@@ -1999,8 +2013,10 @@ Status CloudEnvImpl::UploadCloudManifest(const std::string& local_dbname,
     return Status::InvalidArgument(
         "Dest bucket has to be specified when uploading CloudManifest files");
   }
-   // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
-  Status st = GetStorageProvider()->PutCloudObject(
+
+  // upload the cloud manifest file corresponds to cookie (i.e.,
+  // CLOUDMANIFEST-cookie)
+  auto st = GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
       MakeCloudManifestFile(GetDestObjectPath(), cookie));
   if (!st.ok()) {

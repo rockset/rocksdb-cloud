@@ -143,6 +143,17 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     if (read_only) {
       return Status::NotFound("CLOUDMANIFEST not found and read_only is set.");
     }
+
+    // If this is a new db, we should force deleting all local files except Cloud Manifest file
+    // Otherwise, open new db might fail
+    auto cloud_manifest_file = MakeCloudManifestFile(
+        "" /* dbname */, cenv->GetCloudEnvOptions().cookie_on_open);
+    st = cenv->DeleteLocalFiles(local_dbname,
+                           {basename(cloud_manifest_file)});
+    if (!st.ok()) {
+      return st;
+    }
+
     st = cenv->CreateCloudManifest(
         local_dbname, cenv->GetCloudEnvOptions().new_cookie_on_open);
     if (!st.ok()) {
@@ -187,6 +198,7 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
   } else {
     st = DB::Open(options, local_dbname, column_families, handles, &db);
   }
+
 
   if (new_db && st.ok() && cenv->HasDestBucket() &&
       cenv->GetCloudEnvOptions().roll_cloud_manifest_on_open) {

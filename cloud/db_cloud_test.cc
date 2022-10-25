@@ -2941,7 +2941,7 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
 
   // inject io errors during cleaning up. The io errors should be ignored
   SyncPoint::GetInstance()->SetCallBack(
-    "CloudEnvImpl::SanitizeDirectory:AfterDeleteFile",
+    "CloudEnvImpl::DeleteLocalFiles:AfterDeleteFile",
     [](void* arg) {
         auto st = reinterpret_cast<Status*>(arg);
         *st = Status::IOError("Inject io error during cleaning up");
@@ -2954,6 +2954,17 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
 
   ASSERT_OK(GetCloudEnvImpl()->SanitizeDirectory(options_, dbname_, false));
   SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// Verify that when db opens without uploading CM, it can still be reopened.
+TEST_F(CloudTest, ReopenDBWithoutUploadingCM) {
+  // if we don't roll cm, cm won't be uploaded to cloud
+  cloud_env_options_.roll_cloud_manifest_on_open = false;
+  OpenDB();
+  CloseDB();
+
+  OpenDB();
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
