@@ -24,78 +24,10 @@
 #include "rocksdb/status.h"
 #include "test_util/sync_point.h"
 #include "util/xxhash.h"
+#include "cloud/cloud_file_deletion_scheduler.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-std::shared_ptr<CloudFileDeletionScheduler> CloudFileDeletionScheduler::Create(
-     const std::shared_ptr<CloudScheduler>& scheduler) {
-  return std::make_shared<CloudFileDeletionScheduler>(PrivateTag(), scheduler);
-}
-
-CloudFileDeletionScheduler::~CloudFileDeletionScheduler() {
-  TEST_SYNC_POINT(
-      "CloudFileDeletionScheduler::~CloudFileDeletionScheduler:"
-      "BeforeCancelJobs");
-  for (auto& e : files_to_delete_) {
-    scheduler_->CancelJob(e.second);
-  }
-  files_to_delete_.clear();
-}
-
-void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filename) {
-  std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
-  auto itr = files_to_delete_.find(filename);
-  if (itr != files_to_delete_.end()) {
-    scheduler_->CancelJob(itr->second);
-    files_to_delete_.erase(itr);
-  }
-}
-
-rocksdb::Status CloudFileDeletionScheduler::ScheduleFileDeletion(const std::string& fname, FileDeletionRunnable runnable) {
-  auto wp = this->weak_from_this();
-  auto doDeleteFile = [wp = std::move(wp), fname, runnable = std::move(runnable)](void*) {
-    TEST_SYNC_POINT(
-        "CloudFileDeletionScheduler::ScheduleFileDeletion:BeforeFileDeletion");
-    auto sp = wp.lock();
-    bool file_deleted = false;
-    if (sp) {
-      file_deleted = true;
-      sp->DoDeleteFile(std::move(fname), std::move(runnable));
-    }
-    TEST_SYNC_POINT_CALLBACK(
-        "CloudFileDeletionScheduler::ScheduleFileDeletion:AfterFileDeletion",
-        &file_deleted);
-    (void) file_deleted;
-  };
-
-  {
-    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
-    if (files_to_delete_.find(fname) != files_to_delete_.end()) {
-      // already in the queue
-      return Status::OK();
-    }
-
-    auto handle = scheduler_->ScheduleJob(file_deletion_delay_,
-                                          std::move(doDeleteFile), nullptr);
-    files_to_delete_.emplace(fname, std::move(handle));
-  }
-  return Status::OK();
-}
-
-void CloudFileDeletionScheduler::DoDeleteFile(const std::string& fname,
-                                              FileDeletionRunnable runnable) {
-  {
-    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
-    auto itr = files_to_delete_.find(fname);
-    if (itr == files_to_delete_.end()) {
-      // File was removed from files_to_delete_, do not delete!
-      return;
-    }
-    files_to_delete_.erase(itr);
-  }
-
-  runnable();
-}
 
 CloudEnvImpl::CloudEnvImpl(const CloudEnvOptions& opts, Env* base,
                            const std::shared_ptr<Logger>& l)
@@ -831,6 +763,10 @@ Status CloudEnvImpl::DeleteFile(const std::string& logical_fname) {
 
 void CloudEnvImpl::RemoveFileFromDeletionQueue(const std::string& filename) {
   cloud_file_deletion_scheduler_->UnscheduleFileDeletion(filename);
+}
+
+void CloudEnvImpl::TEST_SetFileDeletionDelay(std::chrono::seconds delay) {
+  cloud_file_deletion_scheduler_->TEST_SetFileDeletionDelay(delay);
 }
 
 Status CloudEnvImpl::CopyLocalFileToDest(const std::string& local_name,

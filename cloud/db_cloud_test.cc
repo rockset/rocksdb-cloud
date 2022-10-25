@@ -12,6 +12,7 @@
 #include <cinttypes>
 
 #include "cloud/cloud_env_impl.h"
+#include "cloud/cloud_file_deletion_scheduler.h"
 #include "cloud/cloud_scheduler.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
