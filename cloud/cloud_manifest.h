@@ -8,8 +8,35 @@
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "port/port_posix.h"
+#include "util/random.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+class CloudEpoch {
+  public:
+    explicit CloudEpoch(std::string val)
+      :val_(std::move(val)) {}
+    virtual ~CloudEpoch() {}
+    // whether this epoch can happen right after `prevEpoch`
+    bool CanHappenAfter(const std::string& prevEpoch) const {
+      return this->DoCanHappenAfter(prevEpoch);
+    }
+    const std::string& GetValue() const {
+      return val_;
+    }
+  protected:
+    virtual bool DoCanHappenAfter(const std::string& prevEpoch) const = 0;
+    std::string val_;
+};
+
+class RandomUniqueEpoch: public CloudEpoch {
+  public:
+   RandomUniqueEpoch(std::string val) : CloudEpoch(std::move(val)) {}
+  protected:
+    bool DoCanHappenAfter(const std::string& /*prevEpoch*/) const {
+      return true;
+    }
+};
 
 
 // Cloud manifest holds the information about mapping between original file
@@ -47,7 +74,7 @@ class CloudManifest {
 
   // Add an epoch that starts with startFileNumber and is identified by epochId.
   // GetEpoch(startFileNumber) == epochId
-  void AddEpoch(uint64_t startFileNumber, std::string epochId);
+  [[nodiscard]] bool AddEpoch(uint64_t startFileNumber, const std::shared_ptr<CloudEpoch>& epoch);
 
   std::string GetEpoch(uint64_t fileNumber);
 
@@ -58,7 +85,8 @@ class CloudManifest {
   CloudManifest(std::vector<std::pair<uint64_t, std::string>> pastEpochs,
                 std::string currentEpoch)
       : pastEpochs_(std::move(pastEpochs)),
-        currentEpoch_(std::move(currentEpoch)) {}
+        currentEpoch_(std::move(currentEpoch)),
+        epochSet_({currentEpoch_}) {}
 
   mutable port::RWMutex mutex_;
 
@@ -67,6 +95,8 @@ class CloudManifest {
   // (exclusive) of an epoch
   std::vector<std::pair<uint64_t, std::string>> pastEpochs_;
   std::string currentEpoch_;
+  // all the epochs in the past (including current epoch)
+  std::unordered_set<std::string> epochSet_;
 
   static constexpr uint32_t kCurrentFormatVersion = 1;
 };

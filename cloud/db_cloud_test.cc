@@ -1,5 +1,6 @@
 // Copyright (c) 2017 Rockset
 
+#include "cloud/cloud_manifest.h"
 #ifndef ROCKSDB_LITE
 
 #ifdef USE_AWS
@@ -37,6 +38,48 @@
 #endif
 
 namespace ROCKSDB_NAMESPACE {
+
+using std::shared_ptr;
+using std::make_shared;
+class AutoIncrEpoch: public CloudEpoch {
+public:
+  AutoIncrEpoch(std::string val)
+    :CloudEpoch(std::move(val)) {}
+protected:
+  bool DoHappenAfter(const std::string& prevEpoch) const {
+    auto prevSeq = SplitEpoch(prevEpoch).first;
+    auto seq = SplitEpoch(val_).first;
+    if (prevSeq == 0 || seq == 0) return true;
+    return prevSeq < seq;
+  }
+
+private:
+ std::pair<uint64_t /* seq num */, std::string /* random string*/> SplitEpoch(
+     const std::string& epoch) const {
+   auto pos = epoch.rfind(':');
+   if (pos == std::string::npos) {
+     return {0, epoch};
+    } else {
+      return {std::stoull(epoch.substr(0, pos)), epoch.substr(pos,+1)};
+    }
+  }
+};
+
+class AutoIncrEpochGenerator {
+public:
+  shared_ptr<AutoIncrEpoch> Next() {
+    ++seq_;
+    return make_shared<AutoIncrEpoch>(std::to_string(seq_) + ":" + "epoch" +
+                                      std::to_string(randomSuffix_));
+  }
+  void reset() {
+    seq_ = 0;
+    randomSuffix_++;
+  }
+private:
+  uint64_t seq_{0};
+  uint64_t randomSuffix_{0};
+};
 
 class CloudTest : public testing::Test {
  public:
@@ -349,14 +392,21 @@ class CloudTest : public testing::Test {
     return static_cast<DBImpl*>(db_->GetBaseDB());
   }
 
-  void SwitchToNewCookie(std::string new_cookie) {
+  Status SwitchToNewCookie(const shared_ptr<CloudEpoch>& new_cookie) {
     CloudManifestDelta delta{
       db_->GetNextFileNumber(),
       new_cookie
     };
-    ASSERT_OK(aenv_->RollNewCookie(dbname_, new_cookie, delta));
-    ASSERT_OK(aenv_->ApplyCloudManifestDelta(delta));
+    auto st = aenv_->RollNewCookie(dbname_, new_cookie->GetValue(), delta);
+    if (!st.ok()) {
+      return st;
+    }
+    st = aenv_->ApplyCloudManifestDelta(delta);
+    if (!st.ok()) {
+      return st;
+    }
     db_->NewManifestOnNextUpdate();
+    return st;
   }
 
  protected:
@@ -2050,7 +2100,8 @@ TEST_F(CloudTest, LiveFilesConsistentAfterApplyCloudManifestDeltaTest) {
 
   std::string new_cookie = "2";
   std::string new_epoch = "dca7f3e19212c4b3";
-  auto delta = CloudManifestDelta{GetDBImpl()->GetNextFileNumber(), new_epoch};
+  auto delta = CloudManifestDelta{GetDBImpl()->GetNextFileNumber(),
+                                  std::make_shared<RandomUniqueEpoch>(new_epoch)};
   ASSERT_OK(GetCloudEnvImpl()->RollNewCookie(dbname_, new_cookie, delta));
   ASSERT_OK(GetCloudEnvImpl()->ApplyCloudManifestDelta(delta));
 
@@ -2077,7 +2128,9 @@ TEST_F(CloudTest, WriteAfterUpdateCloudManifestArePersistedInNewEpoch) {
   std::string new_cookie = "2";
   std::string new_epoch = "dca7f3e19212c4b3";
 
-  auto delta = CloudManifestDelta{GetDBImpl()->GetNextFileNumber(), new_epoch};
+  auto delta =
+      CloudManifestDelta{GetDBImpl()->GetNextFileNumber(),
+                         std::make_shared<RandomUniqueEpoch>(new_epoch)};
   ASSERT_OK(GetCloudEnvImpl()->RollNewCookie(dbname_, new_cookie, delta));
   ASSERT_OK(GetCloudEnvImpl()->ApplyCloudManifestDelta(delta));
   GetDBImpl()->NewManifestOnNextUpdate();
@@ -2146,7 +2199,8 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
 
   ASSERT_NOK(GetCloudEnvImpl()->RollNewCookie(
       dbname_, new_cookie,
-      CloudManifestDelta{GetDBImpl()->GetNextFileNumber(), new_epoch}));
+      CloudManifestDelta{GetDBImpl()->GetNextFileNumber(),
+                         std::make_shared<RandomUniqueEpoch>(new_epoch)}));
 
   CloseDB();
 
@@ -2165,7 +2219,9 @@ TEST_F(CloudTest, CMSwitchCrashInMiddleTest) {
   SyncPoint::GetInstance()->EnableProcessing();
   OpenDB();
 
-  auto delta = CloudManifestDelta{GetDBImpl()->GetNextFileNumber(), new_epoch};
+  auto delta =
+      CloudManifestDelta{GetDBImpl()->GetNextFileNumber(),
+                         std::make_shared<RandomUniqueEpoch>(new_epoch)};
   ASSERT_NOK(GetCloudEnvImpl()->RollNewCookie(dbname_, new_cookie, delta));
 
   ASSERT_NOK(GetCloudEnvImpl()->GetStorageProvider()->ExistsCloudObject(
@@ -2467,7 +2523,7 @@ TEST_F(CloudTest, DisableInvisibleFileDeletionOnOpenTest) {
       MakeCloudManifestFile(dbname_, cloud_env_options_.cookie_on_open);
   auto cookie1_sst_filepath = dbname_ + pathsep + cookie1_sst_files[0];
 
-  SwitchToNewCookie(cookie2);
+  ASSERT_OK(SwitchToNewCookie(make_shared<RandomUniqueEpoch>(cookie2)));
 
   // generate sst file with cookie2
   ASSERT_OK(db_->Put({}, "k2", "v2"));
@@ -2535,7 +2591,7 @@ TEST_F(CloudTest, DisableObsoleteFileDeletionOnOpenTest) {
   WriteOptions wo;
   wo.disableWAL = true;
   OpenDB();
-  SwitchToNewCookie("");
+  ASSERT_OK(SwitchToNewCookie(make_shared<RandomUniqueEpoch>("")));
   db_->DisableFileDeletions();
 
   std::vector<LiveFileMetaData> files;
@@ -3147,15 +3203,46 @@ TEST_F(CloudTest,
 }
 
 TEST_F(CloudTest, UniqueCurrentEpochAcrossDBRestart) {
-  constexpr int kNumRestarts = 10;
+  constexpr int kNumRestarts = 3;
   std::unordered_set<std::string> epochs;
   for (int i = 0; i < kNumRestarts; i++) {
     OpenDB();
     auto [it, inserted] = epochs.emplace(
         GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch());
-    EXPECT_FALSE(inserted);
+    EXPECT_TRUE(inserted);
     CloseDB();
   }
+}
+
+TEST_F(CloudTest, ApplyCMDeltaWithOldEpoch) {
+  AutoIncrEpochGenerator epochGen;
+  OpenDB();
+  ASSERT_OK(db_->Put({}, "k1", "v1"));
+  ASSERT_OK(db_->Flush({}));
+  auto e1 = epochGen.Next();
+  EXPECT_OK(SwitchToNewCookie(e1));
+  ASSERT_OK(db_->Put({}, "k2", "v2"));
+  ASSERT_OK(db_->Flush({}));
+  auto e2 = epochGen.Next();
+  EXPECT_OK(SwitchToNewCookie(e2));
+  EXPECT_TRUE(SwitchToNewCookie(e1).IsIncomplete());
+  std::string v;
+
+  ASSERT_OK(db_->Get({}, "k1", &v));
+  EXPECT_EQ(v, "v1");
+  ASSERT_OK(db_->Get({}, "k2", &v));
+  EXPECT_EQ(v, "v2");
+
+  EXPECT_OK(SwitchToNewCookie(make_shared<RandomUniqueEpoch>("")));
+
+  ASSERT_OK(db_->Get({}, "k1", &v));
+  EXPECT_EQ(v, "v1");
+  ASSERT_OK(db_->Get({}, "k2", &v));
+  EXPECT_EQ(v, "v2");
+
+  EXPECT_OK(SwitchToNewCookie(make_shared<RandomUniqueEpoch>("")));
+
+  CloseDB();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

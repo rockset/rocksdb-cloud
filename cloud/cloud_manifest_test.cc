@@ -9,6 +9,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+using std::make_shared;
 class CloudManifestTest : public testing::Test {
  public:
   CloudManifestTest() {
@@ -32,9 +33,9 @@ TEST_F(CloudManifestTest, BasicTest) {
   {
     std::unique_ptr<CloudManifest> manifest;
     ASSERT_OK(CloudManifest::CreateForEmptyDatabase("firstEpoch", &manifest));
-    manifest->AddEpoch(10, "secondEpoch");
-    manifest->AddEpoch(10, "thirdEpoch");
-    manifest->AddEpoch(40, "fourthEpoch");
+    EXPECT_TRUE(manifest->AddEpoch(10, make_shared<RandomUniqueEpoch>("secondEpoch")));
+    EXPECT_TRUE(manifest->AddEpoch(10, make_shared<RandomUniqueEpoch>("thirdEpoch")));
+    EXPECT_TRUE(manifest->AddEpoch(40, make_shared<RandomUniqueEpoch>("fourthEpoch")));
 
     for (int iter = 0; iter < 2; ++iter) {
       ASSERT_EQ(manifest->GetEpoch(0), "firstEpoch");
@@ -68,9 +69,13 @@ TEST_F(CloudManifestTest, BasicTest) {
 TEST_F(CloudManifestTest, IdempotencyTest) {
   std::unique_ptr<CloudManifest> manifest;
   ASSERT_OK(CloudManifest::CreateForEmptyDatabase("epoch1", &manifest));
-  manifest->AddEpoch(10, "epoch2");
-}
 
+  EXPECT_FALSE(manifest->AddEpoch(1, make_shared<RandomUniqueEpoch>("epoch1")));
+  EXPECT_TRUE(manifest->AddEpoch(2, make_shared<RandomUniqueEpoch>("epoch2")));
+  EXPECT_FALSE(manifest->AddEpoch(2, make_shared<RandomUniqueEpoch>("epoch2")));
+  EXPECT_FALSE(manifest->AddEpoch(3, make_shared<RandomUniqueEpoch>("epoch1")));
+  EXPECT_TRUE(manifest->AddEpoch(3, make_shared<RandomUniqueEpoch>("epoch3")));
+}
 }  //  namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {

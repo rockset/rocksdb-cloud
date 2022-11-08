@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "cloud/cloud_manifest.h"
 #include "rocksdb/configurable.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/env.h"
@@ -480,7 +481,11 @@ typedef std::map<std::string, std::string> DbidList;
 // MANIFEST-epoch file
 struct CloudManifestDelta {
   uint64_t file_num; // next file number for new epoch
-  std::string epoch; // epoch for the new manifest file
+  std::shared_ptr<CloudEpoch> epoch; // epoch for the new manifest file
+
+  std::string ToDebugString() const {
+    return std::to_string(file_num) + "," + epoch->GetValue();
+  }
 };
 
 

@@ -175,13 +175,22 @@ Status CloudManifest::WriteToLog(std::unique_ptr<WritableFileWriter> log) {
   return writer.file()->Sync(true);
 }
 
-void CloudManifest::AddEpoch(uint64_t startFileNumber, std::string epochId) {
+bool CloudManifest::AddEpoch(uint64_t startFileNumber, const std::shared_ptr<CloudEpoch>& epoch) {
   WriteLock lck(&mutex_);
+  auto it = epochSet_.find(epoch->GetValue());
+  if (it != epochSet_.end()) {
+    return false;
+  }
+
+  assert(epoch->CanHappenAfter(currentEpoch_));
+  // if new epoch, the file number should be GE than previous epoch
   assert(pastEpochs_.empty() || pastEpochs_.back().first <= startFileNumber);
   if (pastEpochs_.empty() || pastEpochs_.back().first < startFileNumber) {
       pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
-      currentEpoch_ = std::move(epochId);
   }  // Else current epoch hasn't written any files, I can just ignore it
+  currentEpoch_ = epoch->GetValue();
+  epochSet_.insert(currentEpoch_);
+  return true;
 }
 
 std::string CloudManifest::GetEpoch(uint64_t fileNumber) {

@@ -1947,7 +1947,8 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   // To make sure `RollNewEpoch` is backwards compatible, we don't change
   // the cookie when applying CM delta
   auto newCookie = cloud_env_options.new_cookie_on_open;
-  auto cloudManifestDelta = CloudManifestDelta{maxFileNumber, newEpoch};
+  auto cloudManifestDelta = CloudManifestDelta{
+      maxFileNumber, std::make_shared<RandomUniqueEpoch>(newEpoch)};
 
   st = RollNewCookie(local_dbname, newCookie, cloudManifestDelta);
   if (st.ok()) {
@@ -1997,7 +1998,10 @@ size_t CloudEnvImpl::TEST_NumScheduledJobs() const {
 };
 
 Status CloudEnvImpl::ApplyCloudManifestDelta(const CloudManifestDelta& delta) {
-  cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
+  if (!cloud_manifest_->AddEpoch(delta.file_num, delta.epoch)) {
+    return Status::Incomplete("Apply cloud manifest delta with used epoch: " +
+                              delta.ToDebugString());
+  }
   return Status::OK();
 }
 
@@ -2011,7 +2015,7 @@ Status CloudEnvImpl::RollNewCookie(const std::string& local_dbname,
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
       "MANIFEST-%s, new cookie: %s",
-      delta.file_num, old_epoch.c_str(), delta.epoch.c_str(),
+      delta.file_num, old_epoch.c_str(), delta.epoch->GetValue().c_str(),
       cookie.c_str());
   // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
   // We have to move our old manifest to the new filename.
@@ -2019,7 +2023,7 @@ Status CloudEnvImpl::RollNewCookie(const std::string& local_dbname,
   // after (before writing CLOUDMANIFEST), we'd corrupt our database. The old
   // MANIFEST file will be cleaned up in DeleteInvisibleFiles().
   st = CopyFile(fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
-                ManifestFileWithEpoch(local_dbname, delta.epoch), 0 /* size */,
+                ManifestFileWithEpoch(local_dbname, delta.epoch->GetValue()), 0 /* size */,
                 true /* use_fsync */, nullptr /* io_tracer */,
                 Temperature::kUnknown);
   if (!st.ok()) {
@@ -2028,7 +2032,9 @@ Status CloudEnvImpl::RollNewCookie(const std::string& local_dbname,
 
   // TODO(igor): Compact cloud manifest by looking at live files in the database
   // and removing epochs that don't contain any live files.
-  newCloudManifest->AddEpoch(delta.file_num, delta.epoch);
+  if (!newCloudManifest->AddEpoch(delta.file_num, delta.epoch)) {
+    return Status::Incomplete("Rolling to an old epoch: " + delta.ToDebugString());
+  }
 
   TEST_SYNC_POINT_CALLBACK(
       "CloudEnvImpl::RollNewCookie:AfterManifestCopy", &st);
@@ -2047,7 +2053,7 @@ Status CloudEnvImpl::RollNewCookie(const std::string& local_dbname,
     // We have to upload the manifest file first. Otherwise, if the process
     // crashed in the middle, we'll endup with a CLOUDMANIFEST file pointing to
     // MANIFEST file which doesn't exist in s3
-    st = UploadManifest(local_dbname, delta.epoch);
+    st = UploadManifest(local_dbname, delta.epoch->GetValue());
     if (!st.ok()) {
       return st;
     }
