@@ -481,6 +481,10 @@ typedef std::map<std::string, std::string> DbidList;
 struct CloudManifestDelta {
   uint64_t file_num; // next file number for new epoch
   std::string epoch; // epoch for the new manifest file
+
+  std::string ToString() const {
+    return std::to_string(file_num) + "," + epoch;
+  }
 };
 
 
@@ -616,6 +620,9 @@ class CloudEnv : public Env {
 
   // Apply cloud manifest delta to in-memory cloud manifest. Does not change the
   // on-disk state.
+  //
+  // This function is idempotent. If delta has already been applied, then
+  // nothing will be changed
   virtual Status ApplyCloudManifestDelta(const CloudManifestDelta& delta) = 0;
 
   // This function does several things:
@@ -624,6 +631,9 @@ class CloudEnv : public Env {
   // * Copies MANIFEST-epoch into MANIFEST-delta.epoch
   // * Uploads both CLOUDMANIFEST-cookie and MANIFEST-delta.epoch into cloud
   // storage (if dest bucket is given).
+  //
+  // This function is idempotent. If delta has already been applied, then
+  // nothing will be changed
   virtual Status RollNewCookie(const std::string& local_dbname,
                                const std::string& cookie,
                                const CloudManifestDelta& delta) const = 0;

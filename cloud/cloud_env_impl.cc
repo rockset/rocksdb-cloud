@@ -1997,7 +1997,13 @@ size_t CloudEnvImpl::TEST_NumScheduledJobs() const {
 };
 
 Status CloudEnvImpl::ApplyCloudManifestDelta(const CloudManifestDelta& delta) {
-  cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
+  if (!cloud_manifest_->AddEpoch(delta.file_num, delta.epoch)) {
+    Log(InfoLogLevel::INFO_LEVEL, info_log_,
+        "[CloudEnvImpl::ApplyCloudManifestDelta] delta: %s has already been "
+        "applied to current cloud "
+        "manifest",
+        delta.ToString().c_str());
+  }
   return Status::OK();
 }
 
@@ -2028,7 +2034,14 @@ Status CloudEnvImpl::RollNewCookie(const std::string& local_dbname,
 
   // TODO(igor): Compact cloud manifest by looking at live files in the database
   // and removing epochs that don't contain any live files.
-  newCloudManifest->AddEpoch(delta.file_num, delta.epoch);
+  if (!newCloudManifest->AddEpoch(delta.file_num, delta.epoch)) {
+    Log(InfoLogLevel::INFO_LEVEL, info_log_,
+        "[CloudEnvImpl::RollNewCookie] delta: %s has already been applied to "
+        "current cloud "
+        "manifest",
+        delta.ToString().c_str());
+    return st;
+  }
 
   TEST_SYNC_POINT_CALLBACK(
       "CloudEnvImpl::RollNewCookie:AfterManifestCopy", &st);
