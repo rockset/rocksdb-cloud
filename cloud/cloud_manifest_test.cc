@@ -65,6 +65,12 @@ TEST_F(CloudManifestTest, BasicTest) {
   }
 }
 
+TEST_F(CloudManifestTest, IdempotencyTest) {
+  std::unique_ptr<CloudManifest> manifest;
+  ASSERT_OK(CloudManifest::CreateForEmptyDatabase("epoch1", &manifest));
+  manifest->AddEpoch(10, "epoch2");
+}
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {

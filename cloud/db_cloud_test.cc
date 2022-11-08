@@ -3146,6 +3146,18 @@ TEST_F(CloudTest,
   SyncPoint::GetInstance()->DisableProcessing();
 }
 
+TEST_F(CloudTest, UniqueCurrentEpochAcrossDBRestart) {
+  constexpr int kNumRestarts = 10;
+  std::unordered_set<std::string> epochs;
+  for (int i = 0; i < kNumRestarts; i++) {
+    OpenDB();
+    auto [it, inserted] = epochs.emplace(
+        GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch());
+    EXPECT_FALSE(inserted);
+    CloseDB();
+  }
+}
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb

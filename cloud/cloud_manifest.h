@@ -47,7 +47,6 @@ class CloudManifest {
 
   // Add an epoch that starts with startFileNumber and is identified by epochId.
   // GetEpoch(startFileNumber) == epochId
-  // Invalid call if finalized_ is false
   void AddEpoch(uint64_t startFileNumber, std::string epochId);
 
   std::string GetEpoch(uint64_t fileNumber);

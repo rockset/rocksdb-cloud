@@ -180,8 +180,8 @@ void CloudManifest::AddEpoch(uint64_t startFileNumber, std::string epochId) {
   assert(pastEpochs_.empty() || pastEpochs_.back().first <= startFileNumber);
   if (pastEpochs_.empty() || pastEpochs_.back().first < startFileNumber) {
       pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
+      currentEpoch_ = std::move(epochId);
   }  // Else current epoch hasn't written any files, I can just ignore it
-  currentEpoch_ = std::move(epochId);
 }
 
 std::string CloudManifest::GetEpoch(uint64_t fileNumber) {
