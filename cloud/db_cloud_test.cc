@@ -3171,9 +3171,9 @@ TEST_F(CloudTest, UniqueCurrentEpochAcrossDBRestart) {
 
 TEST_F(CloudTest, ReplayCloudManifestDeltaTest) {
   OpenDB();
-  constexpr int numKeys = 3;
+  constexpr int kNumKeys = 3;
   std::vector<CloudManifestDelta> deltas;
-  for (int i = 0; i < numKeys; i++) {
+  for (int i = 0; i < kNumKeys; i++) {
     ASSERT_OK(db_->Put({}, "k" + std::to_string(i), "v" + std::to_string(i)));
     ASSERT_OK(db_->Flush({}));
 
@@ -3194,13 +3194,13 @@ TEST_F(CloudTest, ReplayCloudManifestDeltaTest) {
 
   // replay the deltas one more time
   for (const auto& delta : deltas) {
-    EXPECT_OK(ApplyCMDeltaToCloudDB(delta));
+    EXPECT_TRUE(ApplyCMDeltaToCloudDB(delta).IsInvalidArgument());
     // current epoch not changed
     EXPECT_EQ(GetCloudEnvImpl()->GetCloudManifest()->GetCurrentEpoch(),
               currentEpoch);
   }
 
-  for (int i = 0; i < numKeys; i++) {
+  for (int i = 0; i < kNumKeys; i++) {
     std::string v;
     ASSERT_OK(db_->Get({}, "k" + std::to_string(i), &v));
     EXPECT_EQ(v, "v" + std::to_string(i));
