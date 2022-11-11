@@ -618,7 +618,7 @@ class CloudEnv : public Env {
   // on-disk state.
   //
   // Return InvalidArgument status if the delta has been applied in current
-  // CloudManfiest
+  // CloudManifest
   virtual Status ApplyCloudManifestDelta(const CloudManifestDelta& delta) = 0;
 
   // This function does several things:
@@ -629,7 +629,7 @@ class CloudEnv : public Env {
   // storage (if dest bucket is given).
   //
   // Return InvalidArgument status if the delta has been applied in current
-  // CloudManfiest
+  // CloudManifest
   virtual Status RollNewCookie(const std::string& local_dbname,
                                const std::string& cookie,
                                const CloudManifestDelta& delta) const = 0;
