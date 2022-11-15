@@ -1952,7 +1952,9 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
   st = RollNewCookie(local_dbname, newCookie, cloudManifestDelta);
   if (st.ok()) {
     // Apply the delta to our in-memory state, too.
-    st = ApplyCloudManifestDelta(cloudManifestDelta);
+    bool updateApplied = true;
+    st = ApplyCloudManifestDelta(cloudManifestDelta, &updateApplied);
+    assert(updateApplied);
   }
 
   return st;
@@ -1996,10 +1998,9 @@ size_t CloudEnvImpl::TEST_NumScheduledJobs() const {
   return scheduler_->TEST_NumScheduledJobs();
 };
 
-Status CloudEnvImpl::ApplyCloudManifestDelta(const CloudManifestDelta& delta) {
-  if (!cloud_manifest_->AddEpoch(delta.file_num, delta.epoch)) {
-    return Status::InvalidArgument("Delta already applied in cloud manifest");
-  }
+Status CloudEnvImpl::ApplyCloudManifestDelta(const CloudManifestDelta& delta,
+                                             bool* delta_applied) {
+  *delta_applied = cloud_manifest_->AddEpoch(delta.file_num, delta.epoch);
   return Status::OK();
 }
 
