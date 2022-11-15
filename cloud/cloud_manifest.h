@@ -53,6 +53,10 @@ class CloudManifest {
   // - we can't add an epoch which equals current epoch and starts at
   // same file number
   //
+  // Besides that, we also maintain the invariant that there won't be more than
+  // one epoch with same file number (even if we call `AddEpoch` with same file
+  // number but different epochs multiple times)
+  //
   // Idempotency is based on the assumption that epochs added don't diverge from
   // existing epochs(same sequence of <filenumm, epoch> is re-added)
   bool AddEpoch(uint64_t startFileNumber, std::string epochId);
@@ -61,6 +65,7 @@ class CloudManifest {
 
   std::string GetCurrentEpoch();
   std::string ToString(bool include_past_epochs=false);
+  std::vector<std::pair<uint64_t, std::string>> TEST_GetPastEpochs() const;
 
  private:
   CloudManifest(std::vector<std::pair<uint64_t, std::string>> pastEpochs,

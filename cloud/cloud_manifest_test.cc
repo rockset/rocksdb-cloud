@@ -73,8 +73,22 @@ TEST_F(CloudManifestTest, IdempotencyTest) {
   EXPECT_FALSE(manifest->AddEpoch(9, "epoch3"));
   // same file number, same epoch
   EXPECT_FALSE(manifest->AddEpoch(10, "epoch2"));
+
+  EXPECT_EQ(manifest->GetCurrentEpoch(), "epoch2");
+
   // same file number, different epoch
   EXPECT_TRUE(manifest->AddEpoch(10, "epoch3"));
+
+  EXPECT_EQ(manifest->GetCurrentEpoch(), "epoch3");
+
+  EXPECT_TRUE(manifest->AddEpoch(11, "epoch4"));
+
+  EXPECT_EQ(manifest->GetCurrentEpoch(), "epoch4");
+
+  // NOTE: for file number: 10, there is only one epoch
+  std::vector<std::pair<uint64_t, std::string>> pastEpochs{{10, "epoch1"},
+                                                           {11, "epoch3"}};
+  EXPECT_EQ(manifest->TEST_GetPastEpochs(), pastEpochs);
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

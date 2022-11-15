@@ -194,7 +194,10 @@ bool CloudManifest::AddEpoch(uint64_t startFileNumber, std::string epochId) {
     }
     nxtEpoch = &(rit->second);
   }
-  pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
+
+  if (pastEpochs_.empty() || pastEpochs_.back().first < startFileNumber) {
+    pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
+  }
   currentEpoch_ = std::move(epochId);
   return true;
 }
@@ -216,6 +219,12 @@ std::string CloudManifest::GetEpoch(uint64_t fileNumber) {
 std::string CloudManifest::GetCurrentEpoch() {
   ReadLock lck(&mutex_);
   return currentEpoch_;
+}
+
+std::vector<std::pair<uint64_t, std::string>>
+CloudManifest::TEST_GetPastEpochs() const {
+  ReadLock lck(&mutex_);
+  return pastEpochs_;
 }
 
 std::string CloudManifest::ToString(bool include_past_epochs) {

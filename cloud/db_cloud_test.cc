@@ -47,6 +47,7 @@ class CloudTest : public testing::Test {
 
     base_env_ = Env::Default();
     dbname_ = test::TmpDir() + "/db_cloud-" + test_id_;
+    fprintf(stderr, "dbname: %s\n", dbname_.c_str());
     clone_dir_ = test::TmpDir() + "/ctest-" + test_id_;
     cloud_env_options_.TEST_Initialize("dbcloudtest.", dbname_);
     cloud_env_options_.resync_manifest_on_open = true;
