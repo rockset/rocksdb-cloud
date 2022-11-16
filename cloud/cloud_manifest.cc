@@ -106,7 +106,9 @@ Status CloudManifest::LoadFromLog(std::unique_ptr<SequentialFileReader> log,
     return Status::Corruption(
         "Records read does not match the number of expected records");
   }
-  if (!std::is_sorted(pastEpochs.begin(), pastEpochs.end())) {
+  // is sorted by filenum in ascending order
+  if (!std::is_sorted(pastEpochs.begin(), pastEpochs.end(),
+                      [](auto& e1, auto& e2) { return e1.first < e2.first; })) {
     return Status::Corruption("Cloud manifest records not sorted");
   }
   manifest->reset(
@@ -136,7 +138,7 @@ std::unique_ptr<CloudManifest> CloudManifest::clone() const {
 // varint)
 //
 // Header comes first, and is followed with number_of_records Records.
-Status CloudManifest::WriteToLog(std::unique_ptr<WritableFileWriter> log) {
+Status CloudManifest::WriteToLog(std::unique_ptr<WritableFileWriter> log) const {
   Status status;
   log::Writer writer(std::move(log), 0, false);
   std::string record;
@@ -195,9 +197,7 @@ bool CloudManifest::AddEpoch(uint64_t startFileNumber, std::string epochId) {
     nxtEpoch = &(rit->second);
   }
 
-  if (pastEpochs_.empty() || pastEpochs_.back().first < startFileNumber) {
-    pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
-  }
+  pastEpochs_.emplace_back(startFileNumber, std::move(currentEpoch_));
   currentEpoch_ = std::move(epochId);
   return true;
 }

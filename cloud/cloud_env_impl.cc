@@ -1954,6 +1954,9 @@ Status CloudEnvImpl::RollNewEpoch(const std::string& local_dbname) {
     // Apply the delta to our in-memory state, too.
     bool updateApplied = true;
     st = ApplyCloudManifestDelta(cloudManifestDelta, &updateApplied);
+    // We know for sure that <maxFileNumber, newEpoch> hasn't been applied
+    // in current CLOUDMANFIEST yet since maxFileNumber >= filenumber in
+    // CLOUDMANIFEST and epoch is generated randomly
     assert(updateApplied);
   }
 

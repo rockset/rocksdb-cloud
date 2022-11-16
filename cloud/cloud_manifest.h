@@ -43,7 +43,7 @@ class CloudManifest {
 
   std::unique_ptr<CloudManifest> clone() const;
 
-  Status WriteToLog(std::unique_ptr<WritableFileWriter> log);
+  Status WriteToLog(std::unique_ptr<WritableFileWriter> log) const;
 
   // Add an epoch that starts with startFileNumber and is identified by epochId.
   // GetEpoch(startFileNumber) == epochId
@@ -52,10 +52,6 @@ class CloudManifest {
   // - we can't add an epoch with smaller `startFileNumber`
   // - we can't add an epoch which equals current epoch and starts at
   // same file number
-  //
-  // Besides that, we also maintain the invariant that there won't be more than
-  // one epoch with same file number (even if we call `AddEpoch` with same file
-  // number but different epochs multiple times)
   //
   // Idempotency is based on the assumption that epochs added don't diverge from
   // existing epochs(same sequence of <filenumm, epoch> is re-added)
