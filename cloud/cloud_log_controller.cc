@@ -333,9 +333,9 @@ Status CloudLogControllerImpl::GetFileModificationTime(const std::string& fname,
   return st;
 }
 
-Status CloudLogControllerImpl::NewSequentialFile(
-    const std::string& fname, std::unique_ptr<SequentialFile>* result,
-    const EnvOptions& options) {
+IOStatus CloudLogControllerImpl::NewSequentialFile(
+    const std::string& fname, const FileOptions& file_opts,
+    std::unique_ptr<FSSequentialFile>* result, IODebugContext* dbg) {
   // read from Kinesis
   Status st = status();
   if (st.ok()) {
@@ -344,17 +344,19 @@ Status CloudLogControllerImpl::NewSequentialFile(
     Log(InfoLogLevel::DEBUG_LEVEL, env_->GetLogger(),
         "[%s] NewSequentialFile logfile %s %s", Name(), pathname.c_str(), "ok");
 
-    auto lambda = [this, pathname, &result, options]() -> Status {
-      return env_->GetBaseEnv()->NewSequentialFile(pathname, result, options);
+    auto lambda = [this, pathname = std::move(pathname), &result, &file_opts,
+                   dbg]() -> Status {
+      return env_->GetBaseEnv()->GetFileSystem()->NewSequentialFile(
+          pathname, file_opts, result, dbg);
     };
     st = Retry(lambda);
   }
-  return st;
+  return status_to_io_status(std::move(st));
 }
 
-Status CloudLogControllerImpl::NewRandomAccessFile(
-    const std::string& fname, std::unique_ptr<RandomAccessFile>* result,
-    const EnvOptions& options) {
+IOStatus CloudLogControllerImpl::NewRandomAccessFile(
+    const std::string& fname, const FileOptions& file_opts,
+    std::unique_ptr<FSRandomAccessFile>* result, IODebugContext* dbg) {
   Status st = status();
   if (st.ok()) {
     // map  pathname to cache dir
@@ -363,12 +365,14 @@ Status CloudLogControllerImpl::NewRandomAccessFile(
         "[%s] NewRandomAccessFile logfile %s %s", Name(), pathname.c_str(),
         "ok");
 
-    auto lambda = [this, pathname, &result, options]() -> Status {
-      return env_->GetBaseEnv()->NewRandomAccessFile(pathname, result, options);
+    auto lambda = [this, pathname = std::move(pathname), &result, &file_opts,
+                   dbg]() -> Status {
+      return env_->GetBaseEnv()->GetFileSystem()->NewRandomAccessFile(
+          pathname, file_opts, result, dbg);
     };
     st = Retry(lambda);
   }
-  return st;
+  return status_to_io_status(std::move(st));
 }
 
 Status CloudLogControllerImpl::FileExists(const std::string& fname) {

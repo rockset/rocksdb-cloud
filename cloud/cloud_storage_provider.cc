@@ -237,13 +237,15 @@ Status CloudStorageWritableFileImpl::Sync() {
   return stat;
 }
 
-// Copied from Legacy{Sequential,RandomAccess}FileWrapper in rocksdb/env.env.cc  
+// Copied from Legacy{Sequential,RandomAccess}FileWrapper in rocksdb/env.env.cc
 class CloudStorageReadableFileWrapper : public FSCloudStorageReadableFile {
   public:
    explicit CloudStorageReadableFileWrapper(std::unique_ptr<CloudStorageReadableFile>&& _target)
     : target_(std::move(_target)) {}
 
-    virtual const char* Name() const { return "CloudStorageReadableFileWrapper"; }
+   const char* Name() const override {
+    return "CloudStorageReadableFileWrapper";
+   }
 
   // From FSSequentialFile
   //
@@ -335,7 +337,9 @@ class CloudStorageWritableFileWrapper : public FSCloudStorageWritableFile {
     explicit CloudStorageWritableFileWrapper(std::unique_ptr<CloudStorageWritableFile>&& _target)
       : target_(std::move(_target)) {}
 
-    virtual const char* Name() const { return "CloudStorageWritableFileWrapper"; }
+    const char* Name() const override {
+      return "CloudStorageWritableFileWrapper";
+    }
 
   IOStatus status() override {
     return status_to_io_status(target_->status());

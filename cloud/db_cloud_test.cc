@@ -913,14 +913,16 @@ TEST_F(CloudTest, CopyToFromS3) {
 
     // reopen file for reading. It should be refetched from cloud storage.
     {
-      std::unique_ptr<RandomAccessFile> reader;
-      ASSERT_OK(aenv_->NewRandomAccessFile(fname, &reader, EnvOptions()));
+      std::unique_ptr<FSRandomAccessFile> reader;
+      ASSERT_OK(aenv_->GetFileSystem()->NewRandomAccessFile(
+          fname, FileOptions(), &reader, nullptr /* dbg */));
 
       uint64_t offset = 0;
       for (int i = 0; i < 10; i++) {
         Slice result;
         char* scratch = &buffer[0];
-        ASSERT_OK(reader->Read(offset, sizeof(buffer), &result, scratch));
+        ASSERT_OK(reader->Read(offset, sizeof(buffer), IOOptions(), &result,
+                               scratch, nullptr /* dbg */));
         ASSERT_EQ(result.size(), sizeof(buffer));
         offset += sizeof(buffer);
       }

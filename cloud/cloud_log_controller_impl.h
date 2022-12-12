@@ -49,12 +49,14 @@ class CloudLogControllerImpl : public CloudLogController {
                                        std::string* out);
   Status GetFileModificationTime(const std::string& fname,
                                  uint64_t* time) override;
-  Status NewSequentialFile(const std::string& fname,
-                           std::unique_ptr<SequentialFile>* result,
-                           const EnvOptions& options) override;
-  Status NewRandomAccessFile(const std::string& fname,
-                             std::unique_ptr<RandomAccessFile>* result,
-                             const EnvOptions& options) override;
+  IOStatus NewSequentialFile(const std::string& fname,
+                             const FileOptions& file_opts,
+                             std::unique_ptr<FSSequentialFile>* result,
+                             IODebugContext* dbg) override;
+  IOStatus NewRandomAccessFile(const std::string& fname,
+                               const FileOptions& file_opts,
+                               std::unique_ptr<FSRandomAccessFile>* result,
+                               IODebugContext* dbg) override;
   Status FileExists(const std::string& fname) override;
   Status GetFileSize(const std::string& logical_fname, uint64_t* size) override;
   Status PrepareOptions(const ConfigOptions& options) override;

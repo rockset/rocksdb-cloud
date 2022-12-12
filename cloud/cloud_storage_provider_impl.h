@@ -8,7 +8,6 @@
 #include <optional>
 
 namespace ROCKSDB_NAMESPACE {
-
 class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
  public:
   CloudStorageReadableFileImpl(Logger* info_log, const std::string& bucket,

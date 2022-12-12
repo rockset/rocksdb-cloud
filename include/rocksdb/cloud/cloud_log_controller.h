@@ -6,6 +6,7 @@
 
 #include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
+#include "rocksdb/file_system.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -83,14 +84,16 @@ class CloudLogController : public Configurable {
 
   virtual Status StartTailingStream(const std::string& topic) = 0;
   virtual void StopTailingStream() = 0;
+  // TODO(estalgo): Make all of the below return IOStatus?
   virtual Status GetFileModificationTime(const std::string& fname,
                                          uint64_t* time) = 0;
-  virtual Status NewSequentialFile(const std::string& fname,
-                                   std::unique_ptr<SequentialFile>* result,
-                                   const EnvOptions& options) = 0;
-  virtual Status NewRandomAccessFile(const std::string& fname,
-                                     std::unique_ptr<RandomAccessFile>* result,
-                                     const EnvOptions& options) = 0;
+  virtual IOStatus NewSequentialFile(const std::string& fname,
+                                     const FileOptions& file_opts,
+                                     std::unique_ptr<FSSequentialFile>* result,
+                                     IODebugContext* dbg) = 0;
+  virtual IOStatus NewRandomAccessFile(
+      const std::string& fname, const FileOptions& file_opts,
+      std::unique_ptr<FSRandomAccessFile>* result, IODebugContext* dbg) = 0;
   virtual Status FileExists(const std::string& fname) = 0;
   virtual Status GetFileSize(const std::string& logical_fname,
                              uint64_t* size) = 0;

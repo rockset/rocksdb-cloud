@@ -8,6 +8,7 @@
 #include "rocksdb/configurable.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/env.h"
+#include "rocksdb/file_system.h"
 #include "rocksdb/status.h"
 
 namespace Aws {
@@ -460,7 +461,7 @@ class CloudEnvOptions {
   Status Serialize(const ConfigOptions& config_options, std::string* result) const;
 
   // Is the sst file cache configured?
-  bool hasSstFileCache() {
+  bool hasSstFileCache() const {
     return sst_file_cache != nullptr && sst_file_cache->GetCapacity() > 0;
   }
 };
@@ -494,6 +495,11 @@ class CloudEnv : public Env {
 
   CloudEnv(const CloudEnvOptions& options, Env* base,
            const std::shared_ptr<Logger>& logger);
+
+  CloudEnv(const CloudEnvOptions& options,
+           const std::shared_ptr<FileSystem>& fs, Env* base,
+           const std::shared_ptr<Logger>& logger);
+
  public:
   mutable std::shared_ptr<Logger> info_log_;  // informational messages
 
@@ -516,10 +522,10 @@ class CloudEnv : public Env {
   virtual Status MigrateFromPureRocksDB(const std::string& local_dbname) = 0;
 
   // Reads a file from the cloud
-  virtual Status NewSequentialFileCloud(const std::string& bucket_prefix,
-                                        const std::string& fname,
-                                        std::unique_ptr<SequentialFile>* result,
-                                        const EnvOptions& options) = 0;
+  virtual IOStatus NewSequentialFileCloud(
+      const std::string& bucket_prefix, const std::string& fname,
+      const FileOptions& file_opts, std::unique_ptr<FSSequentialFile>* result,
+      IODebugContext* dbg) = 0;
 
   // Saves and retrieves the dbid->dirname mapping in cloud storage
   virtual Status SaveDbid(const std::string& bucket_name,

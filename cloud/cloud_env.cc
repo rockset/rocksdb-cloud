@@ -19,9 +19,9 @@
 #include "options/options_helper.h"
 #include "port/likely.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
-#include "rocksdb/cloud/fs_cloud.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
+#include "rocksdb/file_system.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"
@@ -356,8 +356,14 @@ Status CloudEnvOptions::Serialize(const ConfigOptions& config_options, std::stri
 
 CloudEnv::CloudEnv(const CloudEnvOptions& options, Env* base,
                    const std::shared_ptr<Logger>& logger)
-  : Env(CloudFileSystem::CreateCloudFileSystem(options, Env::GetLegacyFileSystemWrapper(this), this, logger)),
-    cloud_env_options(options), base_env_(base), info_log_(logger) {
+    : cloud_env_options(options), base_env_(base), info_log_(logger) {
+  RegisterOptions(&cloud_env_options, &cloud_env_option_type_info);
+}
+
+CloudEnv::CloudEnv(const CloudEnvOptions& options,
+                   const std::shared_ptr<FileSystem>& fs, Env* base,
+                   const std::shared_ptr<Logger>& logger)
+    : Env(fs), cloud_env_options(options), base_env_(base), info_log_(logger) {
   RegisterOptions(&cloud_env_options, &cloud_env_option_type_info);
 }
 

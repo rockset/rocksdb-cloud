@@ -138,6 +138,8 @@ class CloudStorageProvider : public Configurable {
   // Updates result with the file handle.
   //
   // DEPRECATED
+  //
+  // TODO(estalgo) Consider removing this for v1
   virtual Status NewCloudWritableFile(
       const std::string& local_path, const std::string& bucket_name,
       const std::string& object_path,

@@ -118,11 +118,12 @@ class MockCloudEnv : public CloudEnv {
     return notsup_;
   }
 
-  virtual Status NewSequentialFileCloud(
+  virtual IOStatus NewSequentialFileCloud(
       const std::string& /*bucket_name*/, const std::string& /*fname*/,
-      std::unique_ptr<SequentialFile>* /*result*/,
-      const EnvOptions& /*options*/) override {
-    return notsup_;
+      const FileOptions& /*file_opts*/,
+      std::unique_ptr<FSSequentialFile>* /*result*/,
+      IODebugContext* /*dbg*/) override {
+    return status_to_io_status(Status(notsup_));
   }
   virtual Status SaveDbid(const std::string& /*bucket_name*/,
                           const std::string& /*dbid */,

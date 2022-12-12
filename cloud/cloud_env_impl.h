@@ -24,6 +24,7 @@ class CloudFileDeletionScheduler;
 //
 class CloudEnvImpl : public CloudEnv {
   friend class CloudEnv;
+  friend class CloudFileSystem;
 
  public:
   static int RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
@@ -35,14 +36,18 @@ class CloudEnvImpl : public CloudEnv {
   static const char* kClassName() { return kCloud(); }
   virtual const char* Name() const override { return kClassName(); }
 
+  // DEPRECATED
   Status NewSequentialFile(const std::string& fname,
                            std::unique_ptr<SequentialFile>* result,
                            const EnvOptions& options) override;
-  Status NewSequentialFileCloud(const std::string& bucket,
-                                const std::string& fname,
-                                std::unique_ptr<SequentialFile>* result,
-                                const EnvOptions& options) override;
 
+  IOStatus NewSequentialFileCloud(const std::string& bucket,
+                                  const std::string& fname,
+                                  const FileOptions& file_opts,
+                                  std::unique_ptr<FSSequentialFile>* result,
+                                  IODebugContext* dbg) override;
+
+  // DEPRECATED
   Status NewRandomAccessFile(const std::string& fname,
                              std::unique_ptr<RandomAccessFile>* result,
                              const EnvOptions& options) override;
@@ -333,11 +338,6 @@ class CloudEnvImpl : public CloudEnv {
   // Returns the list of cloud objects from the src and dest buckets.
   Status ListCloudObjects(const std::string& path,
                           std::vector<std::string>* result);
-
-  // Returns a CloudStorageReadableFile from the dest or src bucket
-  Status NewCloudReadableFile(const std::string& fname,
-                              std::unique_ptr<CloudStorageReadableFile>* result,
-                              const EnvOptions& options);
 
   // Copy IDENTITY file to cloud storage. Update dbid registry.
   Status SaveIdentityToCloud(const std::string& localfile,

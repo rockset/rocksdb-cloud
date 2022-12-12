@@ -265,9 +265,9 @@ class RemoteCompactionTest : public testing::Test {
       }
 
       // open source file
-      std::unique_ptr<SequentialFile> readable_file;
-      status = local_env->NewSequentialFile(remote_path, &readable_file,
-                                            env_options);
+      std::unique_ptr<FSSequentialFile> readable_file;
+      status = local_env->GetFileSystem()->NewSequentialFile(
+          remote_path, env_options, &readable_file, nullptr /* dbg */);
       if (!status.ok()) {
         return status;
       }
@@ -276,7 +276,8 @@ class RemoteCompactionTest : public testing::Test {
       Slice result;
       char scratch[16 * 1024];
       while (true) {
-        status = readable_file->Read(sizeof(scratch), &result, &scratch[0]);
+        status = readable_file->Read(sizeof(scratch), IOOptions(), &result,
+                                     &scratch[0], nullptr /* dbg */);
         if (!status.ok()) {
           return status;
         }

@@ -615,10 +615,6 @@ class LegacyFileSystemWrapper : public FileSystem {
 };
 }  // end anonymous namespace
 
-std::shared_ptr<FileSystem> Env::GetLegacyFileSystemWrapper(Env* env) {
-  return std::make_shared<LegacyFileSystemWrapper>(env);
-}
-  
 Env::Env() : thread_status_updater_(nullptr) {
   file_system_ = std::make_shared<LegacyFileSystemWrapper>(this);
   system_clock_ = std::make_shared<LegacySystemClock>(this);
@@ -1188,10 +1184,8 @@ const std::shared_ptr<SystemClock>& Env::GetSystemClock() const {
   return system_clock_;
 }
 
-std::unique_ptr<FSSequentialFile> NewLegacySequentialFileWrapper(
-    std::unique_ptr<SequentialFile>& file) {
-  return std::unique_ptr<FSSequentialFile>(
-      new LegacySequentialFileWrapper(std::move(file)));
+std::shared_ptr<FileSystem> NewLegacyFileSystemWrapper(Env* env) {
+  return std::make_shared<LegacyFileSystemWrapper>(env);
 }
 
 namespace {

@@ -6,6 +6,7 @@
 #include <cinttypes>
 
 #include "cloud/cloud_env_wrapper.h"
+#include "cloud/cloud_file_deletion_scheduler.h"
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_manifest.h"
 #include "cloud/cloud_scheduler.h"
@@ -18,20 +19,20 @@
 #include "file/writable_file_writer.h"
 #include "port/likely.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
+#include "rocksdb/cloud/fs_cloud.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "test_util/sync_point.h"
 #include "util/xxhash.h"
-#include "cloud/cloud_file_deletion_scheduler.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-
 CloudEnvImpl::CloudEnvImpl(const CloudEnvOptions& opts, Env* base,
                            const std::shared_ptr<Logger>& l)
-    : CloudEnv(opts, base, l), purger_is_running_(true) {
+    : CloudEnv(opts, CloudFileSystem::CreateCloudFileSystem(this), base, l),
+      purger_is_running_(true) {
   scheduler_ = CloudScheduler::Get();
   cloud_file_deletion_scheduler_ =
       CloudFileDeletionScheduler::Create(scheduler_);
@@ -129,84 +130,24 @@ Status CloudEnvImpl::ListCloudObjects(const std::string& path,
   return st;
 }
 
-Status CloudEnvImpl::NewCloudReadableFile(
-    const std::string& fname, std::unique_ptr<CloudStorageReadableFile>* result,
-    const EnvOptions& options) {
-  Status st = Status::NotFound();
-  if (HasDestBucket()) {  // read from destination
-    st = GetStorageProvider()->NewCloudReadableFile(
-        GetDestBucketName(), destname(fname), result, options);
-    if (st.ok()) {
-      return st;
-    }
-  }
-  if (HasSrcBucket() && !SrcMatchesDest()) {  // read from src bucket
-    st = GetStorageProvider()->NewCloudReadableFile(
-        GetSrcBucketName(), srcname(fname), result, options);
-  }
-  return st;
-}
-
 // open a file for sequential reading
-Status CloudEnvImpl::NewSequentialFile(const std::string& logical_fname,
-                                       std::unique_ptr<SequentialFile>* result,
-                                       const EnvOptions& options) {
-  result->reset();
-
-  auto fname = RemapFilename(logical_fname);
-  auto file_type = GetFileType(fname);
-  bool sstfile = (file_type == RocksDBFileType::kSstFile),
-       manifest = (file_type == RocksDBFileType::kManifestFile),
-       identity = (file_type == RocksDBFileType::kIdentityFile),
-       logfile = (file_type == RocksDBFileType::kLogFile);
-
-  auto st = CheckOption(options);
-  if (!st.ok()) {
-    return st;
-  }
-
-  if (sstfile || manifest || identity) {
-    if (cloud_env_options.keep_local_sst_files || !sstfile) {
-      // We read first from local storage and then from cloud storage.
-      st = base_env_->NewSequentialFile(fname, result, options);
-      if (!st.ok()) {
-        // copy the file to the local storage if keep_local_sst_files is true
-        st = GetCloudObject(fname);
-        if (st.ok()) {
-          // we successfully copied the file, try opening it locally now
-          st = base_env_->NewSequentialFile(fname, result, options);
-        }
-      }
-    } else {
-      std::unique_ptr<CloudStorageReadableFile> file;
-      st = NewCloudReadableFile(fname, &file, options);
-      if (st.ok()) {
-        result->reset(file.release());
-      }
-    }
-    // Do not update the sst_file_cache for sequential read patterns.
-    // These are mostly used by compaction.
-    Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
-        "[%s] NewSequentialFile file %s %s", Name(), fname.c_str(),
-        st.ToString().c_str());
-    return st;
-
-  } else if (logfile && !cloud_env_options.keep_local_log_files) {
-    return cloud_env_options.cloud_log_controller->NewSequentialFile(
-        fname, result, options);
-  }
-
-  // This is neither a sst file or a log file. Read from default env.
-  return base_env_->NewSequentialFile(fname, result, options);
+Status CloudEnvImpl::NewSequentialFile(
+    const std::string& logical_fname,
+    std::unique_ptr<SequentialFile>* /* result */,
+    const EnvOptions& /* options */) {
+  return Status::NotSupported(
+      "CloudEnvImpl::NewSequentialFile called for file " + logical_fname +
+      ". CloudFileSystem::NewSequentialFile should have been called instead");
 }
 
 // Ability to read a file directly from cloud storage
-Status CloudEnvImpl::NewSequentialFileCloud(
+IOStatus CloudEnvImpl::NewSequentialFileCloud(
     const std::string& bucket, const std::string& fname,
-    std::unique_ptr<SequentialFile>* result, const EnvOptions& options) {
-  std::unique_ptr<CloudStorageReadableFile> file;
-  Status st =
-      GetStorageProvider()->NewCloudReadableFile(bucket, fname, &file, options);
+    const FileOptions& file_opts, std::unique_ptr<FSSequentialFile>* result,
+    IODebugContext* dbg) {
+  std::unique_ptr<FSCloudStorageReadableFile> file;
+  auto st = GetStorageProvider()->NewFSCloudReadableFile(bucket, fname,
+                                                         file_opts, &file, dbg);
   if (!st.ok()) {
     return st;
   }
@@ -217,109 +158,12 @@ Status CloudEnvImpl::NewSequentialFileCloud(
 
 // open a file for random reading
 Status CloudEnvImpl::NewRandomAccessFile(
-    const std::string& logical_fname, std::unique_ptr<RandomAccessFile>* result,
-    const EnvOptions& options) {
-  result->reset();
-
-  auto fname = RemapFilename(logical_fname);
-  auto file_type = GetFileType(fname);
-  bool sstfile = (file_type == RocksDBFileType::kSstFile),
-       manifest = (file_type == RocksDBFileType::kManifestFile),
-       identity = (file_type == RocksDBFileType::kIdentityFile),
-       logfile = (file_type == RocksDBFileType::kLogFile);
-
-  // Validate options
-  auto st = CheckOption(options);
-  if (!st.ok()) {
-    return st;
-  }
-
-  if (sstfile || manifest || identity) {
-    if (cloud_env_options.keep_local_sst_files ||
-        cloud_env_options.hasSstFileCache() || !sstfile) {
-      // Read from local storage and then from cloud storage.
-      st = base_env_->NewRandomAccessFile(fname, result, options);
-
-      // Found in local storage. Update LRU cache.
-      // There is a loose coupling between the sst_file_cache and the files on
-      // local storage. The sst_file_cache is only used for accounting of sst
-      // files. We do not keep a reference to the LRU cache handle when the sst
-      // file remains open by the db. If the LRU policy causes the file to be
-      // evicted, it will be deleted from local storage, but because the db
-      // already has an open file handle to it, it can continue to occupy local
-      // storage space until the time the db decides to close the sst file.
-      if (sstfile && st.ok()) {
-        FileCacheAccess(fname);
-      }
-
-      if (!st.ok() && !base_env_->FileExists(fname).IsNotFound()) {
-        // if status is not OK, but file does exist locally, something is wrong
-        return st;
-      }
-
-      if (!st.ok()) {
-        // copy the file to the local storage
-        st = GetCloudObject(fname);
-        if (st.ok()) {
-          // we successfully copied the file, try opening it locally now
-          st = base_env_->NewRandomAccessFile(fname, result, options);
-        }
-        // Update the size of our local sst file cache
-        if (st.ok() && sstfile && cloud_env_options.hasSstFileCache()) {
-          uint64_t local_size;
-          Status statx = base_env_->GetFileSize(fname, &local_size);
-          if (statx.ok()) {
-            FileCacheInsert(fname, local_size);
-          }
-        }
-      }
-      // If we are being paranoic, then we validate that our file size is
-      // the same as in cloud storage.
-      if (st.ok() && sstfile && cloud_env_options.validate_filesize) {
-        uint64_t remote_size = 0;
-        uint64_t local_size = 0;
-        Status stax = base_env_->GetFileSize(fname, &local_size);
-        if (!stax.ok()) {
-          return stax;
-        }
-        stax = Status::NotFound();
-        if (HasDestBucket()) {
-          stax = GetCloudObjectSize(fname, &remote_size);
-        }
-        if (stax.IsNotFound() && !HasDestBucket()) {
-          // It is legal for file to not be present in storage provider if
-          // destination bucket is not set.
-        } else if (!stax.ok() || remote_size != local_size) {
-          std::string msg = std::string("[") + Name() + "] HeadObject src " +
-                            fname + " local size " +
-                            std::to_string(local_size) + " cloud size " +
-                            std::to_string(remote_size) + " " + stax.ToString();
-          Log(InfoLogLevel::ERROR_LEVEL, info_log_, "%s", msg.c_str());
-          return Status::IOError(msg);
-        }
-      }
-    } else {
-      // Only execute this code path if files are not cached locally
-      std::unique_ptr<CloudStorageReadableFile> file;
-      st = NewCloudReadableFile(fname, &file, options);
-      if (st.ok()) {
-        result->reset(file.release());
-      }
-    }
-    Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
-        "[%s] NewRandomAccessFile file %s %s", Name(), fname.c_str(),
-        st.ToString().c_str());
-    return st;
-
-  } else if (logfile && !cloud_env_options.keep_local_log_files) {
-    // read from LogController
-    st = cloud_env_options.cloud_log_controller->NewRandomAccessFile(
-        fname, result, options);
-    return st;
-  }
-
-  // This is neither a sst file or a log file. Read from default env.
-  return base_env_->NewRandomAccessFile(fname, result, options);
+    const std::string& logical_fname,
+    std::unique_ptr<RandomAccessFile>* /* result */,
+    const EnvOptions& /* options */) {
+  return Status::NotSupported(
+      "CloudEnvImpl::NewRandomAccessFile called for file " + logical_fname +
+      ". CloudFileSystem::NewRandomAccessFile should have been called instead");
 }
 
 // create a new file for writing
@@ -777,8 +621,6 @@ Status CloudEnvImpl::CopyLocalFileToDest(const std::string& local_name,
 }
 
 Status CloudEnvImpl::DeleteCloudFileFromDest(const std::string& fname) {
-  // TODO(estalgo): Just call cloudfs method
-  
   assert(HasDestBucket());
   auto base = basename(fname);
   auto path = GetDestObjectPath() + pathsep + base;
@@ -2199,7 +2041,6 @@ std::string CloudEnvImpl::GetWALCacheDir() {
 Status CloudEnvImpl::PrepareOptions(const ConfigOptions& options) {
   // If underlying env is not defined, then use PosixEnv
   if (!base_env_) {
-    // TODO(estalgo): Is this still right?
     base_env_ = Env::Default();
   }
   Status status;
@@ -2230,7 +2071,6 @@ Status CloudEnvImpl::PrepareOptions(const ConfigOptions& options) {
     CloudEnvImpl* cloud = this;
     purge_thread_ = std::thread([cloud] { cloud->Purger(); });
   }
-  // TODO(estalgo): Call FS PrepareOptions
   return CloudEnv::PrepareOptions(options);
 }
 
