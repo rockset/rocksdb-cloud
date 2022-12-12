@@ -161,6 +161,8 @@ class Env : public Customizable {
     uint64_t size_bytes;
   };
 
+  static std::shared_ptr<FileSystem> GetLegacyFileSystemWrapper(Env* env);
+  
   Env();
   // Construct an Env with a separate FileSystem and/or SystemClock
   // implementation
@@ -679,7 +681,7 @@ class Env : public Customizable {
  private:
   static const size_t kMaxHostNameLen = 256;
 };
-
+ 
 // The factory function to construct a ThreadStatusUpdater.  Any Env
 // that supports GetThreadList() feature should call this function in its
 // constructor to initialize thread_status_updater_.

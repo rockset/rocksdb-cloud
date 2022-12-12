@@ -14,6 +14,7 @@
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/env.h"
+#include "rocksdb/io_status.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"
@@ -236,6 +237,208 @@ Status CloudStorageWritableFileImpl::Sync() {
   return stat;
 }
 
+// Copied from Legacy{Sequential,RandomAccess}FileWrapper in rocksdb/env.env.cc  
+class CloudStorageReadableFileWrapper : public FSCloudStorageReadableFile {
+  public:
+   explicit CloudStorageReadableFileWrapper(std::unique_ptr<CloudStorageReadableFile>&& _target)
+    : target_(std::move(_target)) {}
+
+    virtual const char* Name() const { return "CloudStorageReadableFileWrapper"; }
+
+  // From FSSequentialFile
+  //
+    IOStatus Read(size_t n, const IOOptions& /*options*/, Slice* result,
+                  char* scratch, IODebugContext* /*dbg*/) override {
+      SequentialFile* t = target_.get();
+      return status_to_io_status(t->Read(n, result, scratch));
+    }
+    IOStatus Skip(uint64_t n) override {
+      return status_to_io_status(target_->Skip(n));
+    }
+    IOStatus PositionedRead(uint64_t offset, size_t n,
+                            const IOOptions& /*options*/, Slice* result,
+                            char* scratch, IODebugContext* /*dbg*/) override {
+      return status_to_io_status(
+                                 target_->PositionedRead(offset, n, result, scratch));
+    }
+
+    // From FSRandomAccessFile
+    //
+    IOStatus Read(uint64_t offset, size_t n, const IOOptions& /*options*/,
+                  Slice* result, char* scratch,
+                  IODebugContext* /*dbg*/) const override {
+      RandomAccessFile* t = target_.get();
+      return status_to_io_status(t->Read(offset, n, result, scratch));
+    }
+
+    IOStatus MultiRead(FSReadRequest* fs_reqs, size_t num_reqs,
+                       const IOOptions& /*options*/,
+                       IODebugContext* /*dbg*/) override {
+      std::vector<ReadRequest> reqs;
+      Status status;
+
+      reqs.reserve(num_reqs);
+      for (size_t i = 0; i < num_reqs; ++i) {
+        ReadRequest req;
+
+        req.offset = fs_reqs[i].offset;
+        req.len = fs_reqs[i].len;
+        req.scratch = fs_reqs[i].scratch;
+        req.status = Status::OK();
+
+        reqs.emplace_back(req);
+      }
+      status = target_->MultiRead(reqs.data(), num_reqs);
+      for (size_t i = 0; i < num_reqs; ++i) {
+        fs_reqs[i].result = reqs[i].result;
+        fs_reqs[i].status = status_to_io_status(std::move(reqs[i].status));
+      }
+      return status_to_io_status(std::move(status));
+    }
+
+    IOStatus Prefetch(uint64_t offset, size_t n, const IOOptions& /*options*/,
+                      IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Prefetch(offset, n));
+    }
+    size_t GetUniqueId(char* id, size_t max_size) const override {
+      return target_->GetUniqueId(id, max_size);
+    }
+    void Hint(AccessPattern pattern) override {
+      target_->Hint((RandomAccessFile::AccessPattern)pattern);
+    }
+
+  // Common to both interfaces. Calls on target_ are ambiguous, so we choose one
+  // of the base classes
+  //
+    bool use_direct_io() const override {
+      RandomAccessFile* t = target_.get();
+      return t->use_direct_io();
+    }
+    size_t GetRequiredBufferAlignment() const override {
+      RandomAccessFile* t = target_.get();
+      return t->GetRequiredBufferAlignment();
+    }
+    IOStatus InvalidateCache(size_t offset, size_t length) override {
+      RandomAccessFile* t = target_.get();
+      return status_to_io_status(t->InvalidateCache(offset, length));
+    }
+
+ private:
+    std::unique_ptr<CloudStorageReadableFile> target_;
+    
+};
+  
+  
+// Copied from LegacyWritableFileWrapper in rocksdb/env.env.cc
+class CloudStorageWritableFileWrapper : public FSCloudStorageWritableFile {
+  public:
+    explicit CloudStorageWritableFileWrapper(std::unique_ptr<CloudStorageWritableFile>&& _target)
+      : target_(std::move(_target)) {}
+
+    virtual const char* Name() const { return "CloudStorageWritableFileWrapper"; }
+
+  IOStatus status() override {
+    return status_to_io_status(target_->status());
+  }
+  
+    IOStatus Append(const Slice& data, const IOOptions& /*options*/,
+                    IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Append(data));
+    }
+    IOStatus Append(const Slice& data, const IOOptions& /*options*/,
+                    const DataVerificationInfo& /*verification_info*/,
+                    IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Append(data));
+    }
+    IOStatus PositionedAppend(const Slice& data, uint64_t offset,
+                              const IOOptions& /*options*/,
+                              IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->PositionedAppend(data, offset));
+    }
+    IOStatus PositionedAppend(const Slice& data, uint64_t offset,
+                              const IOOptions& /*options*/,
+                              const DataVerificationInfo& /*verification_info*/,
+                              IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->PositionedAppend(data, offset));
+    }
+    IOStatus Truncate(uint64_t size, const IOOptions& /*options*/,
+                      IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Truncate(size));
+    }
+    IOStatus Close(const IOOptions& /*options*/,
+                   IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Close());
+    }
+    IOStatus Flush(const IOOptions& /*options*/,
+                   IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Flush());
+    }
+    IOStatus Sync(const IOOptions& /*options*/,
+                  IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Sync());
+    }
+    IOStatus Fsync(const IOOptions& /*options*/,
+                   IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Fsync());
+    }
+    bool IsSyncThreadSafe() const override { return target_->IsSyncThreadSafe(); }
+
+    bool use_direct_io() const override { return target_->use_direct_io(); }
+
+    size_t GetRequiredBufferAlignment() const override {
+      return target_->GetRequiredBufferAlignment();
+    }
+
+    void SetWriteLifeTimeHint(Env::WriteLifeTimeHint hint) override {
+      target_->SetWriteLifeTimeHint(hint);
+    }
+
+    Env::WriteLifeTimeHint GetWriteLifeTimeHint() override {
+      return target_->GetWriteLifeTimeHint();
+    }
+
+    uint64_t GetFileSize(const IOOptions& /*options*/,
+                         IODebugContext* /*dbg*/) override {
+      return target_->GetFileSize();
+    }
+
+    void SetPreallocationBlockSize(size_t size) override {
+      target_->SetPreallocationBlockSize(size);
+    }
+
+    void GetPreallocationStatus(size_t* block_size,
+                                size_t* last_allocated_block) override {
+      target_->GetPreallocationStatus(block_size, last_allocated_block);
+    }
+
+    size_t GetUniqueId(char* id, size_t max_size) const override {
+      return target_->GetUniqueId(id, max_size);
+    }
+
+    IOStatus InvalidateCache(size_t offset, size_t length) override {
+      return status_to_io_status(target_->InvalidateCache(offset, length));
+    }
+
+    IOStatus RangeSync(uint64_t offset, uint64_t nbytes,
+                       const IOOptions& /*options*/,
+                       IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->RangeSync(offset, nbytes));
+    }
+
+    void PrepareWrite(size_t offset, size_t len, const IOOptions& /*options*/,
+                      IODebugContext* /*dbg*/) override {
+      target_->PrepareWrite(offset, len);
+    }
+
+    IOStatus Allocate(uint64_t offset, uint64_t len, const IOOptions& /*options*/,
+                      IODebugContext* /*dbg*/) override {
+      return status_to_io_status(target_->Allocate(offset, len));
+    }
+
+private:
+    std::unique_ptr<CloudStorageWritableFile> target_;
+};
+  
 CloudStorageProvider::~CloudStorageProvider() {}
 
 Status CloudStorageProvider::CreateFromString(
@@ -247,6 +450,35 @@ Status CloudStorageProvider::CreateFromString(
   } else {
     return ObjectRegistry::NewInstance()->NewSharedObject<CloudStorageProvider>(id, provider);
   }
+}
+
+IOStatus CloudStorageProvider::NewFSCloudWritableFile(
+                                                      const std::string& local_path, const std::string& bucket_name,
+                                                      const std::string& object_path, const FileOptions& file_opts,
+                                        std::unique_ptr<FSCloudStorageWritableFile>* result,
+                                        IODebugContext* /*dbg*/) {
+
+  std::unique_ptr<CloudStorageWritableFile> r;
+  auto st = NewCloudWritableFile(local_path, bucket_name, object_path, &r, file_opts);
+  if (st.ok()) {
+    result->reset(new CloudStorageWritableFileWrapper(std::move(r)));
+  }
+
+  return status_to_io_status(std::move(st));
+}
+
+IOStatus CloudStorageProvider::NewFSCloudReadableFile(
+                                                      const std::string& bucket, const std::string& fname, const FileOptions& file_opts,
+                                        std::unique_ptr<FSCloudStorageReadableFile>* result,
+                                        IODebugContext* /*dbg*/) {
+
+  std::unique_ptr<CloudStorageReadableFile> r;
+  auto st = NewCloudReadableFile(bucket, fname, &r, file_opts);
+  if (st.ok()) {
+    result->reset(new CloudStorageReadableFileWrapper(std::move(r)));
+  }
+
+  return status_to_io_status(std::move(st));
 }
 
 Status CloudStorageProviderImpl::PrepareOptions(const ConfigOptions& options) {

@@ -910,6 +910,8 @@ set(SOURCES
         cloud/cloud_storage_provider.cc
         cloud/cloud_file_cache.cc
         cloud/cloud_file_deletion_scheduler.cc
+        cloud/fs_cloud.cc
+        cloud/fs_cloud_impl.cc
         db/db_impl/db_impl_remote_compaction.cc
         db/db_impl/replication_codec.cc
         $<TARGET_OBJECTS:build_version>)

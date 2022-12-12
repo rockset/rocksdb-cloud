@@ -6,6 +6,8 @@
 
 #include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
+#include "rocksdb/file_system.h"
+#include "rocksdb/io_status.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -15,6 +17,7 @@ class Logger;
 struct ColumnFamilyOptions;
 struct DBOptions;
 
+// DEPRECATED
 class CloudStorageReadableFile : virtual public SequentialFile,
                                  virtual public RandomAccessFile {
  public:
@@ -22,6 +25,7 @@ class CloudStorageReadableFile : virtual public SequentialFile,
 };
 
 // Appends to a file in S3.
+// DEPRECATED
 class CloudStorageWritableFile : public WritableFile {
  public:
   virtual ~CloudStorageWritableFile() {}
@@ -29,6 +33,20 @@ class CloudStorageWritableFile : public WritableFile {
 
   virtual const char* Name() const { return "cloud"; }
 };
+
+class FSCloudStorageReadableFile : virtual public FSSequentialFile,
+                                   virtual public FSRandomAccessFile {
+ public:
+    virtual const char* Name() const { return "FSCloudRead"; }
+  };
+
+// Appends to a file in S3.
+class FSCloudStorageWritableFile : public FSWritableFile {
+  public:
+    virtual IOStatus status() = 0;
+
+    virtual const char* Name() const { return "FSCloudWrite"; }
+  };
 
 // Generic information of the object in the cloud. Some information might be
 // vendor-dependent.
@@ -118,6 +136,8 @@ class CloudStorageProvider : public Configurable {
 
   // Create a new cloud file in the appropriate location from the input path.
   // Updates result with the file handle.
+  //
+  // DEPRECATED
   virtual Status NewCloudWritableFile(
       const std::string& local_path, const std::string& bucket_name,
       const std::string& object_path,
@@ -125,9 +145,26 @@ class CloudStorageProvider : public Configurable {
       const EnvOptions& options) = 0;
 
   // Create a new readable cloud file, returning the file handle in result.
+  //
+  // DEPRECATED
   virtual Status NewCloudReadableFile(
       const std::string& bucket, const std::string& fname,
       std::unique_ptr<CloudStorageReadableFile>* result,
       const EnvOptions& options) = 0;
+
+  // Default implementation just calls NewCloudWritableFile
+  virtual IOStatus NewFSCloudWritableFile(
+                                      const std::string& local_path, const std::string& bucket_name,
+                                      const std::string& object_path, const FileOptions& file_opts,
+                                      std::unique_ptr<FSCloudStorageWritableFile>* result,
+                                      IODebugContext* dbg);
+
+  // Default implementation just calls NewCloudReadableFile
+  virtual IOStatus NewFSCloudReadableFile(
+                                          const std::string& bucket, const std::string& fname, const FileOptions& file_opts,
+                                      std::unique_ptr<FSCloudStorageReadableFile>* result,
+                                      IODebugContext* dbg);
+
 };
+
 }  // namespace ROCKSDB_NAMESPACE
