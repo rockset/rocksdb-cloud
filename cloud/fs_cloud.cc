@@ -66,7 +66,7 @@ IOStatus CloudFileSystem::NewRandomAccessFile(
 
       if (!st.ok()) {
         // copy the file to the local storage
-        st = status_to_io_status(cloud_env_->GetCloudObject(fname));
+        st = GetCloudObject(fname, file_opts, dbg);
         if (st.ok()) {
           // we successfully copied the file, try opening it locally now
           st = base_fs->NewRandomAccessFile(fname, file_opts, result, dbg);
@@ -160,7 +160,7 @@ IOStatus CloudFileSystem::NewSequentialFile(
       st = base_fs->NewSequentialFile(fname, file_opts, result, dbg);
       if (!st.ok()) {
         // copy the file to the local storage if keep_local_sst_files is true
-        st = status_to_io_status(cloud_env_->GetCloudObject(fname));
+        st = GetCloudObject(fname, file_opts, dbg);
         if (st.ok()) {
           // we successfully copied the file, try opening it locally now
           st = base_fs->NewSequentialFile(fname, file_opts, result, dbg);
@@ -190,10 +190,26 @@ IOStatus CloudFileSystem::NewSequentialFile(
   return base_fs->NewSequentialFile(fname, file_opts, result, dbg);
 }
 
+IOStatus CloudFileSystem::GetCloudObject(const std::string& fname,
+                                         const FileOptions& /*file_opts*/,
+                                         IODebugContext* /*dbg*/) {
+  auto st = Status::NotFound();
+  if (cloud_env_->HasDestBucket()) {
+    st = cloud_env_->GetStorageProvider()->GetCloudObject(
+        cloud_env_->GetDestBucketName(), cloud_env_->destname(fname), fname);
+  }
+  if (st.IsNotFound() && cloud_env_->HasSrcBucket() &&
+      !cloud_env_->SrcMatchesDest()) {
+    st = cloud_env_->GetStorageProvider()->GetCloudObject(
+        cloud_env_->GetSrcBucketName(), cloud_env_->srcname(fname), fname);
+  }
+  return status_to_io_status(std::move(st));
+}
+
 IOStatus CloudFileSystem::NewFSCloudReadableFile(
     const std::string& fname, const FileOptions& file_opts,
     std::unique_ptr<FSCloudStorageReadableFile>* result, IODebugContext* dbg) {
-  IOStatus st = IOStatus::NotFound();
+  auto st = IOStatus::NotFound();
   if (cloud_env_->HasDestBucket()) {
     // read from destination
     st = cloud_env_->GetStorageProvider()->NewFSCloudReadableFile(

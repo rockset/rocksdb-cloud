@@ -33,6 +33,10 @@ class CloudFileSystem : FileSystemWrapper {
                              IODebugContext* dbg) override;
 
  private:
+  // Gets the cloud object fname from the dest or src bucket
+  IOStatus GetCloudObject(const std::string& fname,
+                          const FileOptions& file_opts, IODebugContext* dbg);
+
   // Returns a FSCloudStorageReadableFile from the dest or src bucket
   IOStatus NewFSCloudReadableFile(
       const std::string& fname, const FileOptions& file_opts,

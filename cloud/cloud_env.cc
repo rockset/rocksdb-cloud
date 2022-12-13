@@ -21,7 +21,6 @@
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
-#include "rocksdb/file_system.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"

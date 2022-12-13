@@ -5,10 +5,10 @@
 #include <memory>
 #include <unordered_map>
 
-#include "rocksdb/configurable.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
-#include "rocksdb/file_system.h"
+#include "rocksdb/io_status.h"
 #include "rocksdb/status.h"
 
 namespace Aws {
@@ -28,6 +28,10 @@ namespace ROCKSDB_NAMESPACE {
 class CloudEnv;
 class CloudLogController;
 class CloudStorageProvider;
+class FileOptions;
+class FileSystem;
+class FSSequentialFile;
+class IODebugContext;
 
 enum CloudType : unsigned char {
   kCloudNone = 0x0,       // Not really a cloud env
@@ -493,9 +497,11 @@ class CloudEnv : public Env {
   CloudEnvOptions cloud_env_options;
   Env* base_env_;  // The underlying env
 
+  // The environment
   CloudEnv(const CloudEnvOptions& options, Env* base,
            const std::shared_ptr<Logger>& logger);
 
+  // Initializes the environment with the given filesystem
   CloudEnv(const CloudEnvOptions& options,
            const std::shared_ptr<FileSystem>& fs, Env* base,
            const std::shared_ptr<Logger>& logger);

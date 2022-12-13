@@ -36,7 +36,7 @@ class CloudEnvImpl : public CloudEnv {
   static const char* kClassName() { return kCloud(); }
   virtual const char* Name() const override { return kClassName(); }
 
-  // DEPRECATED
+  // DEPRECATED, use CloudFileSystem::NewSequentialFile instead.
   Status NewSequentialFile(const std::string& fname,
                            std::unique_ptr<SequentialFile>* result,
                            const EnvOptions& options) override;
@@ -47,7 +47,7 @@ class CloudEnvImpl : public CloudEnv {
                                   std::unique_ptr<FSSequentialFile>* result,
                                   IODebugContext* dbg) override;
 
-  // DEPRECATED
+  // DEPRECATED, use CloudFileSystem::NewRandomAccessFile instead
   Status NewRandomAccessFile(const std::string& fname,
                              std::unique_ptr<RandomAccessFile>* result,
                              const EnvOptions& options) override;
@@ -323,9 +323,6 @@ class CloudEnvImpl : public CloudEnv {
 
   // Checks to see if the input fname exists in the dest or src bucket
   Status ExistsCloudObject(const std::string& fname);
-
-  // Gets the cloud object fname from the dest or src bucket
-  Status GetCloudObject(const std::string& fname);
 
   // Gets the size of the named cloud object from the dest or src bucket
   Status GetCloudObjectSize(const std::string& fname, uint64_t* remote_size);

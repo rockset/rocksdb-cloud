@@ -14,6 +14,7 @@
 #include "cloud/filename.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/convenience.h"
+#include "rocksdb/file_system.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"
 #include "util/coding.h"

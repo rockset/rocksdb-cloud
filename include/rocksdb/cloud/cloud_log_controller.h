@@ -6,12 +6,16 @@
 
 #include "rocksdb/configurable.h"
 #include "rocksdb/env.h"
-#include "rocksdb/file_system.h"
+#include "rocksdb/io_status.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
 class CloudEnv;
 class CloudEnvOptions;
+class FileOptions;
+class FSRandomAccessFile;
+class FSSequentialFile;
+class IODebugContext;
 
 // Creates a new file, appends data to a file or delete an existing file via
 // logging into a cloud stream (such as Kinesis).
@@ -84,7 +88,6 @@ class CloudLogController : public Configurable {
 
   virtual Status StartTailingStream(const std::string& topic) = 0;
   virtual void StopTailingStream() = 0;
-  // TODO(estalgo): Make all of the below return IOStatus?
   virtual Status GetFileModificationTime(const std::string& fname,
                                          uint64_t* time) = 0;
   virtual IOStatus NewSequentialFile(const std::string& fname,

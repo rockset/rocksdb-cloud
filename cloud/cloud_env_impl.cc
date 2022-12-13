@@ -61,19 +61,6 @@ Status CloudEnvImpl::ExistsCloudObject(const std::string& fname) {
   return st;
 }
 
-Status CloudEnvImpl::GetCloudObject(const std::string& fname) {
-  Status st = Status::NotFound();
-  if (HasDestBucket()) {
-    st = GetStorageProvider()->GetCloudObject(GetDestBucketName(),
-                                              destname(fname), fname);
-  }
-  if (st.IsNotFound() && HasSrcBucket() && !SrcMatchesDest()) {
-    st = GetStorageProvider()->GetCloudObject(GetSrcBucketName(),
-                                              srcname(fname), fname);
-  }
-  return st;
-}
-
 Status CloudEnvImpl::GetCloudObjectSize(const std::string& fname,
                                         uint64_t* remote_size) {
   Status st = Status::NotFound();

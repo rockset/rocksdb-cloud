@@ -237,7 +237,7 @@ Status CloudStorageWritableFileImpl::Sync() {
   return stat;
 }
 
-// Copied from Legacy{Sequential,RandomAccess}FileWrapper in rocksdb/env.env.cc
+// Inspired by Legacy{Sequential,RandomAccess}FileWrapper in rocksdb/env.cc
 class CloudStorageReadableFileWrapper : public FSCloudStorageReadableFile {
   public:
    explicit CloudStorageReadableFileWrapper(std::unique_ptr<CloudStorageReadableFile>&& _target)
@@ -247,83 +247,83 @@ class CloudStorageReadableFileWrapper : public FSCloudStorageReadableFile {
     return "CloudStorageReadableFileWrapper";
    }
 
-  // From FSSequentialFile
-  //
-    IOStatus Read(size_t n, const IOOptions& /*options*/, Slice* result,
-                  char* scratch, IODebugContext* /*dbg*/) override {
-      SequentialFile* t = target_.get();
-      return status_to_io_status(t->Read(n, result, scratch));
-    }
-    IOStatus Skip(uint64_t n) override {
-      return status_to_io_status(target_->Skip(n));
-    }
-    IOStatus PositionedRead(uint64_t offset, size_t n,
-                            const IOOptions& /*options*/, Slice* result,
-                            char* scratch, IODebugContext* /*dbg*/) override {
-      return status_to_io_status(
-                                 target_->PositionedRead(offset, n, result, scratch));
-    }
+   // From FSSequentialFile
+   //
+   IOStatus Read(size_t n, const IOOptions& /*options*/, Slice* result,
+                 char* scratch, IODebugContext* /*dbg*/) override {
+    SequentialFile* t = target_.get();
+    return status_to_io_status(t->Read(n, result, scratch));
+   }
+   IOStatus Skip(uint64_t n) override {
+    return status_to_io_status(target_->Skip(n));
+   }
+   IOStatus PositionedRead(uint64_t offset, size_t n,
+                           const IOOptions& /*options*/, Slice* result,
+                           char* scratch, IODebugContext* /*dbg*/) override {
+    return status_to_io_status(
+        target_->PositionedRead(offset, n, result, scratch));
+   }
 
-    // From FSRandomAccessFile
-    //
-    IOStatus Read(uint64_t offset, size_t n, const IOOptions& /*options*/,
-                  Slice* result, char* scratch,
-                  IODebugContext* /*dbg*/) const override {
-      RandomAccessFile* t = target_.get();
-      return status_to_io_status(t->Read(offset, n, result, scratch));
-    }
+   // From FSRandomAccessFile
+   //
+   IOStatus Read(uint64_t offset, size_t n, const IOOptions& /*options*/,
+                 Slice* result, char* scratch,
+                 IODebugContext* /*dbg*/) const override {
+    RandomAccessFile* t = target_.get();
+    return status_to_io_status(t->Read(offset, n, result, scratch));
+   }
 
-    IOStatus MultiRead(FSReadRequest* fs_reqs, size_t num_reqs,
-                       const IOOptions& /*options*/,
-                       IODebugContext* /*dbg*/) override {
-      std::vector<ReadRequest> reqs;
-      Status status;
-
-      reqs.reserve(num_reqs);
-      for (size_t i = 0; i < num_reqs; ++i) {
-        ReadRequest req;
-
-        req.offset = fs_reqs[i].offset;
-        req.len = fs_reqs[i].len;
-        req.scratch = fs_reqs[i].scratch;
-        req.status = Status::OK();
-
-        reqs.emplace_back(req);
-      }
-      status = target_->MultiRead(reqs.data(), num_reqs);
-      for (size_t i = 0; i < num_reqs; ++i) {
-        fs_reqs[i].result = reqs[i].result;
-        fs_reqs[i].status = status_to_io_status(std::move(reqs[i].status));
-      }
-      return status_to_io_status(std::move(status));
-    }
-
-    IOStatus Prefetch(uint64_t offset, size_t n, const IOOptions& /*options*/,
+   IOStatus MultiRead(FSReadRequest* fs_reqs, size_t num_reqs,
+                      const IOOptions& /*options*/,
                       IODebugContext* /*dbg*/) override {
-      return status_to_io_status(target_->Prefetch(offset, n));
-    }
-    size_t GetUniqueId(char* id, size_t max_size) const override {
-      return target_->GetUniqueId(id, max_size);
-    }
-    void Hint(AccessPattern pattern) override {
-      target_->Hint((RandomAccessFile::AccessPattern)pattern);
-    }
+    std::vector<ReadRequest> reqs;
+    Status status;
 
-  // Common to both interfaces. Calls on target_ are ambiguous, so we choose one
-  // of the base classes
-  //
-    bool use_direct_io() const override {
-      RandomAccessFile* t = target_.get();
-      return t->use_direct_io();
+    reqs.reserve(num_reqs);
+    for (size_t i = 0; i < num_reqs; ++i) {
+      ReadRequest req;
+
+      req.offset = fs_reqs[i].offset;
+      req.len = fs_reqs[i].len;
+      req.scratch = fs_reqs[i].scratch;
+      req.status = Status::OK();
+
+      reqs.emplace_back(req);
     }
-    size_t GetRequiredBufferAlignment() const override {
-      RandomAccessFile* t = target_.get();
-      return t->GetRequiredBufferAlignment();
+    status = target_->MultiRead(reqs.data(), num_reqs);
+    for (size_t i = 0; i < num_reqs; ++i) {
+      fs_reqs[i].result = reqs[i].result;
+      fs_reqs[i].status = status_to_io_status(std::move(reqs[i].status));
     }
-    IOStatus InvalidateCache(size_t offset, size_t length) override {
-      RandomAccessFile* t = target_.get();
-      return status_to_io_status(t->InvalidateCache(offset, length));
-    }
+    return status_to_io_status(std::move(status));
+   }
+
+   IOStatus Prefetch(uint64_t offset, size_t n, const IOOptions& /*options*/,
+                     IODebugContext* /*dbg*/) override {
+    return status_to_io_status(target_->Prefetch(offset, n));
+   }
+   size_t GetUniqueId(char* id, size_t max_size) const override {
+    return target_->GetUniqueId(id, max_size);
+   }
+   void Hint(AccessPattern pattern) override {
+    target_->Hint((RandomAccessFile::AccessPattern)pattern);
+   }
+
+   // Common to both interfaces. Calls on target_ are ambiguous, so we choose
+   // one of the base classes
+   //
+   bool use_direct_io() const override {
+    RandomAccessFile* t = target_.get();
+    return t->use_direct_io();
+   }
+   size_t GetRequiredBufferAlignment() const override {
+    RandomAccessFile* t = target_.get();
+    return t->GetRequiredBufferAlignment();
+   }
+   IOStatus InvalidateCache(size_t offset, size_t length) override {
+    RandomAccessFile* t = target_.get();
+    return status_to_io_status(t->InvalidateCache(offset, length));
+   }
 
  private:
     std::unique_ptr<CloudStorageReadableFile> target_;
@@ -343,10 +343,10 @@ Status CloudStorageProvider::CreateFromString(
 }
 
 IOStatus CloudStorageProvider::NewFSCloudReadableFile(
-                                                      const std::string& bucket, const std::string& fname, const FileOptions& file_opts,
-                                        std::unique_ptr<FSCloudStorageReadableFile>* result,
-                                        IODebugContext* /*dbg*/) {
-
+    const std::string& bucket, const std::string& fname,
+    const FileOptions& file_opts,
+    std::unique_ptr<FSCloudStorageReadableFile>* result,
+    IODebugContext* /*dbg*/) {
   std::unique_ptr<CloudStorageReadableFile> r;
   auto st = NewCloudReadableFile(bucket, fname, &r, file_opts);
   if (st.ok()) {

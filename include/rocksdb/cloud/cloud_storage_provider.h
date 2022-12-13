@@ -17,7 +17,7 @@ class Logger;
 struct ColumnFamilyOptions;
 struct DBOptions;
 
-// DEPRECATED, use FSCloudStorageReadableFile
+// DEPRECATED. Use FSCloudStorageReadableFile.
 class CloudStorageReadableFile : virtual public SequentialFile,
                                  virtual public RandomAccessFile {
  public:
@@ -143,10 +143,9 @@ class CloudStorageProvider : public Configurable {
 
   // Default implementation just calls NewCloudReadableFile
   virtual IOStatus NewFSCloudReadableFile(
-                                          const std::string& bucket, const std::string& fname, const FileOptions& file_opts,
-                                      std::unique_ptr<FSCloudStorageReadableFile>* result,
-                                      IODebugContext* dbg);
-
+      const std::string& bucket, const std::string& fname,
+      const FileOptions& file_opts,
+      std::unique_ptr<FSCloudStorageReadableFile>* result, IODebugContext* dbg);
 };
 
 }  // namespace ROCKSDB_NAMESPACE
