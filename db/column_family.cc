@@ -1309,21 +1309,48 @@ void ColumnFamilyData::InstallSuperVersion(
     //
     // At this time, old_superversion has `disable_auto_flush=false` while
     // `new_superversion` has `disable_auto_flush=true`.
-    if (old_superversion->mutable_cf_options.disable_auto_flush &&
-        !mutable_cf_options.disable_auto_flush) {
-      ROCKS_LOG_INFO(
-          ioptions_.info_log,
-          "Enabling auto flush for column family: %s; old super "
-          "version: %" PRIu64
-          ", disable_auto_flush: %d; new super version: %" PRIu64
-          ", disable_auto_flush: %d",
-          GetName().c_str(), old_superversion->version_number,
-          static_cast<int>(
-              old_superversion->mutable_cf_options.disable_auto_flush),
-          new_superversion->version_number,
-          static_cast<int>(
-              new_superversion->mutable_cf_options.disable_auto_flush));
-      mem_->EnableAutoFlush();
+    // if (old_superversion->mutable_cf_options.disable_auto_flush &&
+    //     !mutable_cf_options.disable_auto_flush) {
+    if (old_superversion->mutable_cf_options.disable_auto_flush !=
+        mutable_cf_options.disable_auto_flush) {
+      auto latest_seq = mutable_cf_options_.seq;
+      auto old_mutable_cf_seq = old_superversion->mutable_cf_options.seq;
+      auto new_mutable_cf_seq = mutable_cf_options.seq;
+      assert(old_mutable_cf_seq <= latest_seq &&
+             new_mutable_cf_seq <= latest_seq);
+      if (old_mutable_cf_seq < new_mutable_cf_seq) {
+        ROCKS_LOG_INFO(
+            ioptions_.info_log,
+            "Enabling auto flush for column family: %s; old super "
+            "version: %" PRIu64
+            ", old mutable cf seq %" PRIu64
+            ", disable_auto_flush: %d; new super version: %" PRIu64
+            ", new mutable cf seq %" PRIu64
+            ", disable_auto_flush: %d",
+            GetName().c_str(), old_superversion->version_number,
+            old_mutable_cf_seq,
+            static_cast<int>(
+                old_superversion->mutable_cf_options.disable_auto_flush),
+            new_superversion->version_number,
+            new_mutable_cf_seq,
+            static_cast<int>(mutable_cf_options.disable_auto_flush));
+        if (mutable_cf_options.disable_auto_flush) {
+          mem_->DisableAutoFlush();
+        } else {
+          mem_->EnableAutoFlush();
+        }
+      } else {
+        ROCKS_LOG_INFO(
+            ioptions_.info_log,
+            "Trying to install super version with old mutable cf "
+            "options, disable_auto_flush change is ignored; old mutable cf "
+            "seq: %" PRIu64
+            ", disable_auto_flush: %d; new mutable cf seq: %" PRIu64
+            ", disable_auto_flush: %d",
+            old_mutable_cf_seq,
+            old_superversion->mutable_cf_options.disable_auto_flush,
+            new_mutable_cf_seq, mutable_cf_options.disable_auto_flush);
+      }
     }
 
     if (old_superversion->write_stall_condition !=
@@ -1424,6 +1451,7 @@ Status ColumnFamilyData::SetOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
   ColumnFamilyOptions cf_opts =
       BuildColumnFamilyOptions(initial_cf_options_, mutable_cf_options_);
+  auto seq = mutable_cf_options_.seq;
   ConfigOptions config_opts;
   config_opts.mutable_options_only = true;
   Status s = GetColumnFamilyOptionsFromMap(config_opts, cf_opts, options_map,
@@ -1432,17 +1460,9 @@ Status ColumnFamilyData::SetOptions(
     s = ValidateOptions(db_opts, cf_opts);
   }
   if (s.ok()) {
-    // Disabling flush on running db is not supported due to bunch of checks we
-    // added to catch unexpected flush. But it's easy to support it later if we
-    // want to
-    if (!mutable_cf_options_.disable_auto_flush && cf_opts.disable_auto_flush) {
-      s = Status::NotSupported(
-          "Disabling flush on running db is not supported");
-    }
-  }
-  if (s.ok()) {
     mutable_cf_options_ = MutableCFOptions(cf_opts);
     mutable_cf_options_.RefreshDerivedOptions(ioptions_);
+    mutable_cf_options_.seq = seq + 1;
   }
   return s;
 }

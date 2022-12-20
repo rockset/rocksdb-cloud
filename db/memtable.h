@@ -511,6 +511,7 @@ class MemTable {
 
   // Enable auto flush if it's previously disabled
   void EnableAutoFlush();
+  void DisableAutoFlush();
   bool TEST_IsAutoFlushEnabled() const;
 
  private:

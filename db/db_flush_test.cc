@@ -3048,8 +3048,49 @@ TEST_F(DBFlushTest, DisableAutoFlushMultiCF) {
   Close();
 }
 
-TEST_F(DBFlushTest, DisableAutoFlushOnRunningDB) {
-  EXPECT_NOK(db_->SetOptions({{"disable_auto_flush", "true"}}));
+TEST_F(DBFlushTest, ReDisableAutoFlushAfterEnable) {
+  auto triggerRandomWrites = [this](uint32_t handle_idx, size_t num_keys) {
+    for (size_t i = 0; i < num_keys; i++) {
+      ASSERT_OK(Put(handle_idx, "k" + std::to_string(i), "v" + std::to_string(i)));
+    }
+  };
+
+  Options options;
+  options.max_write_buffer_number = 2;
+  options.disable_auto_flush = false;
+  options.env = env_;
+  options.write_buffer_size = 65536;
+  options.atomic_flush = true;
+  options.info_log = info_log_;
+  Reopen(options);
+  CreateColumnFamilies({"cf1", "cf2"}, options);
+  auto versions = dbfull()->GetVersionSet();
+
+  auto cf1 = versions->GetColumnFamilySet()->GetColumnFamily("cf1");
+  auto cf2 = versions->GetColumnFamilySet()->GetColumnFamily("cf2");
+
+  // generate one immutable memtable
+  db_->PauseBackgroundWork();
+  for (int i = 1; i < options.max_write_buffer_number; i++) {
+    triggerRandomWrites(0 /* cf1 */, 10);
+    triggerRandomWrites(1 /* cf2 */, 10);
+    FlushOptions opts;
+    opts.wait = false;
+    opts.allow_write_stall = false;
+    ASSERT_OK(db_->Flush(opts, handles_));
+  }
+
+  EXPECT_EQ(cf1->imm()->NumNotFlushed(), options.max_write_buffer_number - 1);
+  EXPECT_EQ(cf2->imm()->NumNotFlushed(), options.max_write_buffer_number - 1);
+
+  // disable flush
+  ASSERT_OK(db_->SetOptions({{"disable_auto_flush", "true"}}));
+  ASSERT_OK(db_->SetOptions(handles_[0], {{"disable_auto_flush", "true"}}));
+  ASSERT_OK(db_->SetOptions(handles_[1], {{"disable_auto_flush", "true"}}));
+
+  // generate enough writes which exceed the auto flush limit
+  triggerRandomWrites(0 /* cf1 */, 2000);
+  triggerRandomWrites(1 /* cf2 */, 2000);
 }
 
 // Test the case that non-trival compaction job is triggered before
@@ -3168,6 +3209,7 @@ TEST_F(DBFlushTest, NoStopWritesWhenAutoFlushDisabled) {
 
   Close();
 }
+
 
 INSTANTIATE_TEST_CASE_P(DBFlushDirectIOTest, DBFlushDirectIOTest,
                         testing::Bool());

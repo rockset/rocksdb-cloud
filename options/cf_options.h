@@ -279,6 +279,16 @@ struct MutableCFOptions {
   std::vector<uint64_t> max_file_size;
 
   bool disable_auto_flush;
+  // bumped whenever we change CF Options through `SetOptions` API
+  //
+  // It's possible that we install an old MutableCFOptions when a background job(e.g. compaction)
+  // tries to install super version with old MutableCFOptions. `seq` can
+  // help detect this case
+  // 
+  // Each CF's latest mutable cf options has the biggest seq number
+  // 
+  // Guarded by `DBImpl::mutex_`
+  uint64_t seq{0};
 };
 
 uint64_t MultiplyCheckOverflow(uint64_t op1, double op2);

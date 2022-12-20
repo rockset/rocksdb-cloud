@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <limits>
 #include <memory>
 
@@ -216,7 +217,16 @@ void MemTable::EnableAutoFlush() {
       disable_auto_flush_.exchange(false, std::memory_order_relaxed);
   if (!flush_previously_disabled) {
     ROCKS_LOG_WARN(moptions_.info_log,
-                   "EnableFlush called when flush is already enabled");
+                   "EnableAutoFlush called when flush is already enabled");
+  }
+}
+
+void MemTable::DisableAutoFlush() {
+  bool flush_previously_disabled =
+    disable_auto_flush_.exchange(true, std::memory_order_relaxed);
+  if (flush_previously_disabled) {
+    ROCKS_LOG_WARN(moptions_.info_log,
+                   "DisableAutoFlush called when flush is already enabled");
   }
 }
 
