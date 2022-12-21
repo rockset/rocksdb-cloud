@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <iostream>
 
-#include "cloud/fs_cloud_impl.h"
+#include "cloud/cloud_file_system_impl.h"
 
 #ifdef USE_AWS
 
@@ -39,8 +39,8 @@ namespace ROCKSDB_NAMESPACE {
 // of AwsFileSystem for each of those rocksdb-cloud instances. This is required
 // because the cloud-configuration needed to operate on an individual instance
 // of rocksdb is associated with a specific instance of AwsFileSystem. All
-// AwsFileSystem internally share Env::Posix() for sharing common file system
-// resources
+// AwsFileSystem internally share PosixFileSystem for sharing common file system
+// resources.
 //
 class AwsFileSystem : public CloudFileSystemImpl {
  public:

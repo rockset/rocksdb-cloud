@@ -1,7 +1,7 @@
 // Copyright (c) 2017 Rockset.
 #ifndef ROCKSDB_LITE
 
-#include "cloud/fs_cloud_impl.h"
+#include "cloud/cloud_file_system_impl.h"
 
 #include <cinttypes>
 

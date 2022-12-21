@@ -38,7 +38,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include "cloud/aws/fs_aws.h"
+#include "cloud/aws/aws_file_system.h"
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
 #include "db/version_set.h"

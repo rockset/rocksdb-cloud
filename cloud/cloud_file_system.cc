@@ -8,12 +8,12 @@
 #endif
 #include <unordered_map>
 
-#include "cloud/aws/fs_aws.h"
+#include "cloud/aws/aws_file_system.h"
+#include "cloud/cloud_file_system_impl.h"
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
-#include "cloud/fs_cloud_impl.h"
 #include "env/composite_env_wrapper.h"
 #include "options/configurable_helper.h"
 #include "options/options_helper.h"

@@ -8,9 +8,9 @@
 #include <chrono>
 #include <cinttypes>
 
+#include "cloud/cloud_file_system_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
-#include "cloud/fs_cloud_impl.h"
 #include "cloud/manifest_reader.h"
 #include "db/db_impl/db_impl.h"
 #include "env/composite_env_wrapper.h"

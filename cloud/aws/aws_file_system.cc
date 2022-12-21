@@ -1,7 +1,7 @@
 //  Copyright (c) 2016-present, Rockset, Inc.  All rights reserved.
 //
 #ifndef ROCKSDB_LITE
-#include "cloud/aws/fs_aws.h"
+#include "cloud/aws/aws_file_system.h"
 
 #include <chrono>
 #include <cinttypes>
