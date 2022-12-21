@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <iostream>
 
-#include "cloud/cloud_env_impl.h"
+#include "cloud/fs_cloud_impl.h"
 
 #ifdef USE_AWS
 

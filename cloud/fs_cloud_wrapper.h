@@ -4,7 +4,7 @@
 #include <atomic>
 #include <thread>
 
-#include "cloud/cloud_env_impl.h"
+#include "cloud/fs_cloud_impl.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/status.h"

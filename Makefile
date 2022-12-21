@@ -1789,7 +1789,7 @@ db_cloud_test: cloud/db_cloud_test.o $(TEST_LIBRARY) $(LIBRARY)
 replication_test: cloud/replication_test.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK)
 
-cloud_env_test: cloud/cloud_env_test.o $(TEST_LIBRARY) $(LIBRARY)
+fs_cloud_test: cloud/fs_cloud_test.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK)
 
 cloud_manifest_test: cloud/cloud_manifest_test.o $(TEST_LIBRARY) $(LIBRARY)

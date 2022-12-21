@@ -893,14 +893,14 @@ set(SOURCES
         utilities/wal_filter.cc
         utilities/write_batch_with_index/write_batch_with_index.cc
         utilities/write_batch_with_index/write_batch_with_index_internal.cc
-        cloud/aws/aws_env.cc
+        cloud/aws/fs_aws.cc
         cloud/aws/aws_kafka.cc
         cloud/aws/aws_kinesis.cc
         cloud/aws/aws_retry.cc
         cloud/aws/aws_s3.cc
         cloud/db_cloud_impl.cc
-        cloud/cloud_env.cc
-        cloud/cloud_env_impl.cc
+        cloud/fs_cloud.cc
+        cloud/fs_cloud_impl.cc
         cloud/cloud_env_options.cc
         cloud/cloud_log_controller.cc
         cloud/manifest_reader.cc
@@ -1229,7 +1229,7 @@ if(WITH_TESTS)
         cache/cache_test.cc
         cache/compressed_secondary_cache_test.cc
         cache/lru_cache_test.cc
-        cloud/cloud_env_test.cc
+        cloud/fs_cloud_test.cc
         cloud/db_cloud_test.cc
         cloud/cloud_manifest_test.cc
         cloud/cloud_scheduler_test.cc

@@ -3,7 +3,7 @@
 
 #include <cinttypes>
 
-#include "cloud/cloud_env_impl.h"
+#include "cloud/fs_cloud_impl.h"
 
 namespace ROCKSDB_NAMESPACE {
 

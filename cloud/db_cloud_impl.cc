@@ -6,6 +6,7 @@
 #include <cinttypes>
 
 #include "cloud/filename.h"
+#include "cloud/fs_cloud_impl.h"
 #include "cloud/manifest_reader.h"
 #include "env/composite_env_wrapper.h"
 #include "file/file_util.h"

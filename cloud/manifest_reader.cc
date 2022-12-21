@@ -9,6 +9,7 @@
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/fs_cloud_impl.h"
 #include "db/version_set.h"
 #include "env/composite_env_wrapper.h"
 #include "rocksdb/db.h"

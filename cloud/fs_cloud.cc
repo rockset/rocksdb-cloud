@@ -8,12 +8,12 @@
 #endif
 #include <unordered_map>
 
-#include "cloud/aws/aws_env.h"
-#include "cloud/cloud_env_impl.h"
+#include "cloud/aws/fs_aws.h"
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/fs_cloud_impl.h"
 #include "env/composite_env_wrapper.h"
 #include "options/configurable_helper.h"
 #include "options/options_helper.h"
@@ -200,7 +200,8 @@ static std::unordered_map<std::string, OptionTypeInfo>
              const void* addr1, const void* addr2, std::string* /*mismatch*/) {
             auto bucket1 = static_cast<const BucketOptions*>(addr1);
             auto bucket2 = static_cast<const BucketOptions*>(addr2);
-            return bucket1->GetBucketName(false) == bucket2->GetBucketName(false);
+            return bucket1->GetBucketName(false) ==
+                   bucket2->GetBucketName(false);
           }}},
         {"TEST",
          {0, OptionType::kUnknown, OptionVerificationType::kAlias,
@@ -250,8 +251,7 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offset_of(&CloudEnvOptions::skip_dbid_verification),
           OptionType::kBoolean}},
         {"resync_on_open",
-         {offset_of(&CloudEnvOptions::resync_on_open),
-          OptionType::kBoolean}},
+         {offset_of(&CloudEnvOptions::resync_on_open), OptionType::kBoolean}},
         {"skip_cloud_children_files",
          {offset_of(&CloudEnvOptions::skip_cloud_files_in_getchildren),
           OptionType::kBoolean}},
@@ -335,22 +335,23 @@ Status CloudEnvOptions::Configure(const ConfigOptions& config_options,
     }
   }
   if (s.ok()) {
-    s = OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
-                                    &cloud_env_option_type_info,
-                                    CloudEnvOptions::kName(), opts_str, reinterpret_cast<char*>(this));
-    if (!s.ok()) { // Something went wrong.  Attempt to reset
-      OptionTypeInfo::ParseStruct(config_options, CloudEnvOptions::kName(),
-                                  &cloud_env_option_type_info,
-                                  CloudEnvOptions::kName(), current, reinterpret_cast<char*>(this));
+    s = OptionTypeInfo::ParseStruct(
+        config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+        CloudEnvOptions::kName(), opts_str, reinterpret_cast<char*>(this));
+    if (!s.ok()) {  // Something went wrong.  Attempt to reset
+      OptionTypeInfo::ParseStruct(
+          config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+          CloudEnvOptions::kName(), current, reinterpret_cast<char*>(this));
     }
   }
   return s;
 }
-  
-Status CloudEnvOptions::Serialize(const ConfigOptions& config_options, std::string* value) const {
-  return OptionTypeInfo::SerializeStruct(config_options, CloudEnvOptions::kName(),
-                                         &cloud_env_option_type_info,
-                                         CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
+
+Status CloudEnvOptions::Serialize(const ConfigOptions& config_options,
+                                  std::string* value) const {
+  return OptionTypeInfo::SerializeStruct(
+      config_options, CloudEnvOptions::kName(), &cloud_env_option_type_info,
+      CloudEnvOptions::kName(), reinterpret_cast<const char*>(this), value);
 }
 
 CloudFileSystem::CloudFileSystem(const CloudEnvOptions& options,
@@ -415,17 +416,16 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
         return guard->get();
       });
   count++;
-  
+
   return count;
 }
 
 void CloudFileSystem::RegisterCloudObjects(const std::string& arg) {
   static std::once_flag do_once;
-  std::call_once(do_once,
-    [&]() {
-      auto library = ObjectLibrary::Default();
-      DoRegisterCloudObjects(*library, arg);
-    });
+  std::call_once(do_once, [&]() {
+    auto library = ObjectLibrary::Default();
+    DoRegisterCloudObjects(*library, arg);
+  });
 }
 
 std::unique_ptr<Env> CloudFileSystem::NewCompositeEnvFromThis(Env* env) {
@@ -441,7 +441,7 @@ Status CloudFileSystem::CreateFromString(
     std::unique_ptr<CloudFileSystem>* result) {
   RegisterCloudObjects();
   std::string id;
-  std::unordered_map<std::string, std::string> options;  
+  std::unordered_map<std::string, std::string> options;
   Status s;
   if (value.find("=") == std::string::npos) {
     id = value;
@@ -495,7 +495,7 @@ Status CloudFileSystem::CreateFromString(
     std::unique_ptr<CloudFileSystem>* result) {
   RegisterCloudObjects();
   std::string id;
-  std::unordered_map<std::string, std::string> options;  
+  std::unordered_map<std::string, std::string> options;
   Status s;
   if (value.find("=") == std::string::npos) {
     id = value;
@@ -537,7 +537,7 @@ Status CloudFileSystem::CreateFromString(
       }
     }
   }
-  
+
   if (s.ok()) {
     result->reset(static_cast<CloudFileSystem*>(fs.release()));
   }

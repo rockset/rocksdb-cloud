@@ -7,9 +7,9 @@
 #include <mutex>
 #include <set>
 
-#include "cloud/cloud_env_impl.h"
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/filename.h"
+#include "cloud/fs_cloud_impl.h"
 #include "file/filename.h"
 #include "rocksdb/cloud/cloud_env_options.h"
 #include "rocksdb/convenience.h"

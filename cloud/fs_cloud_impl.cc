@@ -1,7 +1,7 @@
 // Copyright (c) 2017 Rockset.
 #ifndef ROCKSDB_LITE
 
-#include "cloud/cloud_env_impl.h"
+#include "cloud/fs_cloud_impl.h"
 
 #include <cinttypes>
 
@@ -810,7 +810,8 @@ IOStatus CloudFileSystemImpl::DeleteCloudFileFromDest(
   auto path = GetDestObjectPath() + pathsep + base;
   auto bucket = GetDestBucketName();
   std::weak_ptr<Logger> info_log_wp = info_log_;
-  std::weak_ptr<CloudStorageProvider> storage_provider_wp = GetStorageProvider();
+  std::weak_ptr<CloudStorageProvider> storage_provider_wp =
+      GetStorageProvider();
   auto file_deletion_runnable =
       [path = std::move(path), bucket = std::move(bucket),
        info_log_wp = std::move(info_log_wp),
@@ -945,8 +946,8 @@ IOStatus CloudFileSystemImpl::DeleteCloudInvisibleFiles(
     const std::vector<std::string>& active_cookies) {
   assert(HasDestBucket());
   std::vector<std::string> pathnames;
-  auto s = GetStorageProvider()->ListCloudObjects(GetDestBucketName(),
-                                             GetDestObjectPath(), &pathnames);
+  auto s = GetStorageProvider()->ListCloudObjects(
+      GetDestBucketName(), GetDestObjectPath(), &pathnames);
   if (!s.ok()) {
     Log(InfoLogLevel::WARN_LEVEL, info_log_,
         "Files in cloud are not scheduled to be deleted since listing cloud "
@@ -983,11 +984,11 @@ IOStatus CloudFileSystemImpl::DeleteLocalInvisibleFiles(
   }
   for (auto& fname : children) {
     if (IsFileInvisible(active_cookies, fname)) {
-        // Ignore returned status on purpose.
-        Log(InfoLogLevel::INFO_LEVEL, info_log_,
-            "DeleteLocalInvisibleFiles deleting file %s from local dir",
-            fname.c_str());
-        GetBaseFileSystem()->DeleteFile(dbname + "/" + fname, io_opts, dbg);
+      // Ignore returned status on purpose.
+      Log(InfoLogLevel::INFO_LEVEL, info_log_,
+          "DeleteLocalInvisibleFiles deleting file %s from local dir",
+          fname.c_str());
+      GetBaseFileSystem()->DeleteFile(dbname + "/" + fname, io_opts, dbg);
     }
   }
   return s;
@@ -1006,7 +1007,7 @@ bool CloudFileSystemImpl::IsFileInvisible(
     }
 
     bool is_active = false;
-    for (auto& c: active_cookies) {
+    for (auto& c : active_cookies) {
       if (c == fname_cookie) {
         is_active = true;
         break;
@@ -1550,7 +1551,7 @@ IOStatus CloudFileSystemImpl::MigrateFromPureRocksDB(
   st = local_fs->RenameFile(manifest_filename, local_dbname + "/MANIFEST",
                             io_opts, dbg);
   if (st.ok() && cloud_env_options.roll_cloud_manifest_on_open) {
-      st = RollNewEpoch(local_dbname);
+    st = RollNewEpoch(local_dbname);
   }
 
   return st;
@@ -1563,9 +1564,9 @@ IOStatus CloudFileSystemImpl::PreloadCloudManifest(
   // Init cloud manifest
   auto st = FetchCloudManifest(local_dbname);
   if (st.ok()) {
-      // Inits CloudFileSystemImpl::cloud_manifest_, which will enable us to
-      // read files from the cloud
-      st = LoadLocalCloudManifest(local_dbname);
+    // Inits CloudFileSystemImpl::cloud_manifest_, which will enable us to
+    // read files from the cloud
+    st = LoadLocalCloudManifest(local_dbname);
   }
   return st;
 }
@@ -1575,9 +1576,9 @@ IOStatus CloudFileSystemImpl::LoadCloudManifest(const std::string& local_dbname,
   // Init cloud manifest
   auto st = FetchCloudManifest(local_dbname);
   if (st.ok()) {
-      // Inits CloudFileSystemImpl::cloud_manifest_, which will enable us to
-      // read files from the cloud
-      st = LoadLocalCloudManifest(local_dbname);
+    // Inits CloudFileSystemImpl::cloud_manifest_, which will enable us to
+    // read files from the cloud
+    st = LoadLocalCloudManifest(local_dbname);
   }
 
   if (st.ok() && cloud_env_options.resync_on_open &&
@@ -2042,7 +2043,8 @@ IOStatus CloudFileSystemImpl::UploadCloudManifest(
     return IOStatus::InvalidArgument(
         "Dest bucket has to be specified when uploading CloudManifest files");
   }
-   // upload the cloud manifest file corresponds to cookie (i.e., CLOUDMANIFEST-cookie)
+  // upload the cloud manifest file corresponds to cookie (i.e.,
+  // CLOUDMANIFEST-cookie)
   auto st = GetStorageProvider()->PutCloudObject(
       MakeCloudManifestFile(local_dbname, cookie), GetDestBucketName(),
       MakeCloudManifestFile(GetDestObjectPath(), cookie));
@@ -2076,17 +2078,16 @@ IOStatus CloudFileSystemImpl::RollNewCookie(
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "Rolling new CLOUDMANIFEST from file number %lu, renaming MANIFEST-%s to "
       "MANIFEST-%s, new cookie: %s",
-      delta.file_num, old_epoch.c_str(), delta.epoch.c_str(),
-      cookie.c_str());
+      delta.file_num, old_epoch.c_str(), delta.epoch.c_str(), cookie.c_str());
   // ManifestFileWithEpoch(local_dbname, oldEpoch) should exist locally.
   // We have to move our old manifest to the new filename.
   // However, we don't move here, we copy. If we moved and crashed immediately
   // after (before writing CLOUDMANIFEST), we'd corrupt our database. The old
   // MANIFEST file will be cleaned up in DeleteInvisibleFiles().
-  auto st = CopyFile(base_fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
-                ManifestFileWithEpoch(local_dbname, delta.epoch), 0 /* size */,
-                true /* use_fsync */, nullptr /* io_tracer */,
-                Temperature::kUnknown);
+  auto st = CopyFile(
+      base_fs.get(), ManifestFileWithEpoch(local_dbname, old_epoch),
+      ManifestFileWithEpoch(local_dbname, delta.epoch), 0 /* size */,
+      true /* use_fsync */, nullptr /* io_tracer */, Temperature::kUnknown);
   if (!st.ok()) {
     return st;
   }
@@ -2348,7 +2349,8 @@ IOStatus CloudFileSystemImpl::FindAllLiveFilesAndFetchManifest(
 
   live_sst_files->resize(file_nums.size());
 
-  // filename will be remapped correctly based on current_epoch of cloud_manifest
+  // filename will be remapped correctly based on current_epoch of
+  // cloud_manifest
   *manifest_file =
       RemapFilename(ManifestFileWithEpoch("" /* dbname */, "" /* epoch */));
   size_t idx = 0;

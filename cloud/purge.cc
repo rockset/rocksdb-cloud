@@ -6,9 +6,9 @@
 #include <chrono>
 #include <set>
 
-#include "cloud/cloud_env_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/fs_cloud_impl.h"
 #include "cloud/manifest_reader.h"
 #include "file/filename.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"

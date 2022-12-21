@@ -18,7 +18,7 @@
 #include "rocksdb/env_encryption.h"
 #include "util/stderr_logger.h"
 #ifdef USE_AWS
-#include "cloud/cloud_env_impl.h"
+#include "cloud/fs_cloud_impl.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #endif
 #include "rocksdb/unique_id.h"

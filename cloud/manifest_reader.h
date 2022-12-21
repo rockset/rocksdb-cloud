@@ -6,9 +6,14 @@
 #include <set>
 #include <string>
 
-#include "cloud/cloud_env_impl.h"
+#include "rocksdb/io_status.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+class CloudFileSystem;
+class FileSystem;
+class Logger;
+class SequentialFileReader;
 
 // Operates on MANIFEST files stored locally
 class LocalManifestReader {

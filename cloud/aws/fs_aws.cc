@@ -1,7 +1,7 @@
 //  Copyright (c) 2016-present, Rockset, Inc.  All rights reserved.
 //
 #ifndef ROCKSDB_LITE
-#include "cloud/aws/aws_env.h"
+#include "cloud/aws/fs_aws.h"
 
 #include <chrono>
 #include <cinttypes>
@@ -113,8 +113,8 @@ Status AwsCloudAccessCredentials::GetCredentialsProvider(
   result->reset();
 
   if (provider) {
-      *result = provider;
-      return Status::OK();
+    *result = provider;
+    return Status::OK();
   }
 
   AwsAccessType aws_type = GetAccessType();
@@ -294,4 +294,4 @@ int CloudFileSystemImpl::RegisterAwsObjects(ObjectLibrary& library,
 }
 
 }  // namespace ROCKSDB_NAMESPACE
-#endif // ROCKSDB_LITE
+#endif  // ROCKSDB_LITE
