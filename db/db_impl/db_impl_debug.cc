@@ -13,7 +13,6 @@
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/periodic_work_scheduler.h"
-#include "monitoring/thread_status_updater.h"
 #include "util/cast_util.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -191,6 +190,14 @@ Status DBImpl::TEST_WaitForFlushMemTable(ColumnFamilyHandle* column_family) {
 Status DBImpl::TEST_WaitForCompact(bool wait_unscheduled) {
   // Wait until the compaction completes
   return WaitForCompact(wait_unscheduled);
+}
+
+Status DBImpl::TEST_WaitForScheduledCompaction() {
+  InstrumentedMutexLock l(&mutex_);
+  while (bg_compaction_scheduled_ && (error_handler_.GetBGError().ok())) {
+    bg_cv_.Wait();
+  }
+  return error_handler_.GetBGError();
 }
 
 Status DBImpl::TEST_WaitForPurge() {
