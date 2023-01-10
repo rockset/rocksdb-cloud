@@ -14,6 +14,7 @@
 #include "db/write_thread.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
+#include "rocksdb/options.h"
 #include "test_util/sync_point.h"
 #include "util/random.h"
 #include "util/string_util.h"
@@ -449,6 +450,23 @@ TEST_P(DBWriteTest, ConcurrentlyDisabledWAL) {
         ROCKSDB_NAMESPACE::Tickers::WAL_FILE_BYTES);
     // written WAL size should less than 100KB (even included HEADER & FOOTER overhead)
     ASSERT_LE(bytes_num, 1024 * 100);
+}
+
+TEST_P(DBWriteTest, DisableWriteStall) {
+  Options options = GetOptions();
+  options.disable_write_stall = true;
+  options.max_write_buffer_number = 2;
+  Reopen(options);
+  db_->PauseBackgroundWork();
+  Put("k1", "v1");
+  FlushOptions opts;
+  opts.wait = false;
+  db_->Flush(opts);
+  Put("k2", "v2");
+  db_->Flush(opts);
+
+  // write stall
+  Put("k3", "v3");
 }
 
 INSTANTIATE_TEST_CASE_P(DBWriteTestInstance, DBWriteTest,

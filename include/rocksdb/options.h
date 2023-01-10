@@ -320,10 +320,14 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
 
   // Disable automatic flush(exceed `write_buffer_size` limit). Manual flush
   // (including exceeding `db_write_buffer_size` limit) can still be issued
-  //
   // Dynamically changeable through SetOptions() API
   // Default: false, auto flush is enabled
   bool disable_auto_flush = false;
+
+  // No write stall will be triggered if true.
+  // Dynamically changeable through SetOptions() API
+  // Default: false, write stall will be enabled
+  bool disable_write_stall = false;
 
   // Create ColumnFamilyOptions with default values for all fields
   ColumnFamilyOptions();
