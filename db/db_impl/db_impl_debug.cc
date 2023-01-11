@@ -7,6 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include "monitoring/instrumented_mutex.h"
 #ifndef NDEBUG
 
 #include "db/column_family.h"
@@ -191,6 +192,14 @@ Status DBImpl::TEST_WaitForFlushMemTable(ColumnFamilyHandle* column_family) {
 Status DBImpl::TEST_WaitForCompact(bool wait_unscheduled) {
   // Wait until the compaction completes
   return WaitForCompact(wait_unscheduled);
+}
+
+Status DBImpl::TEST_WaitForNoScheduledCompaction() {
+  InstrumentedMutexLock l(&mutex_);
+  while (bg_compaction_scheduled_ && (error_handler_.GetBGError().ok())) {
+    bg_cv_.Wait();
+  }
+  return error_handler_.GetBGError();
 }
 
 Status DBImpl::TEST_WaitForPurge() {

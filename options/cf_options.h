@@ -199,7 +199,8 @@ struct MutableCFOptions {
         bottommost_compression(kDisableCompressionOption),
         bottommost_temperature(Temperature::kUnknown),
         sample_for_compression(0),
-        disable_auto_flush(false) {}
+        disable_auto_flush(false),
+        disable_write_stall(false) {}
 
   explicit MutableCFOptions(const Options& options);
 
