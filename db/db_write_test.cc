@@ -471,6 +471,7 @@ TEST_P(DBWriteTest, DisableWriteStall) {
 
   // now enable write stall
   ASSERT_OK(db_->SetOptions({{"disable_write_stall", "false"}}));
+
   WriteOptions wopts;
   wopts.no_slowdown = true;
   auto st = db_->Put(wopts, "k4", "v4");
@@ -493,6 +494,41 @@ TEST_P(DBWriteTest, DisableWriteStall) {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   ASSERT_OK(db_->SetOptions({{"disable_write_stall", "true"}}));
   t.join();
+
+  Close();
+}
+
+class DummyListener : public ReplicationLogListener {
+   public:
+    std::string OnReplicationLogRecord(
+        ReplicationLogRecord /*record*/) override {
+        seq_ += 1;
+        return std::to_string(seq_);
+    }
+
+   private:
+    std::atomic_int seq_{0};
+};
+
+// verifies that when `disable_write_stall` is the only cf option we set,
+// there won't be manifest updates
+TEST_P(DBWriteTest, DisableWriteStallNotWriteManifest) {
+  Options options = GetOptions();
+  options.disable_write_stall = false;
+  // make sure manifest update seq is bumped
+  options.replication_log_listener = std::make_shared<DummyListener>();
+  options.atomic_flush = true;
+  Reopen(options);
+
+  uint64_t manifestUpdateSeq;
+  ASSERT_OK(db_->GetManifestUpdateSequence(&manifestUpdateSeq));
+
+  db_->SetOptions({{"disable_write_stall", "true"}});
+
+  uint64_t newManifestUpdateSeq;
+  ASSERT_OK(db_->GetManifestUpdateSequence(&newManifestUpdateSeq));
+
+  EXPECT_EQ(manifestUpdateSeq, newManifestUpdateSeq);
 
   Close();
 }

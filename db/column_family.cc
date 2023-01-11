@@ -893,7 +893,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     uint64_t compaction_needed_bytes =
         vstorage->estimated_compaction_needed_bytes();
 
-    // NOTE: we should check lastest `mutable_cf_options_` instead of
+    // NOTE: we should check latest `mutable_cf_options_` instead of
     // the passed `mutable_cf_options`. We want to make sure that
     // once `disable_write_stall=true` is set, there won't be any
     // write stall afterwards. But it's possible for async compaction jobs
