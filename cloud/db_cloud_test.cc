@@ -159,7 +159,7 @@ class CloudTest : public testing::Test {
     cloud_fs_options_.use_aws_transfer_manager = true;
     // To catch any possible file deletion bugs, we set file deletion delay to
     // smallest possible
-    cloud_fs_options_.invisible_cloud_file_deletion_delay =
+    cloud_fs_options_.cloud_file_deletion_delay =
         std::chrono::seconds(0);
     ASSERT_OK(CloudFileSystem::NewAwsFileSystem(base_env_->GetFileSystem(),
                                                 cloud_fs_options_,

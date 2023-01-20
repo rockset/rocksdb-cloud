@@ -54,7 +54,7 @@ class CloudFileDeletionScheduler
 
   mutable std::mutex files_to_delete_mutex_;
   std::unordered_map<std::string, int> files_to_delete_;
-  std::chrono::seconds file_deletion_delay_ = std::chrono::hours(1);
+  std::chrono::seconds file_deletion_delay_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
