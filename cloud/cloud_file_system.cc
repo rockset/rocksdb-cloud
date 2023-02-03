@@ -1,4 +1,8 @@
 // Copyright (c) 2017 Rockset.
+#ifdef USE_AWS
+#include <aws/core/Aws.h>
+#endif
+
 #ifndef ROCKSDB_LITE
 
 #include "rocksdb/cloud/cloud_file_system.h"
@@ -30,6 +34,33 @@
 #include "util/string_util.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+#ifdef USE_AWS
+std::shared_ptr<void> useAWS() {
+    static std::mutex gMutex;
+    static std::weak_ptr<void> gInstance;
+
+    std::lock_guard lock(gMutex);
+
+    auto existing = gInstance.lock();
+    if (existing) {
+        return existing;
+    }
+
+    Aws::InitAPI(Aws::SDKOptions());
+
+    // No need to actually allocate or delete real memory
+    static bool dummy;
+
+    auto rv = std::shared_ptr<void>(&dummy, [](bool*) {
+        // Shut down AWS API.
+        Aws::ShutdownAPI(Aws::SDKOptions());
+    });
+
+    gInstance = rv;
+    return rv;
+}
+#endif
 
 void CloudFileSystemOptions::Dump(Logger* log) const {
   auto provider = storage_provider.get();
