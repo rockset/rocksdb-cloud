@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <memory>
 
 #include "cloud/cloud_file_system_impl.h"
 
@@ -82,6 +83,8 @@ class AwsFileSystem : public CloudFileSystemImpl {
   explicit AwsFileSystem(const std::shared_ptr<FileSystem>& underlying_fs,
                          const CloudFileSystemOptions& cloud_options,
                          const std::shared_ptr<Logger>& info_log = nullptr);
+
+  std::shared_ptr<void> awsGuard_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
