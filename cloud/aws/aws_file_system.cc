@@ -33,6 +33,31 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+std::shared_ptr<void> useAWS() {
+    static std::mutex gMutex;
+    static std::weak_ptr<void> gInstance;
+
+    std::lock_guard lock(gMutex);
+
+    auto existing = gInstance.lock();
+    if (existing) {
+        return existing;
+    }
+
+    Aws::InitAPI(Aws::SDKOptions());
+
+    // No need to actually allocate or delete real memory
+    static bool dummy;
+
+    auto rv = std::shared_ptr<void>(&dummy, [](bool*) {
+        // Shut down AWS API.
+        Aws::ShutdownAPI(Aws::SDKOptions());
+    });
+
+    gInstance = rv;
+    return rv;
+}
+
 static const std::unordered_map<std::string, AwsAccessType> AwsAccessTypeMap = {
     {"undefined", AwsAccessType::kUndefined},
     {"simple", AwsAccessType::kSimple},

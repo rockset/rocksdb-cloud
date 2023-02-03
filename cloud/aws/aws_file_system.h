@@ -19,6 +19,12 @@
 #include <unordered_map>
 
 namespace ROCKSDB_NAMESPACE {
+
+// Initializes AWS, or joins an existing initialization. Keep the
+// returned shared_ptr alive for as long as you will be using AWS
+// operations
+std::shared_ptr<void> useAWS();
+
 //
 // The S3 environment for rocksdb. This class overrides all the
 // file/dir access methods and delegates all other methods to the
