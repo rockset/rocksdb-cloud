@@ -508,6 +508,9 @@ struct CloudManifestDelta {
 //
 class CloudFileSystem : public FileSystem {
  protected:
+  // awsGuard_ must be declared before cloud_fs_options so that the AWS SDK is
+  // not shut down until after we have destroyed AWS-related resources.
+  std::shared_ptr<void> awsGuard_;
   CloudFileSystemOptions cloud_fs_options;
   std::shared_ptr<FileSystem> base_fs_;  // The underlying file system
 

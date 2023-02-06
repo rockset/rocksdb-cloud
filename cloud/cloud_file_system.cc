@@ -453,7 +453,7 @@ Status CloudFileSystemOptions::Serialize(const ConfigOptions& config_options,
 CloudFileSystem::CloudFileSystem(const CloudFileSystemOptions& options,
                                  const std::shared_ptr<FileSystem>& base,
                                  const std::shared_ptr<Logger>& logger)
-    : cloud_fs_options(options), base_fs_(base), info_log_(logger) {
+    : awsGuard_(useAWS()), cloud_fs_options(options), base_fs_(base), info_log_(logger) {
   RegisterOptions(&cloud_fs_options, &cloud_fs_option_type_info);
 }
 

@@ -7,6 +7,7 @@
 #include <cinttypes>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <set>
 
 #include "cloud/cloud_log_controller_impl.h"
@@ -174,7 +175,7 @@ Status AwsCloudAccessCredentials::GetCredentialsProvider(
 AwsFileSystem::AwsFileSystem(const std::shared_ptr<FileSystem>& underlying_fs,
                              const CloudFileSystemOptions& _cloud_fs_options,
                              const std::shared_ptr<Logger>& info_log)
-    : CloudFileSystemImpl(_cloud_fs_options, underlying_fs, info_log), awsGuard_(useAWS()) {
+    : CloudFileSystemImpl(_cloud_fs_options, underlying_fs, info_log) {
 }
 
 // If you do not specify a region, then S3 buckets are created in the
