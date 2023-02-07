@@ -26,13 +26,6 @@ class S3Client;
 
 namespace ROCKSDB_NAMESPACE {
 
-#ifdef USE_AWS
-// Initializes AWS, or joins an existing initialization. Keep the
-// returned shared_ptr alive for as long as you will be using AWS
-// operations
-std::shared_ptr<void> useAWS();
-#endif
-
 class CloudFileSystem;
 class CloudLogController;
 class CloudStorageProvider;
@@ -508,9 +501,6 @@ struct CloudManifestDelta {
 //
 class CloudFileSystem : public FileSystem {
  protected:
-  // awsGuard_ must be declared before cloud_fs_options so that the AWS SDK is
-  // not shut down until after we have destroyed AWS-related resources.
-  std::shared_ptr<void> awsGuard_;
   CloudFileSystemOptions cloud_fs_options;
   std::shared_ptr<FileSystem> base_fs_;  // The underlying file system
 

@@ -209,8 +209,6 @@ Status AwsFileSystem::PrepareOptions(const ConfigOptions& options) {
   return CloudFileSystemImpl::PrepareOptions(options);
 }
 
-void AwsFileSystem::Shutdown() { Aws::ShutdownAPI(Aws::SDKOptions()); }
-
 // The factory method for creating an S3 Env
 Status AwsFileSystem::NewAwsFileSystem(
     const std::shared_ptr<FileSystem>& base_fs,
