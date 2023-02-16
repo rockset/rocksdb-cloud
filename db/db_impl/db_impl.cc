@@ -1410,6 +1410,30 @@ Status DBImpl::GetManifestUpdateSequence(uint64_t* out) {
   return Status::OK();
 }
 
+Status DBImpl::BumpManifestUpdateSequence(uint64_t* out) {
+  Status st;
+  SuperVersionContext dummy_ctx(true /* create_superversion */);
+  InstrumentedMutexLock l(&mutex_);
+  if (!immutable_db_options_.replication_log_listener) {
+    return Status::NotSupported(
+        "manifest update sequence can only be used when "
+        "replication_log_listener_set");
+  }
+
+  VersionEdit dummy_edit;
+  auto cfd = versions_->GetColumnFamilySet()->GetDefault();
+  auto cf_options = cfd->GetLatestMutableCFOptions();
+  st = versions_->LogAndApply(cfd, *cf_options, &dummy_edit, &mutex_,
+                              directories_.GetDbDir());
+  if (st.ok()) {
+    InstallSuperVersionAndScheduleWork(cfd, &dummy_ctx, *cf_options);
+  }
+  dummy_ctx.Clean();
+
+  *out = versions_->GetManifestUpdateSequence();
+  return Status::OK();
+}
+
 Status DBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& options_map) {

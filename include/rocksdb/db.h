@@ -1284,6 +1284,12 @@ class DB {
   virtual Status GetPersistedReplicationSequence(std::string* out) = 0;
   // Returns latest ManifestUpdateSequence.
   virtual Status GetManifestUpdateSequence(uint64_t* out) = 0;
+  // Increase the manifest update sequence by 1. The MUS in manifest file will
+  // be updated as well.
+  //
+  // Returns ManifestUpdateSequence after the bump
+  // REQUIRES: `replication_log_listener` set
+  virtual Status BumpManifestUpdateSequence(uint64_t* out) = 0;
 
   // Dynamically change column family options or table factory options in a
   // running DB, for the specified column family. Only options internally

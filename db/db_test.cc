@@ -3248,6 +3248,9 @@ class ModelDB : public DB {
   Status GetManifestUpdateSequence(uint64_t* /*out*/) override {
     return Status::NotSupported("Not supported in Model DB");
   }
+  Status BumpManifestUpdateSequence(uint64_t* /*out*/) override {
+    return Status::NotSupported("Not supported in Model DB");
+  }
   Status GetReplicationRecordDebugString(const ReplicationLogRecord& /* record */,
                                          std::string* /* out */) const override {
     return Status::NotSupported("Not supported in Model DB");

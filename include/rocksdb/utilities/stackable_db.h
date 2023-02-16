@@ -494,6 +494,9 @@ class StackableDB : public DB {
   Status GetManifestUpdateSequence(uint64_t* out) override {
     return db_->GetManifestUpdateSequence(out);
   }
+  Status BumpManifestUpdateSequence(uint64_t* out) override {
+    return db_->BumpManifestUpdateSequence(out);
+  }
 
   using DB::SetOptions;
   virtual Status SetOptions(ColumnFamilyHandle* column_family_handle,

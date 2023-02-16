@@ -867,6 +867,37 @@ TEST_F(ReplicationTest, Stress) {
   verify_equal();
 }
 
+TEST_F(ReplicationTest, BumpManifestUpdateSequence) {
+  auto leader = openLeader();
+  auto follower = openFollower();
+
+  // kMemtableWrite
+  ASSERT_OK(leader->Put(wo(), "k1", "v1"));
+  // kMemtableSwitch
+  // kManifestWrite
+  ASSERT_OK(leader->Flush(FlushOptions()));
+  EXPECT_EQ(catchUpFollower(), 3);
+  uint64_t leaderMUS, followerMUS;
+  ASSERT_OK(leader->GetManifestUpdateSequence(&leaderMUS));
+  ASSERT_OK(follower->GetManifestUpdateSequence(&followerMUS));
+  EXPECT_EQ(leaderMUS, followerMUS);
+
+  uint64_t mus;
+  // kManifestWrite to bump the `mus`
+  ASSERT_OK(leader->BumpManifestUpdateSequence(&mus));
+  EXPECT_EQ(mus, leaderMUS + 1);
+  // only one `kManifestWrite` in the log
+  EXPECT_EQ(catchUpFollower(), 1);
+
+  ASSERT_OK(follower->GetManifestUpdateSequence(&mus));
+  EXPECT_EQ(mus, followerMUS + 1);
+
+  // verify that writes still work after increasing MUS
+  ASSERT_OK(leader->Put(wo(), "k2", "v2"));
+  ASSERT_OK(leader->Flush(FlushOptions()));
+  EXPECT_EQ(catchUpFollower(), 3);
+}
+
 }  //  namespace ROCKSDB_NAMESPACE
 
 // A black-box test for the cloud wrapper around rocksdb
