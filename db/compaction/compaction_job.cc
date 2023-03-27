@@ -99,6 +99,8 @@ const char* GetCompactionReasonString(CompactionReason compaction_reason) {
       return "ForcedBlobGC";
     case CompactionReason::kRoundRobinTtl:
       return "RoundRobinTtl";
+    case CompactionReason::kRefitLevel:
+      return "RefitLevel";
     case CompactionReason::kNumOfReasons:
       // fall through
     default:
@@ -714,11 +716,12 @@ Status CompactionJob::Run() {
           break;
         }
         // Verify that the table is usable
-        // We set for_compaction to false and don't OptimizeForCompactionTableRead
-        // here because this is a special case after we finish the table building
-        // No matter whether use_direct_io_for_flush_and_compaction is true,
-        // we will regard this verification as user reads since the goal is
-        // to cache it here for further user reads
+        // We set for_compaction to false and don't
+        // OptimizeForCompactionTableRead here because this is a special case
+        // after we finish the table building No matter whether
+        // use_direct_io_for_flush_and_compaction is true, we will regard this
+        // verification as user reads since the goal is to cache it here for
+        // further user reads
         ReadOptions read_options;
         InternalIterator* iter = cfd->table_cache()->NewIterator(
             read_options, file_options_, cfd->internal_comparator(),
@@ -764,8 +767,8 @@ Status CompactionJob::Run() {
       }
     };
     for (size_t i = 1; i < compact_->sub_compact_states.size(); i++) {
-      thread_pool.emplace_back(verify_table,
-                               std::ref(compact_->sub_compact_states[i].status));
+      thread_pool.emplace_back(
+          verify_table, std::ref(compact_->sub_compact_states[i].status));
     }
     verify_table(compact_->sub_compact_states[0].status);
     for (auto& thread : thread_pool) {
@@ -1834,12 +1837,14 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
   }
 
   // Initialize a SubcompactionState::Output and add it to sub_compact->outputs
+  uint64_t epoch_number = sub_compact->compaction->MinInputFileEpochNumber();
   {
     FileMetaData meta;
     meta.fd = FileDescriptor(file_number,
                              sub_compact->compaction->output_path_id(), 0);
     meta.oldest_ancester_time = oldest_ancester_time;
     meta.file_creation_time = current_time;
+    meta.epoch_number = epoch_number;
     meta.temperature = temperature;
     assert(!db_id_.empty());
     assert(!db_session_id_.empty());

@@ -39,9 +39,6 @@ CloudFileSystemImpl::CloudFileSystemImpl(
 }
 
 CloudFileSystemImpl::~CloudFileSystemImpl() {
-  // remove items from the file cache
-  FileCachePurge();
-
   if (cloud_fs_options.cloud_log_controller) {
     cloud_fs_options.cloud_log_controller->StopTailingStream();
   }
@@ -185,8 +182,6 @@ IOStatus CloudFileSystemImpl::NewSequentialFile(
         result->reset(file.release());
       }
     }
-    // Do not update the sst_file_cache for sequential read patterns.
-    // These are mostly used by compaction.
     Log(InfoLogLevel::DEBUG_LEVEL, info_log_,
         "[%s] NewSequentialFile file %s %s", Name(), fname.c_str(),
         st.ToString().c_str());
@@ -238,22 +233,9 @@ IOStatus CloudFileSystemImpl::NewRandomAccessFile(
 
   const IOOptions io_opts;
   if (sstfile || manifest || identity) {
-    if (cloud_fs_options.keep_local_sst_files ||
-        cloud_fs_options.hasSstFileCache() || !sstfile) {
+    if (cloud_fs_options.keep_local_sst_files || !sstfile) {
       // Read from local storage and then from cloud storage.
       st = base_fs_->NewRandomAccessFile(fname, file_opts, result, dbg);
-
-      // Found in local storage. Update LRU cache.
-      // There is a loose coupling between the sst_file_cache and the files on
-      // local storage. The sst_file_cache is only used for accounting of sst
-      // files. We do not keep a reference to the LRU cache handle when the sst
-      // file remains open by the db. If the LRU policy causes the file to be
-      // evicted, it will be deleted from local storage, but because the db
-      // already has an open file handle to it, it can continue to occupy local
-      // storage space until the time the db decides to close the sst file.
-      if (sstfile && st.ok()) {
-        FileCacheAccess(fname);
-      }
 
       if (!st.ok() && !base_fs_->FileExists(fname, io_opts, dbg).IsNotFound()) {
         // if status is not OK, but file does exist locally, something is wrong
@@ -266,14 +248,6 @@ IOStatus CloudFileSystemImpl::NewRandomAccessFile(
         if (st.ok()) {
           // we successfully copied the file, try opening it locally now
           st = base_fs_->NewRandomAccessFile(fname, file_opts, result, dbg);
-        }
-        // Update the size of our local sst file cache
-        if (st.ok() && sstfile && cloud_fs_options.hasSstFileCache()) {
-          uint64_t local_size;
-          auto statx = base_fs_->GetFileSize(fname, io_opts, &local_size, dbg);
-          if (statx.ok()) {
-            FileCacheInsert(fname, local_size);
-          }
         }
       }
       // If we are being paranoic, then we validate that our file size is
@@ -755,11 +729,6 @@ IOStatus CloudFileSystemImpl::DeleteFile(const std::string& logical_fname,
     // delete from local, too. Ignore the result, though. The file might not be
     // there locally.
     base_fs_->DeleteFile(fname, io_opts, dbg);
-
-    // remove from sst_file_cache
-    if (sstfile) {
-      FileCacheErase(fname);
-    }
   } else if (logfile && !cloud_fs_options.keep_local_log_files) {
     // read from Log Controller
     st = status_to_io_status(
@@ -1110,12 +1079,6 @@ Status CloudFileSystemImpl::CheckOption(const FileOptions& file_opts) {
   // local
   if (file_opts.use_mmap_reads && !cloud_fs_options.keep_local_sst_files) {
     std::string msg = "Mmap only if keep_local_sst_files is set";
-    return Status::InvalidArgument(msg);
-  }
-  if (cloud_fs_options.hasSstFileCache() &&
-      cloud_fs_options.keep_local_sst_files) {
-    std::string msg =
-        "Only one of sst_file_cache or keep_local_sst_files can be set";
     return Status::InvalidArgument(msg);
   }
   return Status::OK();
@@ -1671,13 +1634,6 @@ IOStatus CloudFileSystemImpl::SanitizeDirectory(const DBOptions& options,
   IODebugContext* dbg = nullptr;
   if (!read_only) {
     local_fs->CreateDirIfMissing(local_name, io_opts, dbg);
-  }
-
-  if (cloud_fs_options.hasSstFileCache() &&
-      cloud_fs_options.keep_local_sst_files) {
-    std::string msg =
-        "Only one of sst_file_cache or keep_local_sst_files can be set";
-    return IOStatus::InvalidArgument(msg);
   }
 
   // Shall we reinitialize the clone dir?
