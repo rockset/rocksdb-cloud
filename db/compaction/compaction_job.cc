@@ -2163,6 +2163,9 @@ void CompactionJob::RunRemote(PluggableCompactionService* service) {
     // set smallest and largest keys in FileMetaData
     meta.smallest.DecodeFrom(result_file.smallest_internal_key);
     meta.largest.DecodeFrom(result_file.largest_internal_key);
+    meta.unique_id[0] = result_file.unique_id_lo;
+    meta.unique_id[1] = result_file.unique_id_hi;
+    meta.epoch_number = result_file.epoch_number;
 
     ColumnFamilyData* cfd = compact_->compaction->column_family_data();
     sub->Current().AddOutput(std::move(meta), cfd->internal_comparator(),
@@ -2229,6 +2232,9 @@ void CompactionJob::RetrieveResultsAndCleanup(
       file.largest_internal_key = out.meta.largest.Encode().ToString();
       file.smallest_seqno = out.meta.fd.smallest_seqno;
       file.largest_seqno = out.meta.fd.smallest_seqno;
+      file.unique_id_lo = out.meta.unique_id[0];
+      file.unique_id_hi = out.meta.unique_id[1];
+      file.epoch_number = out.meta.epoch_number;
 
       result->output_files.push_back(file);
     }
