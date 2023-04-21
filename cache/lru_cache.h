@@ -212,6 +212,7 @@ struct LRUHandle {
 
   void Free() {
     assert(refs == 0);
+    assert(prev == nullptr && next == nullptr);
 
     if (!IsSecondaryCacheCompatible() && info_.deleter) {
       (*info_.deleter)(key(), value);
