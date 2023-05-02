@@ -1319,6 +1319,8 @@ class DB {
       ApplyReplicationLogRecordInfo* info) = 0;
   virtual Status GetReplicationRecordDebugString(
       const ReplicationLogRecord& record, std::string* out) const = 0;
+  virtual Status GetMaxManifestUpdateSequence(
+      const ReplicationLogRecord& record, uint64_t* out) const = 0;
   // Returns the latest replication log sequence number (returned by
   // ReplicationLogListener::OnReplicationLogRecord()) that is persisted in the
   // LSM tree. All records after the persisted sequence need to be reapplied

@@ -3400,6 +3400,10 @@ class ModelDB : public DB {
       ApplyReplicationLogRecordInfo* /*info*/) override {
     return Status::NotSupported("Not supported in Model DB");
   }
+  Status GetMaxManifestUpdateSequence(const ReplicationLogRecord& /* record */,
+                                      uint64_t* /* out */) const override {
+    return Status::NotSupported("Not supported in Model DB");
+  }
   Status GetPersistedReplicationSequence(std::string* /*out*/) override {
     return Status::NotSupported("Not supported in Model DB");
   }

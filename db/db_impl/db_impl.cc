@@ -1508,6 +1508,33 @@ Status DBImpl::GetReplicationRecordDebugString(
   return s;
 }
 
+Status DBImpl::GetMaxManifestUpdateSequence(const ReplicationLogRecord& record,
+                                            uint64_t* out) const {
+  switch (record.type) {
+    case ReplicationLogRecord::kMemtableWrite: // fallthrough
+    case ReplicationLogRecord::kMemtableSwitch:
+      return Status::InvalidArgument("Not manifest write");
+    case ReplicationLogRecord::kManifestWrite: {
+      *out = 0;
+      Slice contents_slice(record.contents);
+      autovector<VersionEdit> edits;
+      auto s = DeserializeReplicationLogManifestWrite(&contents_slice, &edits);
+      if (!s.ok()) {
+        return s;
+      }
+      for (auto& e: edits) {
+        if (!e.HasManifestUpdateSequence()) {
+          s = Status::InvalidArgument(
+              "Manifest write doesn't have a ManifestUpdateSequence");
+          break;
+        }
+        *out = std::max(*out, e.GetManifestUpdateSequence());
+      }
+      return s;
+    }
+  }
+}
+
 Status DBImpl::GetPersistedReplicationSequence(std::string* out) {
   InstrumentedMutexLock l(&mutex_);
   *out = versions_->GetReplicationSequence();

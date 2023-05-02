@@ -256,6 +256,11 @@ protected:
   void resetFollowerSequence(int new_seq) {
     followerSequence_ = new_seq;
   }
+
+  LogRecordsVector getAllLogRecords() {
+    MutexLock lock(&log_records_mutex_);
+    return log_records_;
+  }
  private:
   std::string test_dir_;
   FollowerEnv follower_env_;
@@ -1018,6 +1023,26 @@ TEST_F(ReplicationTest, Stress) {
   catchUpFollower();
 
   verify_equal();
+}
+
+TEST_F(ReplicationTest, GetMaxManifestUpdateSequence) {
+  auto leader = openLeader();
+  ASSERT_OK(leader->Put(wo(), "key1", "val1"));
+  ASSERT_OK(leader->Flush(FlushOptions()));
+
+  for (auto& [r, s]: getAllLogRecords()) {
+    uint64_t mus;
+    switch (r.type) {
+        case ReplicationLogRecord::kManifestWrite: {
+        ASSERT_OK(leader->GetMaxManifestUpdateSequence(r, &mus));
+        EXPECT_GT(mus, 0);
+        break;
+        }
+        default:
+        EXPECT_NOK(leader->GetMaxManifestUpdateSequence(r, &mus));
+        break;
+    }
+  }
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
