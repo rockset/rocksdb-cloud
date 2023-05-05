@@ -3102,14 +3102,14 @@ TEST_F(CloudTest, CloudFileDeletionNotTriggeredIfDestBucketNotSet) {
 
 TEST_F(CloudTest, ScheduleFileDeletionTest) {
   auto scheduler = CloudScheduler::Get();
-  auto deletion_scheduler =
-      CloudFileDeletionScheduler::Create(scheduler, std::chrono::seconds(0));
+  auto deletion_scheduler = DefaultCloudFileDeletionScheduler::Create(scheduler);
 
   std::atomic_int counter{0};
   int num_file_deletions = 10;
   for (int i = 0; i < num_file_deletions; i++) {
     ASSERT_OK(deletion_scheduler->ScheduleFileDeletion(
-        std::to_string(i) + ".sst", [&counter]() { counter++; }));
+        std::to_string(i) + ".sst", [&counter]() { counter++; },
+        std::chrono::seconds(0)));
   }
 
   // wait until no scheduled jobs
@@ -3117,22 +3117,28 @@ TEST_F(CloudTest, ScheduleFileDeletionTest) {
     usleep(100);
   }
   EXPECT_EQ(counter, num_file_deletions);
-  EXPECT_EQ(deletion_scheduler->TEST_FilesToDelete().size(), 0);
+  auto deletion_scheduler_full =
+      static_cast<DefaultCloudFileDeletionScheduler*>(deletion_scheduler.get());
+  EXPECT_EQ(deletion_scheduler_full->TEST_FilesToDelete().size(), 0);
 }
 
 TEST_F(CloudTest, SameFileDeletedMultipleTimesTest) {
   auto scheduler = CloudScheduler::Get();
   auto deletion_scheduler =
-      CloudFileDeletionScheduler::Create(scheduler, std::chrono::hours(1));
-  ASSERT_OK(deletion_scheduler->ScheduleFileDeletion("filename", []() {}));
-  ASSERT_OK(deletion_scheduler->ScheduleFileDeletion("filename", []() {}));
-  EXPECT_EQ(deletion_scheduler->TEST_FilesToDelete().size(), 1);
+      DefaultCloudFileDeletionScheduler::Create(scheduler);
+  ASSERT_OK(deletion_scheduler->ScheduleFileDeletion(
+      "filename", []() {}, std::chrono::hours(1)));
+  ASSERT_OK(deletion_scheduler->ScheduleFileDeletion(
+      "filename", []() {}, std::chrono::hours(1)));
+  auto deletion_scheduler_full =
+      static_cast<DefaultCloudFileDeletionScheduler*>(deletion_scheduler.get());
+  EXPECT_EQ(deletion_scheduler_full->TEST_FilesToDelete().size(), 1);
 }
 
 TEST_F(CloudTest, UnscheduleFileDeletionTest) {
   auto scheduler = CloudScheduler::Get();
   auto deletion_scheduler =
-      CloudFileDeletionScheduler::Create(scheduler, std::chrono::hours(1));
+      DefaultCloudFileDeletionScheduler::Create(scheduler);
 
   std::atomic_int counter{0};
   int num_file_deletions = 10;
@@ -3140,10 +3146,13 @@ TEST_F(CloudTest, UnscheduleFileDeletionTest) {
   for (int i = 0; i < num_file_deletions; i++) {
     std::string filename = std::to_string(i) + ".sst";
     files_to_delete.push_back(filename);
-    ASSERT_OK(
-        deletion_scheduler->ScheduleFileDeletion(filename, [&counter]() { counter++; }));
+    ASSERT_OK(deletion_scheduler->ScheduleFileDeletion(
+        filename, [&counter]() { counter++; }, std::chrono::hours(1)));
   }
-  auto actual_files_to_delete = deletion_scheduler->TEST_FilesToDelete();
+
+  auto deletion_scheduler_full =
+      static_cast<DefaultCloudFileDeletionScheduler*>(deletion_scheduler.get());
+  auto actual_files_to_delete = deletion_scheduler_full->TEST_FilesToDelete();
   std::sort(actual_files_to_delete.begin(), actual_files_to_delete.end());
   EXPECT_EQ(actual_files_to_delete, files_to_delete);
 
@@ -3158,7 +3167,7 @@ TEST_F(CloudTest, UnscheduleFileDeletionTest) {
 TEST_F(CloudTest, UnscheduleUnknownFileTest) {
   auto scheduler = CloudScheduler::Get();
   auto deletion_scheduler =
-      CloudFileDeletionScheduler::Create(scheduler, std::chrono::hours(1));
+      DefaultCloudFileDeletionScheduler::Create(scheduler);
   deletion_scheduler->UnscheduleFileDeletion("unknown file");
 }
 

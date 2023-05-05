@@ -33,9 +33,13 @@ CloudFileSystemImpl::CloudFileSystemImpl(
     const CloudFileSystemOptions& opts, const std::shared_ptr<FileSystem>& base,
     const std::shared_ptr<Logger>& l)
     : CloudFileSystem(opts, base, l), purger_is_running_(true) {
-  scheduler_ = CloudScheduler::Get();
-  cloud_file_deletion_scheduler_ =
-      CloudFileDeletionScheduler::Create(scheduler_, opts.cloud_file_deletion_delay);
+  file_deletion_delay_ = opts.cloud_file_deletion_delay;
+  if (opts.cloud_file_deletion_scheduler) {
+    cloud_file_deletion_scheduler_ = std::move(opts.cloud_file_deletion_scheduler);
+  } else {
+    scheduler_ = CloudScheduler::Get();
+    cloud_file_deletion_scheduler_ = DefaultCloudFileDeletionScheduler::Create(scheduler_);
+  }
 }
 
 CloudFileSystemImpl::~CloudFileSystemImpl() {
@@ -793,7 +797,7 @@ void CloudFileSystemImpl::RemoveFileFromDeletionQueue(
 
 void CloudFileSystemImpl::TEST_SetFileDeletionDelay(
     std::chrono::seconds delay) {
-  cloud_file_deletion_scheduler_->TEST_SetFileDeletionDelay(delay);
+  file_deletion_delay_ = delay;
 }
 
 IOStatus CloudFileSystemImpl::CopyLocalFileToDest(
@@ -829,7 +833,7 @@ IOStatus CloudFileSystemImpl::DeleteCloudFileFromDest(
         }
       };
   return cloud_file_deletion_scheduler_->ScheduleFileDeletion(
-      base, std::move(file_deletion_runnable));
+      base, std::move(file_deletion_runnable), file_deletion_delay_);
 }
 
 // Copy my IDENTITY file to cloud storage. Update dbid registry.

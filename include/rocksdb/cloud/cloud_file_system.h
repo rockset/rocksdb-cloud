@@ -179,6 +179,20 @@ class AwsCloudOptions {
       Aws::Client::ClientConfiguration* config);
 };
 
+class CloudFileDeletionScheduler {
+public:
+  virtual ~CloudFileDeletionScheduler() = default;
+
+  using FileDeletionRunnable = std::function<void()>;
+  // Schedule the file deletion runnable(which actually deletes the file from
+  // cloud) to be executed in the future.
+  virtual rocksdb::IOStatus ScheduleFileDeletion(
+      const std::string& filename, FileDeletionRunnable runnable,
+      std::chrono::seconds delay) = 0;
+  
+  virtual void UnscheduleFileDeletion(const std::string& filename) = 0;
+};
+
 //
 // The cloud file system for rocksdb. It allows configuring the rocksdb
 // FileSystem used for the cloud.
@@ -398,10 +412,16 @@ class CloudFileSystemOptions {
 
   // Experimental option!
   // Delay after files(including both invisible and obsolete files) are
-  // scheduled to be deleted
+  // scheduled to be deleted.
   //
   // Default: 1 hour
   std::chrono::seconds cloud_file_deletion_delay;
+
+  // Experimental option!
+  // Specifies a custom cloud file deletion scheduler.
+  // If null, a default cloud file deletion scheduler will be used
+  // Default: null
+  std::shared_ptr<CloudFileDeletionScheduler> cloud_file_deletion_scheduler;
 
   CloudFileSystemOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
@@ -424,8 +444,9 @@ class CloudFileSystemOptions {
       bool _roll_cloud_manifest_on_open = true,
       std::string _cookie_on_open = "", std::string _new_cookie_on_open = "",
       bool _delete_cloud_invisible_files_on_open = true,
-      std::chrono::seconds _cloud_file_deletion_delay =
-          std::chrono::hours(1))
+      std::chrono::seconds _cloud_file_deletion_delay = std::chrono::hours(1),
+      std::shared_ptr<CloudFileDeletionScheduler>
+          _cloud_file_deletion_scheduler = nullptr)
       : log_type(_log_type),
         sst_file_cache(_sst_file_cache),
         keep_local_sst_files(_keep_local_sst_files),
@@ -453,8 +474,9 @@ class CloudFileSystemOptions {
         new_cookie_on_open(_new_cookie_on_open),
         delete_cloud_invisible_files_on_open(
             _delete_cloud_invisible_files_on_open),
-        cloud_file_deletion_delay(
-            _cloud_file_deletion_delay) {
+        cloud_file_deletion_delay(_cloud_file_deletion_delay),
+        cloud_file_deletion_scheduler(
+            std::move(_cloud_file_deletion_scheduler)) {
     (void) _cloud_type;
   }
 

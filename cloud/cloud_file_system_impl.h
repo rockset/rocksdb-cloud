@@ -18,7 +18,6 @@ namespace ROCKSDB_NAMESPACE {
 class CloudScheduler;
 class CloudStorageReadableFile;
 class ObjectLibrary;
-class CloudFileDeletionScheduler;
 
 //
 // The Cloud file system
@@ -402,6 +401,7 @@ class CloudFileSystemImpl : public CloudFileSystem {
   // scratch space in local dir
   static constexpr const char* SCRATCH_LOCAL_DIR = "/tmp";
   std::shared_ptr<CloudFileDeletionScheduler> cloud_file_deletion_scheduler_;
+  std::chrono::seconds file_deletion_delay_{std::chrono::hours(1)};
 };
 
 }  // namespace ROCKSDB_NAMESPACE

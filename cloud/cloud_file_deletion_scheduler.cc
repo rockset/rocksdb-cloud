@@ -7,14 +7,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-std::shared_ptr<CloudFileDeletionScheduler> CloudFileDeletionScheduler::Create(
-     const std::shared_ptr<CloudScheduler>& scheduler,
-     std::chrono::seconds file_deletion_delay) {
-  return std::make_shared<CloudFileDeletionScheduler>(PrivateTag(), scheduler,
-                                                      file_deletion_delay);
+std::shared_ptr<CloudFileDeletionScheduler>
+DefaultCloudFileDeletionScheduler::Create(
+    const std::shared_ptr<CloudScheduler>& scheduler) {
+  return std::make_shared<DefaultCloudFileDeletionScheduler>(PrivateTag(),
+                                                             scheduler);
 }
 
-CloudFileDeletionScheduler::~CloudFileDeletionScheduler() {
+DefaultCloudFileDeletionScheduler::~DefaultCloudFileDeletionScheduler() {
   TEST_SYNC_POINT(
       "CloudFileDeletionScheduler::~CloudFileDeletionScheduler:"
       "BeforeCancelJobs");
@@ -23,7 +23,7 @@ CloudFileDeletionScheduler::~CloudFileDeletionScheduler() {
   // `LocalCloudScheduler` will remove the jobs in the queue when destructed
 }
 
-void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filename) {
+void DefaultCloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filename) {
   std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
   auto itr = files_to_delete_.find(filename);
   if (itr != files_to_delete_.end()) {
@@ -32,8 +32,8 @@ void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filen
   }
 }
 
-rocksdb::IOStatus CloudFileDeletionScheduler::ScheduleFileDeletion(
-    const std::string& fname, FileDeletionRunnable runnable) {
+rocksdb::IOStatus DefaultCloudFileDeletionScheduler::ScheduleFileDeletion(
+    const std::string& fname, FileDeletionRunnable runnable, std::chrono::seconds delay) {
   auto wp = this->weak_from_this();
   auto doDeleteFile = [wp = std::move(wp), fname, runnable = std::move(runnable)](void*) {
     TEST_SYNC_POINT(
@@ -57,14 +57,15 @@ rocksdb::IOStatus CloudFileDeletionScheduler::ScheduleFileDeletion(
       return IOStatus::OK();
     }
 
-    auto handle = scheduler_->ScheduleJob(file_deletion_delay_,
-                                          std::move(doDeleteFile), nullptr);
+    auto handle = scheduler_->ScheduleJob(
+        std::chrono::duration_cast<std::chrono::microseconds>(delay),
+        std::move(doDeleteFile), nullptr);
     files_to_delete_.emplace(fname, std::move(handle));
   }
   return IOStatus::OK();
 }
 
-void CloudFileDeletionScheduler::DoDeleteFile(const std::string& fname,
+void DefaultCloudFileDeletionScheduler::DoDeleteFile(const std::string& fname,
                                               FileDeletionRunnable runnable) {
   {
     std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
