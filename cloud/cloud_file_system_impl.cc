@@ -804,31 +804,30 @@ IOStatus CloudFileSystemImpl::DeleteCloudFileFromDest(
   auto base = basename(fname);
   auto path = GetDestObjectPath() + pathsep + base;
   auto bucket = GetDestBucketName();
-  if (cloud_file_deletion_scheduler_) {
-    std::weak_ptr<Logger> info_log_wp = info_log_;
-    std::weak_ptr<CloudStorageProvider> storage_provider_wp =
-        GetStorageProvider();
-    auto file_deletion_runnable =
-        [path = std::move(path), bucket = std::move(bucket),
-         info_log_wp = std::move(info_log_wp),
-         storage_provider_wp = std::move(storage_provider_wp)]() {
-          auto storage_provider = storage_provider_wp.lock();
-          auto info_log = info_log_wp.lock();
-          if (!storage_provider || !info_log) {
-            return;
-          }
-          auto st = storage_provider->DeleteCloudObject(bucket, path);
-          if (!st.ok() && !st.IsNotFound()) {
-            Log(InfoLogLevel::ERROR_LEVEL, info_log,
-                "[CloudFileSystemImpl] DeleteFile file %s error %s",
-                path.c_str(), st.ToString().c_str());
-          }
-        };
-    return cloud_file_deletion_scheduler_->ScheduleFileDeletion(
-        base, std::move(file_deletion_runnable));
-  } else {
+  if (!cloud_file_deletion_scheduler_) {
     return GetStorageProvider()->DeleteCloudObject(bucket, path);
   }
+  std::weak_ptr<Logger> info_log_wp = info_log_;
+  std::weak_ptr<CloudStorageProvider> storage_provider_wp =
+      GetStorageProvider();
+  auto file_deletion_runnable =
+      [path = std::move(path), bucket = std::move(bucket),
+       info_log_wp = std::move(info_log_wp),
+       storage_provider_wp = std::move(storage_provider_wp)]() {
+        auto storage_provider = storage_provider_wp.lock();
+        auto info_log = info_log_wp.lock();
+        if (!storage_provider || !info_log) {
+          return;
+        }
+        auto st = storage_provider->DeleteCloudObject(bucket, path);
+        if (!st.ok() && !st.IsNotFound()) {
+          Log(InfoLogLevel::ERROR_LEVEL, info_log,
+              "[CloudFileSystemImpl] DeleteFile file %s error %s", path.c_str(),
+              st.ToString().c_str());
+        }
+      };
+  return cloud_file_deletion_scheduler_->ScheduleFileDeletion(
+      base, std::move(file_deletion_runnable));
 }
 
 // Copy my IDENTITY file to cloud storage. Update dbid registry.
