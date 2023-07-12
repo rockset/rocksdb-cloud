@@ -146,9 +146,9 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
     }
   }
   if (new_db) {
-    if (!options.create_if_missing) {
+    if (read_only || !options.create_if_missing) {
       return Status::NotFound(
-          "CLOUDMANIFEST not found and create_if_missing false");
+          "CLOUDMANIFEST not found and not creating new db");
     }
     st = cfs->CreateCloudManifest(
         local_dbname, cfs->GetCloudFileSystemOptions().new_cookie_on_open);
