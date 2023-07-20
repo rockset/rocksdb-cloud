@@ -200,17 +200,11 @@ char* Arena::AllocateAligned(size_t bytes, size_t huge_page_size,
 }
 
 char* Arena::AllocateNewBlock(size_t block_bytes) {
-  // Reserve space in `blocks_` before allocating memory via new.
-  // Use `emplace_back()` instead of `reserve()` to let std::vector manage its
-  // own memory and do fewer reallocations.
-  //
-  // - If `emplace_back` throws, no memory leaks because we haven't called `new`
-  //   yet.
-  // - If `new` throws, no memory leaks because the vector will be cleaned up
-  //   via RAII.
-  blocks_.emplace_back(nullptr);
-
+  // NOTE: std::make_unique zero-initializes the block so is not appropriate
+  // here
   char* block = new char[block_bytes];
+  blocks_.push_back(std::unique_ptr<char[]>(block));
+
   size_t allocated_size;
 #ifdef ROCKSDB_MALLOC_USABLE_SIZE
   allocated_size = malloc_usable_size(block);
