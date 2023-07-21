@@ -25,15 +25,6 @@
 #include "test_util/sync_point.h"
 #include "util/rate_limiter.h"
 
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
-// VerifyFileChecksums is a weak symbol.
-// If it is defined and returns true, and options.best_efforts_recovery = true,
-// and file checksum is enabled, then the checksums of table files will be
-// computed and verified with MANIFEST.
-extern "C" bool RocksDbFileChecksumsVerificationEnabledOnRecovery()
-    __attribute__((__weak__));
-#endif  // !ROCKSDB_LITE && OS_LINUX
-
 namespace ROCKSDB_NAMESPACE {
 Options SanitizeOptions(const std::string& dbname, const Options& src,
                         bool read_only, Status* logger_creation_s) {
@@ -1645,22 +1636,6 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
       InternalStats::BYTES_FLUSHED,
       stats.bytes_written + stats.bytes_written_blob);
   RecordTick(stats_, COMPACT_WRITE_BYTES, meta.fd.GetFileSize());
-  return s;
-}
-
-Status DBImpl::MaybeVerifyFileChecksums() {
-  Status s;
-#if !defined(ROCKSDB_LITE) && defined(OS_LINUX)
-  // TODO: remove the VerifyFileChecksums() call because it's very expensive.
-  if (immutable_db_options_.best_efforts_recovery &&
-      RocksDbFileChecksumsVerificationEnabledOnRecovery &&
-      RocksDbFileChecksumsVerificationEnabledOnRecovery() &&
-      immutable_db_options_.file_checksum_gen_factory) {
-    s = VerifyFileChecksums(ReadOptions());
-    ROCKS_LOG_INFO(immutable_db_options_.info_log,
-                   "Verified file checksums: %s\n", s.ToString().c_str());
-  }
-#endif  // !ROCKSDB_LITE && OS_LINUX
   return s;
 }
 

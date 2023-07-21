@@ -28,10 +28,6 @@
 #include "util/random.h"
 #include "logging/logging.h"
 
-extern "C" bool RocksDbFileChecksumsVerificationEnabledOnRecovery() {
-  return true;
-}
-
 namespace ROCKSDB_NAMESPACE {
 
 namespace {
