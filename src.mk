@@ -25,7 +25,6 @@ LIB_SOURCES =                                                   \
   cloud/cloud_manifest.cc                                       \
   cloud/cloud_scheduler.cc                                      \
   cloud/cloud_storage_provider.cc                               \
-  cloud/cloud_file_cache.cc                                     \
   cloud/cloud_file_deletion_scheduler.cc                        \
   db/arena_wrapped_db_iter.cc                                   \
   db/blob/blob_contents.cc                                      \

@@ -988,7 +988,6 @@ set(SOURCES
         cloud/cloud_manifest.cc
         cloud/cloud_scheduler.cc
         cloud/cloud_storage_provider.cc
-        cloud/cloud_file_cache.cc
         cloud/cloud_file_deletion_scheduler.cc
         db/db_impl/db_impl_remote_compaction.cc
         db/db_impl/replication_codec.cc)
