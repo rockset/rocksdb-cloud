@@ -270,7 +270,8 @@ Status DBImpl::ValidateOptions(const DBOptions& db_options) {
   if (db_options.unordered_write &&
       !db_options.allow_concurrent_memtable_write) {
     return Status::InvalidArgument(
-        "unordered_write is incompatible with !allow_concurrent_memtable_write");
+        "unordered_write is incompatible with "
+        "!allow_concurrent_memtable_write");
   }
 
   if (db_options.unordered_write && db_options.enable_pipelined_write) {
@@ -1076,9 +1077,8 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
     std::unique_ptr<SequentialFileReader> file_reader;
     {
       std::unique_ptr<FSSequentialFile> file;
-      status = fs_->NewSequentialFile(fname,
-                                      fs_->OptimizeForLogRead(file_options_),
-                                      &file, nullptr);
+      status = fs_->NewSequentialFile(
+          fname, fs_->OptimizeForLogRead(file_options_), &file, nullptr);
       if (!status.ok()) {
         MaybeIgnoreError(&status);
         if (!status.ok()) {
@@ -1535,7 +1535,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
         .PermitUncheckedError();  // ignore error
     const uint64_t current_time = static_cast<uint64_t>(_current_time);
     meta.oldest_ancester_time = current_time;
-
+    meta.epoch_number = cfd->NewEpochNumber();
     {
       auto write_hint = cfd->CalculateSSTWriteHint(0);
       mutex_.Unlock();
@@ -1570,6 +1570,8 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
           0 /* file_creation_time */, db_id_, db_session_id_,
           0 /* target_file_size */, meta.fd.GetNumber());
       SeqnoToTimeMapping empty_seqno_time_mapping;
+      Version* version = cfd->current();
+      version->Ref();
       s = BuildTable(
           dbname_, versions_.get(), immutable_db_options_, tboptions,
           file_options_for_compaction_, cfd->table_cache(), iter.get(),
@@ -1579,7 +1581,8 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
           io_tracer_, BlobFileCreationReason::kRecovery,
           empty_seqno_time_mapping, &event_logger_, job_id, Env::IO_HIGH,
           nullptr /* table_properties */, write_hint,
-          nullptr /*full_history_ts_low*/, &blob_callback_);
+          nullptr /*full_history_ts_low*/, &blob_callback_, version);
+      version->Unref();
       LogFlush(immutable_db_options_.info_log);
       ROCKS_LOG_DEBUG(immutable_db_options_.info_log,
                       "[%s] [WriteLevel0TableForRecovery]"
@@ -1608,8 +1611,9 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
                   meta.fd.smallest_seqno, meta.fd.largest_seqno,
                   meta.marked_for_compaction, meta.temperature,
                   meta.oldest_blob_file_number, meta.oldest_ancester_time,
-                  meta.file_creation_time, meta.file_checksum,
-                  meta.file_checksum_func_name, meta.unique_id);
+                  meta.file_creation_time, meta.epoch_number,
+                  meta.file_checksum, meta.file_checksum_func_name,
+                  meta.unique_id, meta.compensated_range_deletion_size);
 
     for (const auto& blob : blob_file_additions) {
       edit->AddBlobFile(blob);
