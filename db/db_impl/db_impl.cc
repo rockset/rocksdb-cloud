@@ -1217,6 +1217,7 @@ std::string DescribeVersionEdit(const VersionEdit& e, ColumnFamilyData* cfd) {
       }
       first = false;
       oss << f.second.fd.GetNumber();
+      oss << ":" << f.second.epoch_number;
     }
     oss << "] ";
   }
@@ -1424,9 +1425,108 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           autovector<VersionEdit*> el;
           el.push_back(&e);
           edit_lists.push_back(std::move(el));
-
           ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s",
                          DescribeVersionEdit(e, cfd).c_str());
+          auto& newFiles = e.GetNewFiles();
+          if (!(flags & AR_REPLICATE_EPOCH_NUM)) {
+            // Epoch number calculation on the fly.
+            // There are two cases in which we need to calculate epoch number
+            // when applying `kManifestWrite`
+            // 1. flush which generates L0 files. epoch number is allocated
+            // based on `next_epoch_number` of each CF. The L0 files are sorted
+            // based on `largest seqno`. 
+            // 2. compaction which merges files in lower levels to higher
+            // levels. epoch number = min epoch number of input files.
+            const auto& deletedFiles = e.GetDeletedFiles();
+            bool epoch_recovery_succeeded = true;
+            std::ostringstream err_oss;
+            if (deletedFiles.empty() && !newFiles.empty()) {
+              // case 1: flush into L0 files. New files must be level 0
+
+              for (auto& p : newFiles) {
+                if (p.first != 0) {
+                  epoch_recovery_succeeded = false;
+                  err_oss << "newly flushed file: " << p.first << " is not at L0";
+                  break;
+                }
+              }
+
+              // sort added files by largest seqno
+              std::vector<FileMetaData*> added_files;
+              for(auto& p: newFiles) {
+                added_files.push_back(&p.second);
+              }
+
+              NewestFirstBySeqNo cmp;
+              std::sort(added_files.begin(), added_files.end(), cmp);
+              auto first_file = added_files[0];
+              // Rewind/advance next_epoch_number. This is necessary if epoch_number
+              // mismtaches due to db reopen.
+              if (first_file->epoch_number != kUnknownEpochNumber &&
+                  first_file->epoch_number != cfd->GetNextEpochNumber() &&
+                  (flags & AR_RESET_IF_EPOCH_MISMATCH)) {
+                auto max_epoch_number =
+                    cfd->current()->storage_info()->GetMaxEpochNumberOfFiles();
+                if (first_file->epoch_number < cfd->GetNextEpochNumber() &&
+                    (first_file->epoch_number == max_epoch_number + 1)) {
+                  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                                 "[%s] rewind next_epoch_number from: %" PRIu64
+                                 " to %" PRIu64,
+                                 cfd->GetName().c_str(),
+                                 cfd->GetNextEpochNumber(),
+                                 max_epoch_number + 1);
+                  cfd->SetNextEpochNumber(max_epoch_number + 1);
+                } else if (first_file->epoch_number >
+                               cfd->GetNextEpochNumber() &&
+                           (cfd->GetNextEpochNumber() ==
+                            max_epoch_number + 1)) {
+                  ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                                 "[%s] advance next_epoch_number from: %" PRIu64
+                                 " to %" PRIu64,
+                                 cfd->GetName().c_str(),
+                                 cfd->GetNextEpochNumber(),
+                                 first_file->epoch_number);
+                  cfd->SetNextEpochNumber(first_file->epoch_number);
+                }
+              }
+
+              for (auto meta: added_files) {
+                auto old_epoch_number = meta->epoch_number;
+                meta->epoch_number = cfd->NewEpochNumber();
+                if (old_epoch_number != meta->epoch_number) {
+                  info->mismatched_epoch_num += 1;
+                }
+              }
+            } else if (!deletedFiles.empty() && !newFiles.empty()) {
+              // case 2: compaction
+              uint64_t min_input_epoch_number =
+                  std::numeric_limits<uint64_t>::max();
+              const auto& storage_info = cfd->current()->storage_info();
+              for (auto [level, file_number] : deletedFiles) {
+                auto meta = storage_info->GetFileMetaDataByNumber(file_number);
+                if (!meta) {
+                  err_oss << "deleted file: " << file_number
+                          << " at level: " << level << " not found";
+                  break;
+                }
+                min_input_epoch_number =
+                    std::min(meta->epoch_number, min_input_epoch_number);
+              }
+
+              for (auto& p: newFiles) {
+                auto old_epoch_number = p.second.epoch_number;
+                p.second.epoch_number = min_input_epoch_number;
+                if (old_epoch_number != p.second.epoch_number) {
+                  info->mismatched_epoch_num += 1;
+                }
+              }
+            }
+
+            if (!epoch_recovery_succeeded) {
+              s = Status::Corruption(err_oss.str());
+              break;
+            }
+          }
         }
         if (!s.ok()) {
           break;
