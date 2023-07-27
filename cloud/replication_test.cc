@@ -61,19 +61,44 @@ class Listener : public ReplicationLogListener {
   State state_{OPEN};
 };
 
+
+class FollowerEnv;
+class FollowerRandomAccessFile: public RandomAccessFile {
+public:
+ FollowerRandomAccessFile(std::unique_ptr<RandomAccessFile> target,
+                          FollowerEnv* env);
+
+ Status Read(uint64_t offset, size_t n, Slice* result,
+             char* scratch) const override;
+private:
+  std::unique_ptr<RandomAccessFile> target_;
+  FollowerEnv* env_;
+};
+
 class FollowerEnv : public EnvWrapper {
  public:
-  FollowerEnv(std::string leader_path)
-      : EnvWrapper(Env::Default()), leader_path_(std::move(leader_path)) {}
+  FollowerEnv(std::string leader_path, Env* base_env)
+      : EnvWrapper(base_env), leader_path_(std::move(leader_path)) {}
 
   Status NewRandomAccessFile(const std::string& fname,
                              std::unique_ptr<RandomAccessFile>* result,
                              const EnvOptions& options) override {
-    return EnvWrapper::NewRandomAccessFile(mapFilename(fname), result, options);
+    auto s = EnvWrapper::NewRandomAccessFile(mapFilename(fname), result, options);
+    if (!s.ok()) {
+      return s;
+    }
+
+    result->reset(new FollowerRandomAccessFile(std::move(*result), this));
+    return s;
   };
 
   Status GetFileSize(const std::string& fname, uint64_t* file_size) override {
     return EnvWrapper::GetFileSize(mapFilename(fname), file_size);
+  }
+
+  bool shouldFailRandomRead() const { return simulate_random_read_failure_; }
+  void setSimulateRandomReadFailure(bool simulate) {
+    simulate_random_read_failure_ = simulate;
   }
 
  private:
@@ -85,7 +110,24 @@ class FollowerEnv : public EnvWrapper {
   }
 
   std::string leader_path_;
+
+  // If true, return io error for random access read
+  bool simulate_random_read_failure_ = false;
 };
+
+FollowerRandomAccessFile::FollowerRandomAccessFile(
+    std::unique_ptr<RandomAccessFile> target, FollowerEnv* env)
+    : target_(std::move(target)), env_(env) {}
+
+
+Status FollowerRandomAccessFile::Read(uint64_t offset, size_t n, Slice* result,
+             char* scratch) const {
+    if (env_->shouldFailRandomRead()) {
+      return Status::IOError("simulated error");
+    }
+
+    return target_->Read(offset, n, result, scratch);
+}
 
 int getPersistedSequence(DB* db) {
   std::string out;
@@ -138,7 +180,8 @@ Status countWalFiles(Env* env, const std::string& path, size_t* out) {
 class ReplicationTest : public testing::Test {
  public:
   ReplicationTest()
-      : test_dir_(test::TmpDir()), follower_env_(test_dir_ + "/leader") {
+      : test_dir_(test::TmpDir()),
+        follower_env_(leaderPath(), Env::Default()) {
     auto base_env = Env::Default();
     DestroyDir(base_env, test_dir_ + "/leader");
     DestroyDir(base_env, test_dir_ + "/follower");
@@ -194,7 +237,7 @@ class ReplicationTest : public testing::Test {
   }
 
   DB* openFollower() {
-    return openFollower(leaderOptions());
+    return openFollower(followerOptions());
   }
   DB* openFollower(Options options);
 
@@ -204,6 +247,7 @@ class ReplicationTest : public testing::Test {
   }
 
   Options leaderOptions() const;
+  Options followerOptions();
 
   // catching up follower for `num_records`. If `num_records` not specified,
   // it will catch up until end of log
@@ -293,6 +337,9 @@ protected:
   void resetFollowerSequence(int new_seq) {
     followerSequence_ = new_seq;
   }
+  FollowerEnv& followerEnv() {
+    return follower_env_;
+  }
  private:
   std::string test_dir_;
   FollowerEnv follower_env_;
@@ -318,6 +365,16 @@ Options ReplicationTest::leaderOptions() const {
   options.max_open_files = 500;
   options.max_bytes_for_level_base = 1 << 20;
   options.info_log = info_log_;
+  return options;
+}
+
+Options ReplicationTest::followerOptions() {
+  auto options = leaderOptions();
+  options.env = &follower_env_;
+  options.disable_auto_compactions = true;
+  // write buffer size of follower is much smaller than leader to help verify
+  // that disable_auto_flush works as expected
+  options.write_buffer_size = 10 << 10;
   return options;
 }
 
@@ -385,13 +442,6 @@ DB* ReplicationTest::openFollower(Options options) {
   if (!s.ok()) {
     cf_names.push_back(kDefaultColumnFamilyName);
   }
-
-  options.env = &follower_env_;
-  options.disable_auto_compactions = true;
-  // write buffer size of follower is much smaller than leader to help verify
-  // that disable_auto_flush works as expected
-  options.write_buffer_size = 10 << 10;
-  options.disable_auto_flush = true;
 
   std::vector<ColumnFamilyDescriptor> column_families;
   for (auto& name : cf_names) {
@@ -1199,6 +1249,24 @@ TEST_F(ReplicationTest, DeleteRange) {
 
   EXPECT_EQ(getAllKeys(leader, leaderCF(cf(0))).size(), 78);
   verifyEqual();
+}
+
+// Simulate footer load failure when follower applies manifest write
+TEST_F(ReplicationTest, IgnoreFooterLoadFailure) {
+  auto leader = openLeader();
+  auto follower = openFollower();
+  ASSERT_OK(leader->Put(wo(), "k1", "v1"));
+  ASSERT_OK(leader->Flush({}));
+  // memtable write and memtable switch
+  EXPECT_EQ(catchUpFollower(2), 2);
+  followerEnv().setSimulateRandomReadFailure(true);
+  EXPECT_EQ(catchUpFollower(), 1);
+  std::string v;
+  EXPECT_TRUE(follower->Get({}, "k1", &v).IsIOError());
+
+  followerEnv().setSimulateRandomReadFailure(false);
+  EXPECT_OK(follower->Get({}, "k1", &v));
+  EXPECT_EQ(v, "v1");
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

@@ -4829,7 +4829,8 @@ void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
 Status VersionSet::ProcessManifestWrites(
     std::deque<ManifestWriter>& writers, InstrumentedMutex* mu,
     FSDirectory* dir_contains_current_file, bool new_descriptor_log,
-    const ColumnFamilyOptions* new_cf_options) {
+    const ColumnFamilyOptions* new_cf_options,
+    bool ignore_table_load_error) {
   mu->AssertHeld();
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
@@ -5111,8 +5112,14 @@ Status VersionSet::ProcessManifestWrites(
             mutable_cf_options_ptrs[i]->prefix_extractor,
             MaxFileSizeForL0MetaPin(*mutable_cf_options_ptrs[i]));
         if (!s.ok()) {
-          if (db_options_->paranoid_checks) {
+          // ignore_table_load_error has higher precedence than paranoid_checks
+          if (!ignore_table_load_error && db_options_->paranoid_checks) {
             break;
+          }
+          if (ignore_table_load_error) {
+            ROCKS_LOG_INFO(db_options_->info_log,
+                           "Ignore LoadTableHandler error: %s",
+                           s.ToString().c_str());
           }
           s = Status::OK();
         }
@@ -5451,7 +5458,8 @@ Status VersionSet::LogAndApply(
     const autovector<autovector<VersionEdit*>>& edit_lists,
     InstrumentedMutex* mu, FSDirectory* dir_contains_current_file,
     bool new_descriptor_log, const ColumnFamilyOptions* new_cf_options,
-    const std::vector<std::function<void(const Status&)>>& manifest_wcbs) {
+    const std::vector<std::function<void(const Status&)>>& manifest_wcbs,
+    bool ignore_table_load_error) {
   mu->AssertHeld();
   int num_edits = 0;
   for (const auto& elist : edit_lists) {
@@ -5525,7 +5533,8 @@ Status VersionSet::LogAndApply(
     return Status::ColumnFamilyDropped();
   }
   return ProcessManifestWrites(writers, mu, dir_contains_current_file,
-                               new_descriptor_log, new_cf_options);
+                               new_descriptor_log, new_cf_options,
+                               ignore_table_load_error);
 }
 
 void VersionSet::LogAndApplyCFHelper(VersionEdit* edit,

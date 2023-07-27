@@ -1429,8 +1429,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         }
         s = versions_->LogAndApply(cfds, mutable_cf_options_list, edit_lists,
                                    &mutex_, directories_.GetDbDir(),
-                                   false /* new_descriptor_log */,
-                                   &*cf_options);
+                                   false /* new_descriptor_log */, &*cf_options,
+                                   {} /* manifest_wcbs */,
+                                   true /* ignore_table_load_error */);
         if (!s.ok()) {
           break;
         }

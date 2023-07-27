@@ -1156,6 +1156,9 @@ class VersionSet {
   // The across-multi-cf batch version. If edit_lists contain more than
   // 1 version edits, caller must ensure that no edit in the []list is column
   // family manipulation.
+  //
+  // `ignore_table_load_error`: if true, errors of loading newly added table
+  // handlers are ignored even if paranoid_checks is true.
   virtual Status LogAndApply(
       const autovector<ColumnFamilyData*>& cfds,
       const autovector<const MutableCFOptions*>& mutable_cf_options_list,
@@ -1164,7 +1167,8 @@ class VersionSet {
       bool new_descriptor_log = false,
       const ColumnFamilyOptions* new_cf_options = nullptr,
       const std::vector<std::function<void(const Status&)>>& manifest_wcbs =
-          {});
+          {},
+      bool ignore_table_load_error = false);
 
   static Status GetCurrentManifestPath(const std::string& dbname,
                                        FileSystem* fs,
@@ -1603,7 +1607,8 @@ class VersionSet {
                                InstrumentedMutex* mu,
                                FSDirectory* dir_contains_current_file,
                                bool new_descriptor_log,
-                               const ColumnFamilyOptions* new_cf_options);
+                               const ColumnFamilyOptions* new_cf_options,
+                               bool ignore_table_load_error);
 
   void LogAndApplyCFHelper(VersionEdit* edit,
                            SequenceNumber* max_last_sequence);
@@ -1665,7 +1670,8 @@ class ReactiveVersionSet : public VersionSet {
       const autovector<autovector<VersionEdit*>>& /*edit_lists*/,
       InstrumentedMutex* /*mu*/, FSDirectory* /*dir_contains_current_file*/,
       bool /*new_descriptor_log*/, const ColumnFamilyOptions* /*new_cf_option*/,
-      const std::vector<std::function<void(const Status&)>>& /*manifest_wcbs*/)
+      const std::vector<std::function<void(const Status&)>>& /*manifest_wcbs*/,
+      bool /* ignore_table_load_error */)
       override {
     return Status::NotSupported("not supported in reactive mode");
   }
