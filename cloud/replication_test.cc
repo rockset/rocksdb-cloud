@@ -274,7 +274,8 @@ class ReplicationTest : public testing::Test {
   void verifyLSMTEqual(ColumnFamilyHandle* h1, ColumnFamilyHandle* h2) {
     auto cf1 = static_cast_with_check<ColumnFamilyHandleImpl>(h1)->cfd(),
          cf2 = static_cast_with_check<ColumnFamilyHandleImpl>(h2)->cfd();
-    ASSERT_EQ(cf1->NumberLevels(), cf2->NumberLevels());
+    ASSERT_EQ(cf1->NumberLevels(), cf2->NumberLevels())
+        << h1->GetName() << ", " << h2->GetName();
 
     for (int level = 0; level < cf1->NumberLevels(); level++) {
         auto files1 = cf1->current()->storage_info()->LevelFiles(level),
@@ -1191,10 +1192,18 @@ TEST_P(ReplicationTestWithParam, Stress) {
       leaderFull()->TEST_WaitForBackgroundWork());
   };
 
+  auto verifyNextEpochNumber = [&]() {
+    for (int i = 0; i < kColumnFamilyCount; i++) {
+      auto cf1 = leaderCFD(cf(i)), cf2 = followerCFD(cf(i));
+      ASSERT_EQ(cf1->GetNextEpochNumber(), cf2->GetNextEpochNumber());
+    }
+  };
+
   do_writes();
 
   catchUpFollower();
   verifyEqual();
+  verifyNextEpochNumber();
 
   ROCKS_LOG_INFO(info_log_, "reopen leader");
 
@@ -1218,6 +1227,7 @@ TEST_P(ReplicationTestWithParam, Stress) {
   catchUpFollower();
 
   verifyEqual();
+  verifyNextEpochNumber();
 }
 
 INSTANTIATE_TEST_CASE_P(ReplicationTest, ReplicationTestWithParam,
