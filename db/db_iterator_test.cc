@@ -822,7 +822,8 @@ TEST_P(DBIteratorTest, IterWithSnapshot) {
     ReadOptions options2;
     options.snapshot = snapshot2;
     Iterator* iter2 = NewIterator(options2, handles_[1]);
-    ASSERT_GT(db_->GetIteratorSequenceNumber(iter2), db_->GetIteratorSequenceNumber(iter));
+    ASSERT_GT(db_->GetIteratorSequenceNumber(iter2),
+              db_->GetIteratorSequenceNumber(iter));
 
     // Now check only the new iterator has the value added after the initial
     // snapshot.

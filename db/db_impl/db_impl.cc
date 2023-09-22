@@ -4087,11 +4087,11 @@ Status DBImpl::NewIterators(
 }
 
 SequenceNumber DBImpl::GetIteratorSequenceNumber(Iterator* it) {
-    auto arena_wrapped = dynamic_cast<ArenaWrappedDBIter*>(it);
-    if (!arena_wrapped) {
-        return SequenceNumber(0);
-    }
-    return arena_wrapped->get_sequence();
+  auto arena_wrapped = dynamic_cast<ArenaWrappedDBIter*>(it);
+  if (!arena_wrapped) {
+    return SequenceNumber(0);
+  }
+  return arena_wrapped->get_sequence();
 }
 
 const Snapshot* DBImpl::GetSnapshot() { return GetSnapshotImpl(false); }
