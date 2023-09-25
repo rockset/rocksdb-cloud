@@ -2304,7 +2304,7 @@ IOStatus CloudFileSystemImpl::FindAllLiveFiles(
   return IOStatus::OK();
 }
 
-IOStatus CloudFileSystemImpl::ReadManifestLiveFiles(
+IOStatus CloudFileSystemImpl::FindLiveFilesFromLocalManifest(
     const std::string& manifest_file,
     std::vector<std::string>* live_sst_files) {
   std::unique_ptr<LocalManifestReader> extractor(

@@ -248,7 +248,9 @@ class MockCloudFileSystem : public CloudFileSystem {
     return notsup_;
   }
 
-  IOStatus ReadManifestLiveFiles(const std::string& /* manifest_file */, std::vector<std::string>* /* live_sst_files */) override {
+  IOStatus FindLiveFilesFromLocalManifest(
+      const std::string& /* manifest_file */,
+      std::vector<std::string>* /* live_sst_files */) override {
     return notsup_;
   }
 

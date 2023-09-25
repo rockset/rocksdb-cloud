@@ -159,7 +159,7 @@ class CloudFileSystemImpl : public CloudFileSystem {
                             std::vector<std::string>* live_sst_files,
                             std::string* manifest_file) override;
 
-  IOStatus ReadManifestLiveFiles(
+  IOStatus FindLiveFilesFromLocalManifest(
       const std::string& manifest_file,
       std::vector<std::string>* live_sst_files) override;
 

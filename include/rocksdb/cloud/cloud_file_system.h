@@ -637,7 +637,7 @@ class CloudFileSystem : public FileSystem {
   // references. Unlike FindAllLiveFiles, this method doesn't resolve the
   // manifest name from the cloud manifest and also doesn't pull the manifest
   // (i.e., it needs to be present locally).
-  virtual IOStatus ReadManifestLiveFiles(
+  virtual IOStatus FindLiveFilesFromLocalManifest(
       const std::string& manifest_file,
       std::vector<std::string>* live_sst_files) = 0;
 
