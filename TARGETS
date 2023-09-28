@@ -375,7 +375,6 @@ cpp_library_wrapper(name="rocksdb_lib", srcs=[
         "//folly/synchronization:distributed_mutex",
     ], headers=None, link_whole=False, extra_test_libs=False)
 
-<<<<<<< HEAD
 cpp_library_wrapper(name="rocksdb_whole_archive_lib", srcs=[
         "cache/cache.cc",
         "cache/cache_entry_roles.cc",
@@ -4983,6 +4982,15 @@ cpp_unittest_wrapper(name="cloud_file_system_test",
             deps=[":rocksdb_test_lib"],
             extra_compiler_flags=[])
 
+cpp_unittest_wrapper(name="gcp_file_system_test",
+            srcs=["cloud/gcp/gcp_file_system_test.cc"],
+            deps=[":rocksdb_test_lib"],
+            extra_compiler_flags=[])
+
+cpp_unittest_wrapper(name="gcp_db_cloud_test",
+            srcs=["cloud/gcp/gcp_db_cloud_test.cc"],
+            deps=[":rocksdb_test_lib"],
+            extra_compiler_flags=[])
 
 cpp_unittest_wrapper(name="cloud_manifest_test",
             srcs=["cloud/cloud_manifest_test.cc"],

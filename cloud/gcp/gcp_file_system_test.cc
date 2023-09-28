@@ -3,15 +3,13 @@
 #include "rocksdb/cloud/cloud_file_system.h"
 
 #include "cloud/cloud_log_controller_impl.h"
+#include "cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
-#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/env.h"
 #include "test_util/testharness.h"
 #include "util/string_util.h"
-
-#include <aws/core/Aws.h>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -112,7 +110,7 @@ TEST(CloudFileSystemTest, ConfigureEnv) {
 
   ConfigOptions config_options;
   config_options.invoke_prepare_options = false;
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
+  ASSERT_OK(CloudFileSystem::CreateFromString(
       config_options, "keep_local_sst_files=true", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -126,7 +124,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   BucketOptions bucket;
   ConfigOptions config_options;
   config_options.invoke_prepare_options = false;
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
+  ASSERT_OK(CloudFileSystem::CreateFromString(
       config_options, "id=cloud; TEST=cloudenvtest:/test/path", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -136,7 +134,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetSrcObjectPath(), "/test/path");
   ASSERT_TRUE(cfs->SrcMatchesDest());
 
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
+  ASSERT_OK(CloudFileSystem::CreateFromString(
       config_options, "id=cloud; TEST=cloudenvtest2:/test/path2?here", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -146,7 +144,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetCloudFileSystemOptions().src_bucket.GetRegion(), "here");
   ASSERT_TRUE(cfs->SrcMatchesDest());
 
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
+  ASSERT_OK(CloudFileSystem::CreateFromString(
       config_options,
       "id=cloud; TEST=cloudenvtest3:/test/path3; "
       "src.bucket=my_bucket; dest.object=/my_path",
@@ -160,64 +158,65 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetDestObjectPath(), "/my_path");
 }
 
-TEST(CloudFileSystemTest, ConfigureAwsEnv) {
+TEST(CloudFileSystemTest, ConfigureGcpEnv) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s = CloudFileSystemEnv::CreateFromString(
-      config_options, "id=aws; keep_local_sst_files=true", &cfs);
-#ifdef USE_AWS
+  Status s = CloudFileSystem::CreateFromString(
+      config_options, "id=gcp; keep_local_sst_files=true", &cfs);
+#ifdef USE_GCP
   ASSERT_OK(s);
   ASSERT_NE(cfs, nullptr);
-  ASSERT_STREQ(cfs->Name(), "aws");
+  ASSERT_STREQ(cfs->Name(), "gcp");
   auto copts = cfs->GetOptions<CloudFileSystemOptions>();
   ASSERT_NE(copts, nullptr);
   ASSERT_TRUE(copts->keep_local_sst_files);
   ASSERT_NE(cfs->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cfs->GetStorageProvider()->Name(),
-               CloudStorageProviderImpl::kS3());
+               CloudStorageProviderImpl::kGcs());
 #else
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 #endif
 }
 
-TEST(CloudFileSystemTest, ConfigureS3Provider) {
+TEST(CloudFileSystemTest, ConfigureGcsProvider) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
   Status s =
-      CloudFileSystemEnv::CreateFromString(config_options, "provider=s3", &cfs);
+      CloudFileSystem::CreateFromString(config_options, "provider=gcs", &cfs);
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 
-#ifdef USE_AWS
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(config_options,
-                                              "id=aws; provider=s3", &cfs));
-  ASSERT_STREQ(cfs->Name(), "aws");
+#ifdef USE_GCP
+  ASSERT_OK(CloudFileSystem::CreateFromString(config_options,
+                                              "id=gcp; provider=gcs", &cfs));
+  ASSERT_STREQ(cfs->Name(), "gcp");
   ASSERT_NE(cfs->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cfs->GetStorageProvider()->Name(),
-               CloudStorageProviderImpl::kS3());
+               CloudStorageProviderImpl::kGcs());
 #endif
 }
 
+/* kinesis
 // Test is disabled until we have a mock provider and authentication issues are
 // resolved
 TEST(CloudFileSystemTest, DISABLED_ConfigureKinesisController) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s = CloudFileSystemEnv::CreateFromString(
+  Status s = CloudFileSystem::CreateFromString(
       config_options, "provider=mock; controller=kinesis", &cfs);
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 
 #ifdef USE_AWS
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
+  ASSERT_OK(CloudFileSystem::CreateFromString(
       config_options, "id=aws; controller=kinesis; TEST=dbcloud:/test", &cfs));
   ASSERT_STREQ(cfs->Name(), "aws");
-  ASSERT_NE(cfs->GetCloudFileSystemOptions().cloud_log_controller, nullptr);
-  ASSERT_STREQ(cfs->GetCloudFileSystemOptions().cloud_log_controller->Name(),
+  ASSERT_NE(cfs->GetLogController(), nullptr);
+  ASSERT_STREQ(cfs->GetLogController()->Name(),
                CloudLogControllerImpl::kKinesis());
 #endif
 }
@@ -226,24 +225,24 @@ TEST(CloudFileSystemTest, ConfigureKafkaController) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s = CloudFileSystemEnv::CreateFromString(
+  Status s = CloudFileSystem::CreateFromString(
       config_options, "provider=mock; controller=kafka", &cfs);
 #ifdef USE_KAFKA
   ASSERT_OK(s);
   ASSERT_NE(cfs, nullptr);
-  ASSERT_NE(cfs->GetCloudFileSystemOptions().cloud_log_controller, nullptr);
-  ASSERT_STREQ(cfs->GetCloudFileSystemOptions().cloud_log_controller->Name(),
+  ASSERT_NE(cfs->GetLogController(), nullptr);
+  ASSERT_STREQ(cfs->GetLogController()->Name(),
                CloudLogControllerImpl::kKafka());
 #else
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 #endif
 }
-
+*/
 }  // namespace ROCKSDB_NAMESPACE
+
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  Aws::InitAPI(Aws::SDKOptions());
   return RUN_ALL_TESTS();
 }
