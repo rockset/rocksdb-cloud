@@ -1305,9 +1305,6 @@ class DB {
     // families that were deleted as a result of ApplyReplicationLogRecord()
     // call, if any.
     std::vector<uint32_t> deleted_column_families;
-
-    // record number of mismatched epoch number found
-    uint64_t mismatched_epoch_num{0};
   };
   // ApplyReplicationLogRecord() applies the replication record provided by the
   // leader's ReplicationLogListener. Info contains some useful information
