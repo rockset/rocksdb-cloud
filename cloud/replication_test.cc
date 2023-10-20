@@ -1315,13 +1315,15 @@ TEST_F(ReplicationTest, SuperSnapshot) {
   ASSERT_OK(follower->Get(ro, "k1", &val));
   EXPECT_EQ(val, "v1");
 
-  auto iter = follower->NewIterator(ro, follower->DefaultColumnFamily());
+  auto iter = std::unique_ptr<rocksdb::Iterator>(
+      follower->NewIterator(ro, follower->DefaultColumnFamily()));
   iter->SeekToFirst();
   EXPECT_TRUE(iter->Valid());
   EXPECT_EQ(iter->key(), "k1");
   EXPECT_EQ(iter->value(), "v1");
   iter->Next();
   EXPECT_FALSE(iter->Valid());
+  iter.reset();
 
   ro.snapshot = nullptr;
   ASSERT_OK(follower->Get(ro, followerCF("cf1"), "cf1k1", &val));

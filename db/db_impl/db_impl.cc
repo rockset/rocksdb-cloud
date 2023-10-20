@@ -4077,6 +4077,8 @@ Status DBImpl::GetSuperSnapshots(
   return Status::InvalidArgument(
       "GetSuperSnapshots only supported in RocksDB compiled with USE_RTTI=1");
 #endif
+  InstrumentedMutexLock l(&mutex_);
+
   if (!is_snapshot_supported_) {
     return Status::InvalidArgument("Snapshot not supported");
   }
@@ -4092,7 +4094,8 @@ Status DBImpl::GetSuperSnapshots(
   for (auto& cf : column_families) {
     auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(cf);
     auto cfd = cfh->cfd();
-    auto sv = cfd->GetReferencedSuperVersion(this);
+    auto sv = cfd->GetSuperVersion();
+    sv->Ref();
     auto ss = new SuperSnapshotImpl(cfd, sv);
     snapshots_.New(ss, snapshot_seq, unix_time,
                    /*is_write_conflict_boundary=*/false);
