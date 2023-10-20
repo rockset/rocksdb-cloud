@@ -2335,8 +2335,10 @@ InternalIterator* DBImpl::NewInternalIterator(
 
   // Code related to super_snapshot in this function was contributed by
   // RocksDB-Cloud
-  auto super_snapshot =
-      dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  auto super_snapshot = nullptr;
+  if (read_options.snapshot) {
+      super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  }
   // Tricky: it's possible for NewInternalIterator to be passed super snapshot,
   // but the super version given doesn't match the super snapshot. This is true
   // for code paths that don't support super snapshot yet.
@@ -2503,8 +2505,11 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   }
 
   // RocksDB-Cloud contribution begin
-  auto super_snapshot =
-      dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  auto super_snapshot = nullptr;
+  if (read_options.snapshot) {
+      super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  }
+
   if (super_snapshot && cfd->GetID() != super_snapshot->cfd()->GetID()) {
     std::ostringstream oss;
     oss << "SuperSnapshot column family " << super_snapshot->cfd()->GetName()
@@ -2777,8 +2782,11 @@ std::vector<Status> DBImpl::MultiGet(
   std::vector<Status> stat_list(num_keys);
 
   // RocksDB-Cloud contribution begin
-  auto super_snapshot =
-      dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  auto super_snapshot = nullptr;
+  if (read_options.snapshot) {
+      super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  }
+
   // RocksDB-Cloud contribution end
 
   bool should_fail = false;
@@ -2967,7 +2975,7 @@ std::vector<Status> DBImpl::MultiGet(
   // Only cleanup the super versions if we don't have super snapshot, which
   // brought its own superversion.
   // RocksDB-Cloud contribution begin
-  if (!dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot)) {
+  if (!super_snapshot) {
   // RocksDB-Cloud contribution end
     for (auto mgd_iter : multiget_cf_data) {
       auto mgd = mgd_iter.second;
@@ -3004,8 +3012,10 @@ bool DBImpl::MultiCFSnapshot(
     auto cf_iter = cf_list->begin();
     auto node = iter_deref_func(cf_iter);
     // RocksDB-Cloud contribution begin
-    auto super_snapshot =
-        dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+    auto super_snapshot = nullptr;
+    if (read_options.snapshot) {
+        super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+    }
     node->super_version = super_snapshot ? super_snapshot->sv()
                                          : GetAndRefSuperVersion(node->cfd);
     // RocksDB-Cloud contribution end
@@ -3867,8 +3877,11 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
 #endif
   } else {
     // RocksDB-Cloud contribution begin
-    auto super_snapshot =
-        dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+    auto super_snapshot = nullptr;
+    if (read_options.snapshot) {
+        super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+    }
+
     if (super_snapshot && cfd->GetID() != super_snapshot->cfd()->GetID()) {
       std::ostringstream oss;
       oss << "SuperSnapshot column family " << super_snapshot->cfd()->GetName()
@@ -3898,8 +3911,10 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
                                             bool expose_blob_index,
                                             bool allow_refresh) {
   // RocksDB-Cloud contribution begin
-  auto super_snapshot =
-      dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  auto super_snapshot = nullptr;
+  if (read_options.snapshot)  {
+      super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+  }
 
   // Acquire SuperVersion
   SuperVersion* sv = super_snapshot ? super_snapshot->sv()
@@ -4047,8 +4062,10 @@ Status DBImpl::NewIterators(
           static_cast_with_check<ColumnFamilyHandleImpl>(column_families[i])
               ->cfd();
       // RocksDB-Cloud contribution begin
-      auto super_snapshot =
-          dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+      auto super_snapshot = nullptr;
+      if (read_options.snapshot) {
+          super_snapshot = dynamic_cast<const SuperSnapshotImpl*>(read_options.snapshot);
+      }
       if (super_snapshot && cfd->GetID() != super_snapshot->cfd()->GetID()) {
         std::ostringstream oss;
         oss << "SuperSnapshot column family " << super_snapshot->cfd()->GetName()
