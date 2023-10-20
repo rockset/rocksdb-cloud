@@ -51,7 +51,6 @@ class CloudTest : public testing::Test {
     dbname_ = test::TmpDir() + "/db_cloud-" + test_id_;
     clone_dir_ = test::TmpDir() + "/ctest-" + test_id_;
     cloud_fs_options_.TEST_Initialize("dbcloudtest.", dbname_);
-    cloud_fs_options_.resync_manifest_on_open = true;
     // To catch any possible file deletion bugs, cloud files are deleted
     // right away
     cloud_fs_options_.cloud_file_deletion_delay = std::chrono::seconds(0);
