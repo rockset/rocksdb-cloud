@@ -198,47 +198,6 @@ TEST(CloudFileSystemTest, ConfigureGcsProvider) {
                CloudStorageProviderImpl::kGcs());
 #endif
 }
-
-/* kinesis
-// Test is disabled until we have a mock provider and authentication issues are
-// resolved
-TEST(CloudFileSystemTest, DISABLED_ConfigureKinesisController) {
-  std::unique_ptr<CloudFileSystem> cfs;
-
-  ConfigOptions config_options;
-  Status s = CloudFileSystem::CreateFromString(
-      config_options, "provider=mock; controller=kinesis", &cfs);
-  ASSERT_NOK(s);
-  ASSERT_EQ(cfs, nullptr);
-
-#ifdef USE_AWS
-  ASSERT_OK(CloudFileSystem::CreateFromString(
-      config_options, "id=aws; controller=kinesis; TEST=dbcloud:/test", &cfs));
-  ASSERT_STREQ(cfs->Name(), "aws");
-  ASSERT_NE(cfs->GetLogController(), nullptr);
-  ASSERT_STREQ(cfs->GetLogController()->Name(),
-               CloudLogControllerImpl::kKinesis());
-#endif
-}
-
-TEST(CloudFileSystemTest, ConfigureKafkaController) {
-  std::unique_ptr<CloudFileSystem> cfs;
-
-  ConfigOptions config_options;
-  Status s = CloudFileSystem::CreateFromString(
-      config_options, "provider=mock; controller=kafka", &cfs);
-#ifdef USE_KAFKA
-  ASSERT_OK(s);
-  ASSERT_NE(cfs, nullptr);
-  ASSERT_NE(cfs->GetLogController(), nullptr);
-  ASSERT_STREQ(cfs->GetLogController()->Name(),
-               CloudLogControllerImpl::kKafka());
-#else
-  ASSERT_NOK(s);
-  ASSERT_EQ(cfs, nullptr);
-#endif
-}
-*/
 }  // namespace ROCKSDB_NAMESPACE
 
 
