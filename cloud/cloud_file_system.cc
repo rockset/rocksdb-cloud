@@ -486,7 +486,9 @@ int DoRegisterCloudObjects(ObjectLibrary& library, std::string const& arg) {
   count++;
 
   count += CloudFileSystemImpl::RegisterAwsObjects(library, arg);
+#ifdef USE_GCP // Only register GCP if we have it
   count += CloudFileSystemImpl::RegisterGcpObjects(library, arg);
+#endif
 
   // Register the Cloud Log Controllers
 

@@ -1,5 +1,7 @@
 #ifndef ROCKSDB_LITE
 
+#ifdef USE_GCP
+
 #include <string>
 
 #include "rocksdb/convenience.h"
@@ -7,8 +9,6 @@
 
 #include "cloud/gcp/gcp_file_system.h"
 #include "cloud/cloud_storage_provider_impl.h"
-
-#ifdef USE_GCP
 
 namespace ROCKSDB_NAMESPACE {
 GcpFileSystem::GcpFileSystem(std::shared_ptr<FileSystem> const& underlying_fs,
@@ -75,7 +75,6 @@ Status GcpFileSystem::PrepareOptions(ConfigOptions const& options) {
 int CloudFileSystemImpl::RegisterGcpObjects(ObjectLibrary& library,
                                             std::string const& /*arg*/) {
   int count = 0;
-#ifdef USE_GCP
   library.AddFactory<FileSystem>(
       CloudFileSystemImpl::kGcp(),
       [](std::string const& /*uri*/, std::unique_ptr<FileSystem>* guard,
@@ -92,7 +91,7 @@ int CloudFileSystemImpl::RegisterGcpObjects(ObjectLibrary& library,
         }
       });
   count++;
-#endif
+
   library.AddFactory<CloudStorageProvider>(
       CloudStorageProviderImpl::kGcs(),
       [](std::string const& /*uri*/,

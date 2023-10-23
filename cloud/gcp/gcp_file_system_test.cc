@@ -1,5 +1,9 @@
 // Copyright (c) 2017 Rockset
 
+#ifndef ROCKSDB_LITE
+
+#ifdef USE_GCP
+
 #include "rocksdb/cloud/cloud_file_system.h"
 
 #include "cloud/cloud_log_controller_impl.h"
@@ -205,3 +209,22 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+#else  // USE_GCP
+#include <stdio.h>
+
+int main(int, char**) {
+  fprintf(stderr,
+          "SKIPPED as DBCloud is supported only when USE_GCP is defined.\n");
+  return 0;
+}
+#endif  // USE_GCP
+
+#else   // ROCKSDB_LITE
+#include <stdio.h>
+
+int main(int, char**) {
+  fprintf(stderr, "SKIPPED as DBCloud is not supported in ROCKSDB_LITE.\n");
+  return 0;
+}
+#endif  // ROCKSDB_LITE

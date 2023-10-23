@@ -1,8 +1,10 @@
-#include "cloud/gcp/gcp_file_system.h"
-#include "rocksdb/cloud/cloud_file_system.h"
 #include <chrono>
 
+#include "rocksdb/cloud/cloud_file_system.h"
+
 #ifdef USE_GCP
+#include "cloud/gcp/gcp_file_system.h"
+
 #include <google/cloud/optional.h>
 #include <google/cloud/options.h>
 #include <google/cloud/retry_policy.h>
@@ -47,7 +49,7 @@ class GcpRetryPolicy : public gcs::RetryPolicy {
             "[gcs] Encountered failure: %s"
             "retry attempt %d exceeds max retries %d. Aborting...",
             s.message().c_str(), failure_count_, maximum_failures_);
-        // retry count exceed maxnum, but is not nonretryable
+        // retry count exceed maxium, but is not nonretryable
         return false;
       }
     } else {
@@ -112,12 +114,12 @@ Status GcpCloudOptions::GetClientConfiguration(CloudFileSystem* fs,
       GcpRetryPolicy(fs, std::chrono::milliseconds(timeout_ms)).clone());
   return Status::OK();
 }
-#else
-Status GcpCloudOptions::GetClientConfiguration(CloudFileSystem*,
-                                               std::string const&,
-                                               gcp::Options&) {
-  return Status::NotSupported("Not configured for GCP support");
-}
+//#else
+//Status GcpCloudOptions::GetClientConfiguration(CloudFileSystem*,
+                                               //std::string const&,
+                                               //gcp::Options&) {
+  //return Status::NotSupported("Not configured for GCP support");
+//}
 #endif /* USE_GCP */
 
 }  // namespace ROCKSDB_NAMESPACE

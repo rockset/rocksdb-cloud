@@ -458,8 +458,8 @@ TEST_MAIN_SOURCES =                                                     \
   cache/cache_reservation_manager_test.cc                               \
   cloud/db_cloud_test.cc                                                \
   cloud/cloud_file_system_test.cc                                       \
-  cloud/gcp/gcp_file_system_test.cc                               \
-  cloud/gcp/gcp_db_cloud_test.cc                               \
+  cloud/gcp/gcp_file_system_test.cc                                     \
+  cloud/gcp/gcp_db_cloud_test.cc                                        \
   cloud/cloud_manifest_test.cc                                          \
   cloud/cloud_scheduler_test.cc                                         \
   cloud/replication_test.cc                                             \
