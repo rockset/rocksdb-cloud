@@ -78,9 +78,6 @@ class CloudTest : public testing::Test {
   void Cleanup() {
     ASSERT_TRUE(!aenv_);
 
-    // check cloud credentials
-    ASSERT_TRUE(cloud_fs_options_.credentials.HasValid().ok());
-
     CloudFileSystem* afs;
     // create a dummy Gcp env
     ASSERT_OK(CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
@@ -183,8 +180,6 @@ class CloudTest : public testing::Test {
 
   void OpenWithColumnFamilies(const std::vector<std::string>& cfs,
                               std::vector<ColumnFamilyHandle*>* handles) {
-    ASSERT_TRUE(cloud_fs_options_.credentials.HasValid().ok());
-
     // Create new Gcp env
     CreateCloudEnv();
     options_.env = aenv_.get();

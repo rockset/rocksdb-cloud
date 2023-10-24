@@ -1,4 +1,7 @@
 // Copyright (c) 2017 Rockset
+#ifndef ROCKSDB_LITE
+
+#ifdef USE_AWS
 
 #include "rocksdb/cloud/cloud_file_system.h"
 
@@ -247,3 +250,25 @@ int main(int argc, char** argv) {
   Aws::InitAPI(Aws::SDKOptions());
   return RUN_ALL_TESTS();
 }
+
+#else  // USE_AWS
+
+#include <stdio.h>
+
+int main(int, char**) {
+  fprintf(stderr,
+          "SKIPPED as DBCloud is supported only when USE_AWS is defined.\n");
+  return 0;
+}
+#endif  // USE_AWS
+
+#else  // ROCKSDB_LITE
+
+#include <stdio.h>
+
+int main(int, char**) {
+  fprintf(stderr, "SKIPPED as DBCloud is not supported in ROCKSDB_LITE\n");
+  return 0;
+}
+
+#endif  // ROCKSDB_LITE
