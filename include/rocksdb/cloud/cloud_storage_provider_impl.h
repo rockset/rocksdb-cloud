@@ -8,14 +8,14 @@
 namespace ROCKSDB_NAMESPACE {
 class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
  public:
-  CloudStorageReadableFileImpl(Logger* info_log, std::string const& bucket,
-                               std::string const& fname, uint64_t size);
+  CloudStorageReadableFileImpl(Logger* info_log, const std::string& bucket,
+                               const std::string& fname, uint64_t size);
   // sequential access, read data at current offset in file
-  IOStatus Read(size_t n, IOOptions const& options, Slice* result,
+  IOStatus Read(size_t n, const IOOptions& options, Slice* result,
                 char* scratch, IODebugContext* dbg) override;
 
   // random access, read data from specified offset in file
-  IOStatus Read(uint64_t offset, size_t n, IOOptions const& options,
+  IOStatus Read(uint64_t offset, size_t n, const IOOptions& options,
                 Slice* result, char* scratch,
                 IODebugContext* dbg) const override;
 
@@ -23,7 +23,7 @@ class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
 
  protected:
   virtual IOStatus DoCloudRead(uint64_t offset, size_t n,
-                               IOOptions const& options, char* scratch,
+                               const IOOptions& options, char* scratch,
                                uint64_t* bytes_read,
                                IODebugContext* dbg) const = 0;
 
@@ -38,7 +38,7 @@ class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
 class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
  protected:
   CloudFileSystem* cfs_;
-  char const* class_;
+  const char* class_;
   std::string fname_;
   std::string tmp_file_;
   IOStatus status_;
@@ -49,14 +49,14 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
 
  public:
   CloudStorageWritableFileImpl(CloudFileSystem* fs,
-                               std::string const& local_fname,
-                               std::string const& bucket,
-                               std::string const& cloud_fname,
-                               FileOptions const& file_opts);
+                               const std::string& local_fname,
+                               const std::string& bucket,
+                               const std::string& cloud_fname,
+                               const FileOptions& file_opts);
 
   virtual ~CloudStorageWritableFileImpl();
   using CloudStorageWritableFile::Append;
-  IOStatus Append(Slice const& data, IOOptions const& opts,
+  IOStatus Append(const Slice& data, const IOOptions& opts,
                   IODebugContext* dbg) override {
     assert(status_.ok());
     // write to temporary file
@@ -64,16 +64,16 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
   }
 
   using CloudStorageWritableFile::PositionedAppend;
-  IOStatus PositionedAppend(Slice const& data, uint64_t offset,
-                            IOOptions const& opts,
+  IOStatus PositionedAppend(const Slice& data, uint64_t offset,
+                            const IOOptions& opts,
                             IODebugContext* dbg) override {
     return local_file_->PositionedAppend(data, offset, opts, dbg);
   }
-  IOStatus Truncate(uint64_t size, IOOptions const& opts,
+  IOStatus Truncate(uint64_t size, const IOOptions& opts,
                     IODebugContext* dbg) override {
     return local_file_->Truncate(size, opts, dbg);
   }
-  IOStatus Fsync(IOOptions const& opts, IODebugContext* dbg) override {
+  IOStatus Fsync(const IOOptions& opts, IODebugContext* dbg) override {
     return local_file_->Fsync(opts, dbg);
   }
   bool IsSyncThreadSafe() const override {
@@ -83,7 +83,7 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
   size_t GetRequiredBufferAlignment() const override {
     return local_file_->GetRequiredBufferAlignment();
   }
-  uint64_t GetFileSize(IOOptions const& opts, IODebugContext* dbg) override {
+  uint64_t GetFileSize(const IOOptions& opts, IODebugContext* dbg) override {
     return local_file_->GetFileSize(opts, dbg);
   }
   size_t GetUniqueId(char* id, size_t max_size) const override {
@@ -92,22 +92,22 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
   IOStatus InvalidateCache(size_t offset, size_t length) override {
     return local_file_->InvalidateCache(offset, length);
   }
-  IOStatus RangeSync(uint64_t offset, uint64_t nbytes, IOOptions const& opts,
+  IOStatus RangeSync(uint64_t offset, uint64_t nbytes, const IOOptions& opts,
                      IODebugContext* dbg) override {
     return local_file_->RangeSync(offset, nbytes, opts, dbg);
   }
-  IOStatus Allocate(uint64_t offset, uint64_t len, IOOptions const& opts,
+  IOStatus Allocate(uint64_t offset, uint64_t len, const IOOptions& opts,
                     IODebugContext* dbg) override {
     return local_file_->Allocate(offset, len, opts, dbg);
   }
 
-  IOStatus Flush(IOOptions const& opts, IODebugContext* dbg) override {
+  IOStatus Flush(const IOOptions& opts, IODebugContext* dbg) override {
     assert(status_.ok());
     return local_file_->Flush(opts, dbg);
   }
   IOStatus status() override { return status_; }
-  IOStatus Sync(IOOptions const& opts, IODebugContext* dbg) override;
-  IOStatus Close(IOOptions const& opts, IODebugContext* dbg) override;
+  IOStatus Sync(const IOOptions& opts, IODebugContext* dbg) override;
+  IOStatus Close(const IOOptions& opts, IODebugContext* dbg) override;
 };
 
 // All writes to this DB can be configured to be persisted
@@ -119,40 +119,40 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
   static Status CreateS3Provider(std::unique_ptr<CloudStorageProvider>* result);
   static Status CreateGcsProvider(
       std::unique_ptr<CloudStorageProvider>* result);
-  static char const* kS3() { return "s3"; }
-  static char const* kGcs() { return "gcs"; }
+  static const char* kS3() { return "s3"; }
+  static const char* kGcs() { return "gcs"; }
 
   CloudStorageProviderImpl();
   virtual ~CloudStorageProviderImpl();
-  IOStatus GetCloudObject(std::string const& bucket_name,
-                          std::string const& object_path,
-                          std::string const& local_destination) override;
-  IOStatus PutCloudObject(std::string const& local_file,
-                          std::string const& bucket_name,
-                          std::string const& object_path) override;
+  IOStatus GetCloudObject(const std::string& bucket_name,
+                          const std::string& object_path,
+                          const std::string& local_destination) override;
+  IOStatus PutCloudObject(const std::string& local_file,
+                          const std::string& bucket_name,
+                          const std::string& object_path) override;
   IOStatus NewCloudReadableFile(
-      std::string const& bucket, std::string const& fname,
-      FileOptions const& options,
+      const std::string& bucket, const std::string& fname,
+      const FileOptions& options,
       std::unique_ptr<CloudStorageReadableFile>* result,
       IODebugContext* dbg) override;
-  Status PrepareOptions(ConfigOptions const& options) override;
+  Status PrepareOptions(const ConfigOptions& options) override;
 
  protected:
   std::unique_ptr<Random64> rng_;
   virtual IOStatus DoNewCloudReadableFile(
-      std::string const& bucket, std::string const& fname, uint64_t fsize,
-      std::string const& content_hash, FileOptions const& options,
+      const std::string& bucket, const std::string& fname, uint64_t fsize,
+      const std::string& content_hash, const FileOptions& options,
       std::unique_ptr<CloudStorageReadableFile>* result,
       IODebugContext* dbg) = 0;
 
   // Downloads object from the cloud into a local directory
-  virtual IOStatus DoGetCloudObject(std::string const& bucket_name,
-                                    std::string const& object_path,
-                                    std::string const& local_path,
+  virtual IOStatus DoGetCloudObject(const std::string& bucket_name,
+                                    const std::string& object_path,
+                                    const std::string& local_path,
                                     uint64_t* remote_size) = 0;
-  virtual IOStatus DoPutCloudObject(std::string const& local_file,
-                                    std::string const& object_path,
-                                    std::string const& bucket_name,
+  virtual IOStatus DoPutCloudObject(const std::string& local_file,
+                                    const std::string& object_path,
+                                    const std::string& bucket_name,
                                     uint64_t file_size) = 0;
 
   CloudFileSystem* cfs_;
