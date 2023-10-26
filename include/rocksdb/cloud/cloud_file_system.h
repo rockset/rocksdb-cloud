@@ -1,17 +1,18 @@
 //  Copyright (c) 2016-present, Rockset, Inc.  All rights reserved.
 //
 #pragma once
-#include "rocksdb/cache.h"
-#include "rocksdb/configurable.h"
-#include "rocksdb/file_system.h"
-#include "rocksdb/io_status.h"
-#include "rocksdb/status.h"
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
+
+#include "rocksdb/cache.h"
+#include "rocksdb/configurable.h"
+#include "rocksdb/file_system.h"
+#include "rocksdb/io_status.h"
+#include "rocksdb/status.h"
 
 namespace Aws {
 namespace Auth {
@@ -90,10 +91,10 @@ class AwsCloudAccessCredentials {
   // functions to support AWS credentials
   //
   // Initialize AWS credentials using access_key_id and secret_key
-  void InitializeSimple(std::string const& aws_access_key_id,
-                        std::string const& aws_secret_key);
+  void InitializeSimple(const std::string& aws_access_key_id,
+                        const std::string& aws_secret_key);
   // Initialize AWS credentials using a config file
-  void InitializeConfig(std::string const& aws_config_file);
+  void InitializeConfig(const std::string& aws_config_file);
 
   // test if valid AWS credentials are present
   Status HasValid() const;
@@ -104,7 +105,7 @@ class AwsCloudAccessCredentials {
 
  private:
   AwsAccessType GetAccessType() const;
-  Status CheckCredentials(AwsAccessType const& aws_type) const;
+  Status CheckCredentials(const AwsAccessType& aws_type) const;
 
  public:
   std::string access_key_id;
@@ -117,13 +118,13 @@ class AwsCloudAccessCredentials {
 };
 
 using S3ClientFactory = std::function<std::shared_ptr<Aws::S3::S3Client>(
-    std::shared_ptr<Aws::Auth::AWSCredentialsProvider> const&,
-    Aws::Client::ClientConfiguration const&)>;
+    const std::shared_ptr<Aws::Auth::AWSCredentialsProvider>&,
+    const Aws::Client::ClientConfiguration&)>;
 
 #ifdef USE_GCP
 using GCSClientFactory =
     std::function<std::shared_ptr<google::cloud::storage::Client>(
-        google::cloud::Options const&)>;
+        const google::cloud::Options&)>;
 #endif
 
 // Defines parameters required to connect to Kafka
@@ -169,26 +170,21 @@ class BucketOptions {
   void SetBucketPrefix(std::string prefix);
   const std::string& GetBucketPrefix() const { return prefix_; }
   const std::string& GetBucketName(bool full = true) const {
-=======
-  void SetBucketName(std::string const& bucket, std::string const& prefix = "");
-  std::string const& GetBucketPrefix() const { return prefix_; }
-  std::string const& GetBucketName(bool full = true) const {
->>>>>>> c266119fc (Google cloud storage support)
     if (full) {
       return name_;
     } else {
       return bucket_;
     }
   }
-  std::string const& GetObjectPath() const { return object_; }
-  void SetObjectPath(std::string const& object) { object_ = object; }
-  std::string const& GetRegion() const { return region_; }
-  void SetRegion(std::string const& region) { region_ = region; }
+  const std::string& GetObjectPath() const { return object_; }
+  void SetObjectPath(const std::string& object) { object_ = object; }
+  const std::string& GetRegion() const { return region_; }
+  void SetRegion(const std::string& region) { region_ = region; }
 
   // Initializes the bucket properties for test purposes
-  void TEST_Initialize(std::string const& name_prefix,
-                       std::string const& object_path,
-                       std::string const& region = "");
+  void TEST_Initialize(const std::string& name_prefix,
+                       const std::string& object_path,
+                       const std::string& region = "");
   bool IsValid() const {
     if (object_.empty() || name_.empty()) {
       return false;
@@ -198,7 +194,7 @@ class BucketOptions {
   }
 };
 
-inline bool operator==(BucketOptions const& lhs, BucketOptions const& rhs) {
+inline bool operator==(const BucketOptions& lhs, const BucketOptions& rhs) {
   if (lhs.IsValid() && rhs.IsValid()) {
     return ((lhs.GetBucketName() == rhs.GetBucketName()) &&
             (lhs.GetObjectPath() == rhs.GetObjectPath()) &&
@@ -207,14 +203,14 @@ inline bool operator==(BucketOptions const& lhs, BucketOptions const& rhs) {
     return false;
   }
 }
-inline bool operator!=(BucketOptions const& lhs, BucketOptions const& rhs) {
+inline bool operator!=(const BucketOptions& lhs, const BucketOptions& rhs) {
   return !(lhs == rhs);
 }
 
 class AwsCloudOptions {
  public:
   static Status GetClientConfiguration(
-      CloudFileSystem* fs, std::string const& region,
+      CloudFileSystem* fs, const std::string& region,
       Aws::Client::ClientConfiguration* config);
 };
 
@@ -225,7 +221,7 @@ class AwsCloudOptions {
 class CloudFileSystemOptions {
  private:
  public:
-  static char const* kName() { return "CloudFileSystemOptions"; }
+  static const char* kName() { return "CloudFileSystemOptions"; }
   BucketOptions src_bucket;
   BucketOptions dest_bucket;
   // Specify the type of cloud-service to use. Deprecated.
@@ -489,11 +485,11 @@ class CloudFileSystemOptions {
 
   // Sets result based on the value of name or alt in the environment
   // Returns true if the name/alt exists in the environment, false otherwise
-  static bool GetNameFromEnvironment(char const* name, char const* alt,
+  static bool GetNameFromEnvironment(const char* name, const char* alt,
                                      std::string* result);
-  void TEST_Initialize(std::string const& name_prefix,
-                       std::string const& object_path,
-                       std::string const& region = "");
+  void TEST_Initialize(const std::string& name_prefix,
+                       const std::string& object_path,
+                       const std::string& region = "");
 
   Status Configure(const ConfigOptions& config_options,
                    const std::string& opts_str);
@@ -532,31 +528,31 @@ class CloudFileSystem : public FileSystem {
   virtual IOStatus PreloadCloudManifest(const std::string& local_dbname) = 0;
   // This method will migrate the database that is using pure RocksDB into
   // RocksDB-Cloud. Call this before opening the database with RocksDB-Cloud.
-  virtual IOStatus MigrateFromPureRocksDB(std::string const& local_dbname) = 0;
+  virtual IOStatus MigrateFromPureRocksDB(const std::string& local_dbname) = 0;
 
   // Reads a file from the cloud
   virtual IOStatus NewSequentialFileCloud(
-      std::string const& bucket_prefix, std::string const& fname,
-      FileOptions const& file_opts, std::unique_ptr<FSSequentialFile>* result,
+      const std::string& bucket_prefix, const std::string& fname,
+      const FileOptions& file_opts, std::unique_ptr<FSSequentialFile>* result,
       IODebugContext* dbg) = 0;
 
   // Saves and retrieves the dbid->dirname mapping in cloud storage
-  virtual IOStatus SaveDbid(std::string const& bucket_name,
-                            std::string const& dbid,
-                            std::string const& dirname) = 0;
-  virtual IOStatus GetPathForDbid(std::string const& bucket_prefix,
-                                  std::string const& dbid,
+  virtual IOStatus SaveDbid(const std::string& bucket_name,
+                            const std::string& dbid,
+                            const std::string& dirname) = 0;
+  virtual IOStatus GetPathForDbid(const std::string& bucket_prefix,
+                                  const std::string& dbid,
                                   std::string* dirname) = 0;
-  virtual IOStatus GetDbidList(std::string const& bucket_prefix,
+  virtual IOStatus GetDbidList(const std::string& bucket_prefix,
                                DbidList* dblist) = 0;
-  virtual IOStatus DeleteDbid(std::string const& bucket_prefix,
-                              std::string const& dbid) = 0;
+  virtual IOStatus DeleteDbid(const std::string& bucket_prefix,
+                              const std::string& dbid) = 0;
 
   // Deletes file from a destination bucket.
-  virtual IOStatus DeleteCloudFileFromDest(std::string const& fname) = 0;
+  virtual IOStatus DeleteCloudFileFromDest(const std::string& fname) = 0;
   // Copies a local file to a destination bucket.
-  virtual IOStatus CopyLocalFileToDest(std::string const& local_name,
-                                       std::string const& cloud_name) = 0;
+  virtual IOStatus CopyLocalFileToDest(const std::string& local_name,
+                                       const std::string& cloud_name) = 0;
 
   // Returns CloudManifest file name for a given db.
   virtual std::string CloudManifestFile(const std::string& dbname) = 0;
@@ -584,14 +580,14 @@ class CloudFileSystem : public FileSystem {
   // For example, it will map 00010.sst to 00010.sst-[epoch] where [epoch] is
   // an epoch during which that file was created.
   // Files both in S3 and in the local directory have this [epoch] suffix.
-  virtual std::string RemapFilename(std::string const& logical_name) const = 0;
+  virtual std::string RemapFilename(const std::string& logical_name) const = 0;
 
   // Find the list of live files based on CloudManifest and Manifest in local db
   //
   // For the returned filepath in `live_sst_files` and `manifest_file`, we only
   // include the basename of the filepath but not the directory prefix to the
   // file
-  virtual IOStatus FindAllLiveFiles(std::string const& local_dbname,
+  virtual IOStatus FindAllLiveFiles(const std::string& local_dbname,
                                     std::vector<std::string>* live_sst_files,
                                     std::string* manifest_file) = 0;
 
@@ -610,7 +606,7 @@ class CloudFileSystem : public FileSystem {
   //
   // If delta has already been applied in cloud manifest, delta_applied would be
   // `false`
-  virtual IOStatus ApplyCloudManifestDelta(CloudManifestDelta const& delta,
+  virtual IOStatus ApplyCloudManifestDelta(const CloudManifestDelta& delta,
                                            bool* delta_applied) = 0;
 
   // This function does several things:
@@ -622,16 +618,17 @@ class CloudFileSystem : public FileSystem {
   //
   // Return InvalidArgument status if the delta has been applied in current
   // CloudManifest
-  virtual IOStatus RollNewCookie(std::string const& local_dbname,
-                                 std::string const& cookie,
-                                 CloudManifestDelta const& delta) const = 0;
+  virtual IOStatus RollNewCookie(const std::string& local_dbname,
+                                 const std::string& cookie,
+                                 const CloudManifestDelta& delta) const = 0;
 
   virtual IOStatus GetMaxFileNumberFromCurrentManifest(
-      std::string const& local_dbname, uint64_t* max_file_number) = 0;
+      const std::string& local_dbname, uint64_t* max_file_number) = 0;
 
   // Delete both local and cloud invisble files
   virtual IOStatus DeleteCloudInvisibleFiles(
       const std::vector<std::string>& active_cookies) = 0;
+
   // Delete local invisible files. This could be helpful when there is one
   // single instance managing lifetime of files in cloud while the other
   // instances reference and download the files in cloud. The other instances
@@ -702,34 +699,34 @@ class CloudFileSystemEnv {
   // data from cloud storage.
   // If dest_bucket_name is empty, then the associated db does not write any
   // data to cloud storage.
-  static Status NewAwsFileSystem(std::shared_ptr<FileSystem> const& base_fs,
-                                 std::string const& src_bucket_name,
-                                 std::string const& src_object_prefix,
-                                 std::string const& src_bucket_region,
-                                 std::string const& dest_bucket_name,
-                                 std::string const& dest_object_prefix,
-                                 std::string const& dest_bucket_region,
-                                 CloudFileSystemOptions const& fs_options,
-                                 std::shared_ptr<Logger> const& logger,
+  static Status NewAwsFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const std::string& src_bucket_name,
+                                 const std::string& src_object_prefix,
+                                 const std::string& src_bucket_region,
+                                 const std::string& dest_bucket_name,
+                                 const std::string& dest_object_prefix,
+                                 const std::string& dest_bucket_region,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
                                  CloudFileSystem** cfs);
-  static Status NewAwsFileSystem(std::shared_ptr<FileSystem> const& base_fs,
-                                 CloudFileSystemOptions const& fs_options,
-                                 std::shared_ptr<Logger> const& logger,
+  static Status NewAwsFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
                                  CloudFileSystem** cfs);
 
-  static Status NewGcpFileSystem(std::shared_ptr<FileSystem> const& base_fs,
-                                 std::string const& src_bucket_name,
-                                 std::string const& src_object_prefix,
-                                 std::string const& src_buck_region,
-                                 std::string const& dest_bucket_name,
-                                 std::string const& dest_bucket_prefix,
-                                 std::string const& dest_bucket_region,
-                                 CloudFileSystemOptions const& fs_options,
-                                 std::shared_ptr<Logger> const& logger,
+  static Status NewGcpFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const std::string& src_bucket_name,
+                                 const std::string& src_object_prefix,
+                                 const std::string& src_buck_region,
+                                 const std::string& dest_bucket_name,
+                                 const std::string& dest_bucket_prefix,
+                                 const std::string& dest_bucket_region,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
                                  CloudFileSystem** cfs);
-  static Status NewGcpFileSystem(std::shared_ptr<FileSystem> const& base_fs,
-                                 CloudFileSystemOptions const& fs_options,
-                                 std::shared_ptr<Logger> const& logger,
+  static Status NewGcpFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
                                  CloudFileSystem** cfs);
 
   // Creates a new Env that delegates all thread/time related
