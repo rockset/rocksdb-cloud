@@ -688,7 +688,7 @@ IOStatus S3StorageProvider::ExistsCloudObject(const std::string& bucket_name,
 IOStatus S3StorageProvider::GetCloudObjectSize(const std::string& bucket_name,
                                                const std::string& object_path,
                                                uint64_t* filesize) {
-  HeadObjectResult result;
+  HeadObjectResult result;                                             
   result.size = filesize;
   return HeadObject(bucket_name, object_path, &result);
 }
