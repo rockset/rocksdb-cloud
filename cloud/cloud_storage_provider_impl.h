@@ -3,9 +3,10 @@
 #pragma once
 
 #ifndef ROCKSDB_LITE
+#include <optional>
+
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "util/random.h"
-#include <optional>
 
 namespace ROCKSDB_NAMESPACE {
 class CloudStorageReadableFileImpl : public CloudStorageReadableFile {
@@ -118,7 +119,10 @@ class CloudStorageWritableFileImpl : public CloudStorageWritableFile {
 class CloudStorageProviderImpl : public CloudStorageProvider {
  public:
   static Status CreateS3Provider(std::unique_ptr<CloudStorageProvider>* result);
+  static Status CreateGcsProvider(
+      std::unique_ptr<CloudStorageProvider>* result);
   static const char* kS3() { return "s3"; }
+  static const char* kGcs() { return "gcs"; }
 
   CloudStorageProviderImpl();
   virtual ~CloudStorageProviderImpl();

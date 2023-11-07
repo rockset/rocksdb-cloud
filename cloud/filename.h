@@ -193,6 +193,32 @@ inline bool IsCloudManifestFile(const std::string& pathname) {
   return false;
 }
 
+inline std::string ReduceSlashes(const std::string& pathname)
+{
+    std::string result;
+    const char slash = '/';
+
+    bool previous_was_slash = false;
+    for (char c : pathname)
+    {
+        if (c == slash)
+        {
+            if (!previous_was_slash)
+            {
+                result += c;
+                previous_was_slash = true;
+            }
+        }
+        else
+        {
+            result += c;
+            previous_was_slash = false;
+        }
+    }
+
+    return result;
+}
+
 enum class RocksDBFileType {
   kSstFile,
   kLogFile,

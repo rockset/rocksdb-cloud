@@ -4967,6 +4967,15 @@ cpp_unittest_wrapper(name="cloud_file_system_test",
             deps=[":rocksdb_test_lib"],
             extra_compiler_flags=[])
 
+cpp_unittest_wrapper(name="gcp_file_system_test",
+            srcs=["cloud/gcp/gcp_file_system_test.cc"],
+            deps=[":rocksdb_test_lib"],
+            extra_compiler_flags=[])
+
+cpp_unittest_wrapper(name="gcp_db_cloud_test",
+            srcs=["cloud/gcp/gcp_db_cloud_test.cc"],
+            deps=[":rocksdb_test_lib"],
+            extra_compiler_flags=[])
 
 cpp_unittest_wrapper(name="cloud_manifest_test",
             srcs=["cloud/cloud_manifest_test.cc"],
@@ -5994,4 +6003,3 @@ cpp_unittest_wrapper(name="write_unprepared_transaction_test",
             srcs=["utilities/transactions/write_unprepared_transaction_test.cc"],
             deps=[":rocksdb_test_lib"],
             extra_compiler_flags=[])
-

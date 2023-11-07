@@ -2,11 +2,9 @@
 
 #ifndef ROCKSDB_LITE
 
-#ifdef USE_AWS
+#ifdef USE_GCP
 
 #include "rocksdb/cloud/db_cloud.h"
-
-#include <aws/core/Aws.h>
 
 #include <algorithm>
 #include <atomic>
@@ -57,7 +55,6 @@ class CloudTest : public testing::Test {
     dbname_ = test::TmpDir() + "/db_cloud-" + test_id_;
     clone_dir_ = test::TmpDir() + "/ctest-" + test_id_;
     cloud_fs_options_.TEST_Initialize("dbcloudtest.", dbname_);
-    cloud_fs_options_.use_aws_transfer_manager = true;
     // To catch any possible file deletion bugs, cloud files are deleted
     // right away
     cloud_fs_options_.cloud_file_deletion_delay = std::chrono::seconds(0);
@@ -81,12 +78,9 @@ class CloudTest : public testing::Test {
   void Cleanup() {
     ASSERT_TRUE(!aenv_);
 
-    // check cloud credentials
-    ASSERT_TRUE(cloud_fs_options_.credentials.HasValid().ok());
-
     CloudFileSystem* afs;
-    // create a dummy aws env
-    ASSERT_OK(CloudFileSystem::NewAwsFileSystem(base_env_->GetFileSystem(),
+    // create a dummy Gcp env
+    ASSERT_OK(CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                 cloud_fs_options_,
                                                 options_.info_log, &afs));
     ASSERT_NE(afs, nullptr);
@@ -146,7 +140,7 @@ class CloudTest : public testing::Test {
     // Cleanup the cloud bucket
     if (!cloud_fs_options_.src_bucket.GetBucketName().empty()) {
       CloudFileSystem* afs;
-      Status st = CloudFileSystem::NewAwsFileSystem(base_env_->GetFileSystem(),
+      Status st = CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                     cloud_fs_options_,
                                                     options_.info_log, &afs);
       if (st.ok()) {
@@ -161,7 +155,7 @@ class CloudTest : public testing::Test {
 
   void CreateCloudEnv() {
     CloudFileSystem* cfs;
-    ASSERT_OK(CloudFileSystem::NewAwsFileSystem(base_env_->GetFileSystem(),
+    ASSERT_OK(CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                 cloud_fs_options_,
                                                 options_.info_log, &cfs));
     std::shared_ptr<FileSystem> fs(cfs);
@@ -186,9 +180,7 @@ class CloudTest : public testing::Test {
 
   void OpenWithColumnFamilies(const std::vector<std::string>& cfs,
                               std::vector<ColumnFamilyHandle*>* handles) {
-    ASSERT_TRUE(cloud_fs_options_.credentials.HasValid().ok());
-
-    // Create new AWS env
+    // Create new Gcp env
     CreateCloudEnv();
     options_.env = aenv_.get();
     // Sleep for a second because S3 is eventual consistency.
@@ -207,7 +199,7 @@ class CloudTest : public testing::Test {
 
   // Try to open and return status
   Status checkOpen() {
-    // Create new AWS env
+    // Create new Gcp env
     CreateCloudEnv();
     options_.env = aenv_.get();
     // Sleep for a second because S3 is eventual consistency.
@@ -252,8 +244,8 @@ class CloudTest : public testing::Test {
         force_keep_local_on_invalid_dest_bucket) {
       copt.keep_local_sst_files = true;
     }
-    // Create new AWS env
-    Status st = CloudFileSystem::NewAwsFileSystem(
+    // Create new Gcp env
+    Status st = CloudFileSystem::NewGcpFileSystem(
         base_env_->GetFileSystem(), copt, options_.info_log, &cfs);
     if (!st.ok()) {
       return st;
@@ -905,7 +897,6 @@ TEST_F(CloudTest, KeepLocalFiles) {
   for (int iter = 0; iter < 4; ++iter) {
     cloud_fs_options_.use_direct_io_for_cloud_download =
         iter == 0 || iter == 1;
-    cloud_fs_options_.use_aws_transfer_manager = iter == 0 || iter == 3;
     // Create two files
     OpenDB();
     std::string value;
@@ -939,15 +930,14 @@ TEST_F(CloudTest, KeepLocalFiles) {
   }
 }
 
-TEST_F(CloudTest, CopyToFromS3) {
+TEST_F(CloudTest, CopyToFromGcs) {
   std::string fname = dbname_ + "/100000.sst";
 
   // iter 0 -- not using transfer manager
   // iter 1 -- using transfer manager
   for (int iter = 0; iter < 2; ++iter) {
-    // Create aws env
+    // Create Gcp env
     cloud_fs_options_.keep_local_sst_files = true;
-    cloud_fs_options_.use_aws_transfer_manager = iter == 1;
     CreateCloudEnv();
     auto* cimpl = GetCloudFileSystemImpl();
     cimpl->TEST_InitEmptyCloudManifest();
@@ -991,7 +981,7 @@ TEST_F(CloudTest, CopyToFromS3) {
 TEST_F(CloudTest, DelayFileDeletion) {
   std::string fname = dbname_ + "/000010.sst";
 
-  // Create aws env
+  // Create Gcp env
   cloud_fs_options_.keep_local_sst_files = true;
   cloud_fs_options_.cloud_file_deletion_delay = std::chrono::seconds(2);
   CreateCloudEnv();
@@ -1108,30 +1098,6 @@ TEST_F(CloudTest, Savepoint) {
       GetCloudFileSystem()->GetSrcBucketName(), dest_path);
 }
 
-TEST_F(CloudTest, Encryption) {
-  // Create aws env
-  cloud_fs_options_.server_side_encryption = true;
-  char* key_id = getenv("AWS_KMS_KEY_ID");
-  if (key_id != nullptr) {
-    cloud_fs_options_.encryption_key_id = std::string(key_id);
-    Log(options_.info_log, "Found encryption key id in env variable %s",
-        key_id);
-  }
-
-  OpenDB();
-
-  ASSERT_OK(db_->Put(WriteOptions(), "Hello", "World"));
-  // create a file
-  ASSERT_OK(db_->Flush(FlushOptions()));
-  CloseDB();
-
-  OpenDB();
-  std::string value;
-  ASSERT_OK(db_->Get(ReadOptions(), "Hello", &value));
-  ASSERT_EQ(value, "World");
-  CloseDB();
-}
-
 TEST_F(CloudTest, DirectReads) {
   options_.use_direct_reads = true;
   options_.use_direct_io_for_flush_and_compaction = true;
@@ -1153,83 +1119,6 @@ TEST_F(CloudTest, DirectReads) {
     ASSERT_OK(db_->Get(ReadOptions(), "Hello" + std::to_string(i), &value));
     ASSERT_EQ(value, "World");
   }
-  CloseDB();
-}
-
-#ifdef USE_KAFKA
-TEST_F(CloudTest, KeepLocalLogKafka) {
-  cloud_fs_options_.keep_local_log_files = false;
-  cloud_fs_options_.log_type = LogType::kLogKafka;
-  cloud_fs_options_.kafka_log_options
-      .client_config_params["metadata.broker.list"] = "localhost:9092";
-
-  OpenDB();
-
-  ASSERT_OK(db_->Put(WriteOptions(), "Franz", "Kafka"));
-
-  // Destroy DB in memory and on local file system.
-  delete db_;
-  db_ = nullptr;
-  aenv_.reset();
-  DestroyDir(dbname_);
-  DestroyDir("/tmp/ROCKSET");
-
-  // Create new env.
-  CreateCloudEnv();
-
-  // Give env enough time to consume WALs
-  std::this_thread::sleep_for(std::chrono::seconds(3));
-
-  // Open DB.
-  cloud_fs_options_.keep_local_log_files = true;
-  auto* cimpl = GetCloudFileSystemImpl();
-  options_.wal_dir = cimpl->GetWALCacheDir();
-  OpenDB();
-
-  // Test read.
-  std::string value;
-  ASSERT_OK(db_->Get(ReadOptions(), "Franz", &value));
-  ASSERT_EQ(value, "Kafka");
-
-  CloseDB();
-}
-#endif /* USE_KAFKA */
-
-// TODO(igor): determine why this fails,
-// https://github.com/rockset/rocksdb-cloud/issues/35
-TEST_F(CloudTest, DISABLED_KeepLocalLogKinesis) {
-  cloud_fs_options_.keep_local_log_files = false;
-  cloud_fs_options_.log_type = LogType::kLogKinesis;
-
-  OpenDB();
-
-  // Test write.
-  ASSERT_OK(db_->Put(WriteOptions(), "Tele", "Kinesis"));
-
-  // Destroy DB in memory and on local file system.
-  delete db_;
-  db_ = nullptr;
-  aenv_.reset();
-  DestroyDir(dbname_);
-  DestroyDir("/tmp/ROCKSET");
-
-  // Create new env.
-  CreateCloudEnv();
-
-  // Give env enough time to consume WALs
-  std::this_thread::sleep_for(std::chrono::seconds(3));
-
-  // Open DB.
-  cloud_fs_options_.keep_local_log_files = true;
-  auto* cimpl = GetCloudFileSystemImpl();
-  options_.wal_dir = cimpl->GetWALCacheDir();
-  OpenDB();
-
-  // Test read.
-  std::string value;
-  ASSERT_OK(db_->Get(ReadOptions(), "Tele", &value));
-  ASSERT_EQ(value, "Kinesis");
-
   CloseDB();
 }
 
@@ -3232,19 +3121,17 @@ TEST_F(CloudTest, CreateIfMissing) {
 // A black-box test for the cloud wrapper around rocksdb
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  Aws::InitAPI(Aws::SDKOptions());
   auto r = RUN_ALL_TESTS();
-  Aws::ShutdownAPI(Aws::SDKOptions());
   return r;
 }
 
-#else  // USE_AWS
+#else  // USE_GCP
 
 #include <stdio.h>
 
 int main(int, char**) {
   fprintf(stderr,
-          "SKIPPED as DBCloud is supported only when USE_AWS is defined.\n");
+          "SKIPPED as DBCloud is supported only when USE_Gcp is defined.\n");
   return 0;
 }
 #endif

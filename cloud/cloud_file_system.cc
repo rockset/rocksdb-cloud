@@ -16,6 +16,7 @@
 #include "cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
+#include "cloud/gcp/gcp_file_system.h"
 #include "env/composite_env_wrapper.h"
 #include "options/configurable_helper.h"
 #include "options/options_helper.h"
@@ -451,6 +452,28 @@ Status CloudFileSystem::NewAwsFileSystem(
   return NewAwsFileSystem(base_fs, options, logger, cfs);
 }
 
+Status CloudFileSystem::NewGcpFileSystem(
+    const std::shared_ptr<FileSystem>& base_fs,
+    const std::string& src_cloud_bucket, const std::string& src_cloud_object,
+    const std::string& src_cloud_region, const std::string& dest_cloud_bucket,
+    const std::string& dest_cloud_object, const std::string& dest_cloud_region,
+    const CloudFileSystemOptions& cloud_options,
+    const std::shared_ptr<Logger>& logger, CloudFileSystem** cfs) {
+  CloudFileSystemOptions options = cloud_options;
+  if (!src_cloud_bucket.empty())
+    options.src_bucket.SetBucketName(src_cloud_bucket);
+  if (!src_cloud_object.empty())
+    options.src_bucket.SetObjectPath(src_cloud_object);
+  if (!src_cloud_region.empty()) options.src_bucket.SetRegion(src_cloud_region);
+  if (!dest_cloud_bucket.empty())
+    options.dest_bucket.SetBucketName(dest_cloud_bucket);
+  if (!dest_cloud_object.empty())
+    options.dest_bucket.SetObjectPath(dest_cloud_object);
+  if (!dest_cloud_region.empty())
+    options.dest_bucket.SetRegion(dest_cloud_region);
+  return NewGcpFileSystem(base_fs, options, logger, cfs);
+}
+
 int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
   int count = 0;
   // Register the FileSystem types
@@ -465,6 +488,11 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
       });
   count++;
 
+#ifdef USE_GCP
+  count += CloudFileSystemImpl::RegisterGcpObjects(library, arg);
+#endif
+
+#ifdef USE_AWS
   count += CloudFileSystemImpl::RegisterAwsObjects(library, arg);
 
   // Register the Cloud Log Controllers
@@ -480,6 +508,7 @@ int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
         return guard->get();
       });
   count++;
+#endif
 
   return count;
 }
@@ -640,9 +669,40 @@ Status CloudFileSystem::NewAwsFileSystem(
 }
 #endif
 
+#ifndef USE_GCP
+Status CloudFileSystem::NewGcpFileSystem(
+    const std::shared_ptr<FileSystem>& /*base_fs*/,
+    const CloudFileSystemOptions& /*options*/,
+    const std::shared_ptr<Logger>& /*logger*/, CloudFileSystem** /*cfs*/) {
+  return Status::NotSupported("RocksDB Cloud not compiled with GCP support");
+}
+#else
+Status CloudFileSystem::NewGcpFileSystem(
+    const std::shared_ptr<FileSystem>& base_fs,
+    const CloudFileSystemOptions& options,
+    const std::shared_ptr<Logger>& logger, CloudFileSystem** cfs) {
+  CloudFileSystem::RegisterCloudObjects();
+  // Dump out cloud fs options
+  options.Dump(logger.get());
+
+  Status st = GcpFileSystem::NewGcpFileSystem(base_fs, options, logger, cfs);
+  if (st.ok()) {
+    // store a copy to the logger
+    auto* cloud = static_cast<CloudFileSystemImpl*>(*cfs);
+    cloud->info_log_ = logger;
+
+    // start the purge thread only if there is a destination bucket
+    if (options.dest_bucket.IsValid() && options.run_purger) {
+      cloud->purge_thread_ = std::thread([cloud] { cloud->Purger(); });
+    }
+  }
+
+  return st;
+}
+#endif
+
 std::unique_ptr<Env> CloudFileSystem::NewCompositeEnv(
-    Env* env,
-    const std::shared_ptr<FileSystem>& fs) {
+    Env* env, const std::shared_ptr<FileSystem>& fs) {
   return std::make_unique<CompositeEnvWrapper>(env, fs);
 }
 

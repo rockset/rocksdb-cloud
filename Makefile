@@ -1895,6 +1895,12 @@ replication_test: cloud/replication_test.o $(TEST_LIBRARY) $(LIBRARY)
 cloud_file_system_test: cloud/cloud_file_system_test.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK)
 
+gcp_file_system_test: cloud/gcp/gcp_file_system_test.o $(TEST_LIBRARY) $(LIBRARY)
+	$(AM_LINK)
+
+gcp_db_cloud_test: cloud/gcp/gcp_db_cloud_test.o $(TEST_LIBRARY) $(LIBRARY)
+	$(AM_LINK)
+
 cloud_manifest_test: cloud/cloud_manifest_test.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK)
 

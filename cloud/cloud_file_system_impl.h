@@ -29,6 +29,8 @@ class CloudFileSystemImpl : public CloudFileSystem {
 
  public:
   static int RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
+  static int RegisterGcpObjects(ObjectLibrary& library, const std::string& arg);
+
   // Constructor
   CloudFileSystemImpl(const CloudFileSystemOptions& options,
                       const std::shared_ptr<FileSystem>& base_fs,

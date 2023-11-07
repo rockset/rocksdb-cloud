@@ -1745,6 +1745,8 @@ static const auto& s3_reg __attribute__((__unused__)) =
 #endif /* USE_AWS */
 #endif // ROCKSDB_LITE
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static enum RepFactory StringToRepFactory(const char* ctype) {
   assert(ctype);
 
@@ -1760,8 +1762,13 @@ static enum RepFactory StringToRepFactory(const char* ctype) {
   fprintf(stdout, "Cannot parse memreptable %s\n", ctype);
   return kSkipList;
 }
+#pragma GCC diagnostic pop
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 static enum RepFactory FLAGS_rep_factory;
+#pragma GCC diagnostic pop
+
 DEFINE_string(memtablerep, "skip_list", "");
 DEFINE_int64(hash_bucket_count, 1024 * 1024, "hash bucket count");
 DEFINE_bool(use_plain_table, false,
