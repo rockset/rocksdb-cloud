@@ -98,9 +98,10 @@ Status GcpCloudOptions::GetClientConfiguration(CloudFileSystem* fs,
   options.set<gcs::IdempotencyPolicyOption>(
       gcs::AlwaysRetryIdempotencyPolicy().clone());
 
-  // Use exponential backoff with a 1ms initial delay, 1 minute maximum delay,
+  // Use exponential backoff with a 500ms initial delay, 1 minute maximum delay,
+  // GCS only allows one write per second per object
   options.set<gcs::BackoffPolicyOption>(
-      gcs::ExponentialBackoffPolicy(std::chrono::milliseconds(1),
+      gcs::ExponentialBackoffPolicy(std::chrono::milliseconds(500),
                                     std::chrono::minutes(1), 2.0)
           .clone());
 
