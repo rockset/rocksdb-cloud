@@ -673,7 +673,7 @@ class FileSystem : public Customizable {
   //
   // Default implementation is to return IOStatus::OK.
 
-  virtual IOStatus Poll(std::vector<void*>& /*io_handles*/,
+  virtual IOStatus Poll(std::vector<void*>& io_handles,
                         size_t /*min_completions*/) {
     return IOStatus::OK();
   }
@@ -950,44 +950,21 @@ class FSRandomAccessFile {
   // request and result and status fields are output parameter set by underlying
   // FileSystem. The data should always be read into scratch field.
   //
-  // Default implementation delegates to ReadAsync for each request.
+  // Default implementation is syncrhonous and delegates to MultiRead.
   virtual IOStatus MultiReadAsync(
       FSReadRequest* reqs, size_t num_reqs, const IOOptions& opts,
       std::function<void(const FSReadRequest*, size_t, void*)> cb, void* cb_arg,
-      void** io_handles, size_t* num_io_handles, IOHandleDeleter* del_fns,
-      IODebugContext* dbg) {
+      void** /*io_handles*/, size_t* num_io_handles,
+      IOHandleDeleter* /*del_fns*/, IODebugContext* dbg) {
     assert(*num_io_handles == num_reqs);
     *num_io_handles = 0;
-    // Counter that we use keep track of how many individual async reads are
-    // still in progress.
-    std::atomic<size_t> in_flight = 0;
-    for (size_t idx = 0; idx < num_reqs; idx++) {
-      auto& req = reqs[idx];
-      auto local_cb = [&in_flight](const FSReadRequest&, void*) {
-        // We are done with this read, decrement the counter and signal.
-        in_flight--;
-        in_flight.notify_one();
-      };
-      auto status = ReadAsync(req, opts, local_cb, nullptr, &io_handles[idx],
-                              &del_fns[idx], dbg);
-      if (status != IOStatus::OK()) {
-        // Delete in-progress IO-handles.
-        for (size_t k = 0; k < *num_io_handles; k++) {
-          if (io_handles[k] && del_fns[k]) {
-            del_fns[k](io_handles[k]);
-            io_handles[k] = nullptr;
-          }
-        }
-        *num_io_handles = 0;
-        return status;
-      }
-      (*num_io_handles)++;
-      in_flight++;
+
+    auto status = MultiRead(reqs, num_reqs, opts, dbg);
+    if (!status.ok()) {
+      return status;
     }
-    for (auto cv = in_flight.load(); cv != 0;
-         in_flight.wait(cv), cv = in_flight.load()) {
-    }
-    // the operation is completed, call the 'op_cb'
+
+    // the operation has completed successfully, execute callbacks
     cb(reqs, num_reqs, cb_arg);
     return IOStatus::OK();
   }
