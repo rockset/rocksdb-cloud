@@ -5,7 +5,6 @@
 
 #include <cinttypes>
 
-#include "rocksdb/cloud/cloud_file_deletion_scheduler.h"
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_manifest.h"
 #include "cloud/cloud_scheduler.h"
@@ -18,6 +17,7 @@
 #include "file/writable_file_writer.h"
 #include "port/likely.h"
 #include "port/port_posix.h"
+#include "rocksdb/cloud/cloud_file_deletion_scheduler.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/db.h"
@@ -33,7 +33,7 @@ namespace ROCKSDB_NAMESPACE {
 CloudFileSystemImpl::CloudFileSystemImpl(
     const CloudFileSystemOptions& opts, const std::shared_ptr<FileSystem>& base,
     const std::shared_ptr<Logger>& l)
-    : CloudFileSystem(opts, base, l), purger_is_running_(true) {
+    : CloudFileSystemEnv(opts, base, l), purger_is_running_(true) {
   if (opts.cloud_file_deletion_delay) {
     cloud_file_deletion_scheduler_ = CloudFileDeletionScheduler::Create(
         CloudScheduler::Get(), *opts.cloud_file_deletion_delay);

@@ -4,8 +4,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <thread>
 #include <set>
+#include <thread>
 
 #include "rocksdb/cloud/cloud_file_system.h"
 #include "rocksdb/file_system.h"
@@ -22,8 +22,8 @@ class CloudFileDeletionScheduler;
 //
 // The Cloud file system
 //
-class CloudFileSystemImpl : public CloudFileSystem {
-  friend class CloudFileSystem;
+class CloudFileSystemImpl : public CloudFileSystemEnv {
+  friend class CloudFileSystemEnv;
 
  public:
   static int RegisterAwsObjects(ObjectLibrary& library, const std::string& arg);
@@ -367,6 +367,7 @@ class CloudFileSystemImpl : public CloudFileSystem {
   IOStatus DeleteLocalInvisibleFiles(
       const std::string& dbname,
       const std::vector<std::string>& active_cookies) override;
+
  private:
   // Files are invisibile if:
   // - It's CLOUDMANFIEST file and cookie is not active. NOTE: empty cookie is
