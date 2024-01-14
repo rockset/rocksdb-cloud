@@ -2,7 +2,6 @@
 #ifndef ROCKSDB_LITE
 
 #include "rocksdb/cloud/cloud_file_system.h"
-
 #ifndef _WIN32_WINNT
 #include <unistd.h>
 #else
@@ -291,8 +290,8 @@ int offset_of(T1 CloudFileSystemOptions::*member) {
   return int(size_t(&(dummy_ceo_options.*member)) - size_t(&dummy_ceo_options));
 }
 
-static std::unordered_map<std::string, OptionTypeInfo>
-    cloud_fs_option_type_info = {
+const std::unordered_map<std::string, OptionTypeInfo>
+    CloudFileSystemOptions::cloud_fs_option_type_info = {
         {"keep_local_sst_files",
          {offset_of(&CloudFileSystemOptions::keep_local_sst_files),
           OptionType::kBoolean}},
@@ -417,18 +416,6 @@ Status CloudFileSystemOptions::Serialize(const ConfigOptions& config_options,
       reinterpret_cast<const char*>(this), value);
 }
 
-CloudFileSystemEnv::CloudFileSystemEnv(const CloudFileSystemOptions& options,
-                                       const std::shared_ptr<FileSystem>& base,
-                                       const std::shared_ptr<Logger>& logger)
-    : cloud_fs_options(options), base_fs_(base), info_log_(logger) {
-  RegisterOptions(&cloud_fs_options, &cloud_fs_option_type_info);
-}
-
-CloudFileSystemEnv::~CloudFileSystemEnv() {
-  cloud_fs_options.cloud_log_controller.reset();
-  cloud_fs_options.storage_provider.reset();
-}
-
 Status CloudFileSystemEnv::NewAwsFileSystem(
     const std::shared_ptr<FileSystem>& base_fs,
     const std::string& src_cloud_bucket, const std::string& src_cloud_object,
@@ -492,12 +479,13 @@ void CloudFileSystemEnv::RegisterCloudObjects(const std::string& arg) {
   });
 }
 
-std::unique_ptr<Env> CloudFileSystemEnv::NewCompositeEnvFromThis(Env* env) {
+std::unique_ptr<Env> CloudFileSystemEnv::NewCompositeEnvFromFs(FileSystem* fs,
+                                                               Env* env) {
   // We need a shared_ptr<FileSystem> pointing to "this", to initialize the
   // env wrapper, but we don't want that shared_ptr to own the lifecycle for
   // "this". Creating a shared_ptr with a custom no-op deleter instead.
-  std::shared_ptr<FileSystem> fs(this, [](auto* /*p*/) { /*noop*/ });
-  return std::make_unique<CompositeEnvWrapper>(env, fs);
+  std::shared_ptr<FileSystem> fsPtr(fs, [](auto* /*p*/) { /*noop*/ });
+  return std::make_unique<CompositeEnvWrapper>(env, fsPtr);
 }
 
 Status CloudFileSystemEnv::CreateFromString(
@@ -529,13 +517,13 @@ Status CloudFileSystemEnv::CreateFromString(
   copy.invoke_prepare_options = false;  // Prepare here, not there
   s = ObjectRegistry::NewInstance()->NewUniqueObject<FileSystem>(id, &fs);
   if (s.ok()) {
-    auto* cfs = dynamic_cast<CloudFileSystemEnv*>(fs.get());
+    auto* cfs = dynamic_cast<CloudFileSystemImpl*>(fs.get());
     assert(cfs);
     if (!options.empty()) {
       s = cfs->ConfigureFromMap(copy, options);
     }
     if (s.ok() && config_options.invoke_prepare_options) {
-      auto env = cfs->NewCompositeEnvFromThis(copy.env);
+      auto env = NewCompositeEnvFromFs(cfs, copy.env);
       copy.invoke_prepare_options = config_options.invoke_prepare_options;
       copy.env = env.get();
       s = cfs->PrepareOptions(copy);
@@ -583,7 +571,7 @@ Status CloudFileSystemEnv::CreateFromString(
   copy.invoke_prepare_options = false;  // Prepare here, not there
   s = ObjectRegistry::NewInstance()->NewUniqueObject<FileSystem>(id, &fs);
   if (s.ok()) {
-    auto* cfs = dynamic_cast<CloudFileSystemEnv*>(fs.get());
+    auto* cfs = dynamic_cast<CloudFileSystemImpl*>(fs.get());
     assert(cfs);
     auto copts = cfs->GetOptions<CloudFileSystemOptions>();
     *copts = cloud_options;
@@ -591,7 +579,7 @@ Status CloudFileSystemEnv::CreateFromString(
       s = cfs->ConfigureFromMap(copy, options);
     }
     if (s.ok() && config_options.invoke_prepare_options) {
-      auto env = cfs->NewCompositeEnvFromThis(copy.env);
+      auto env = NewCompositeEnvFromFs(cfs, copy.env);
       copy.invoke_prepare_options = config_options.invoke_prepare_options;
       copy.env = env.get();
       s = cfs->PrepareOptions(copy);

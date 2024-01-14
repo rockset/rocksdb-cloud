@@ -397,6 +397,10 @@ class CloudFileSystemOptions {
   // Default: 1 hour
   std::optional<std::chrono::seconds> cloud_file_deletion_delay;
 
+  // Type info map for this class.
+  static const std::unordered_map<std::string, OptionTypeInfo>
+      cloud_fs_option_type_info;
+
   CloudFileSystemOptions(
       CloudType _cloud_type = CloudType::kCloudAws,
       LogType _log_type = LogType::kLogKafka,
@@ -616,29 +620,18 @@ class CloudFileSystem : public FileSystem {
 };
 
 //
-// The Cloud file system
+// The Cloud File System initialization/construction.
 //
 // NOTE: The AWS SDK must be initialized before the CloudFileSystem is
 // constructed, and remain active (Aws::ShutdownAPI() not called) as long as any
 // CloudFileSystem objects exist.
-class CloudFileSystemEnv : public CloudFileSystem {
- protected:
-  CloudFileSystemOptions cloud_fs_options;
-  std::shared_ptr<FileSystem> base_fs_;  // The underlying file system
-
+class CloudFileSystemEnv {
+ public:
   // Creates a new CompositeEnv from "env" and "this".
   // The returned Env must not outlive "this"
-  std::unique_ptr<Env> NewCompositeEnvFromThis(Env* env);
-
-  CloudFileSystemEnv(const CloudFileSystemOptions& options,
-                     const std::shared_ptr<FileSystem>& base,
-                     const std::shared_ptr<Logger>& logger);
+  static std::unique_ptr<Env> NewCompositeEnvFromFs(FileSystem* fs, Env* env);
 
  public:
-  mutable std::shared_ptr<Logger> info_log_;  // informational messages
-
-  virtual ~CloudFileSystemEnv();
-
   static void RegisterCloudObjects(const std::string& mode = "");
   static Status CreateFromString(const ConfigOptions& config_options,
                                  const std::string& id,
@@ -647,56 +640,6 @@ class CloudFileSystemEnv : public CloudFileSystem {
                                  const std::string& id,
                                  const CloudFileSystemOptions& cloud_options,
                                  std::unique_ptr<CloudFileSystem>* fs);
-
-  const char* Name() const override { return "cloud-env"; }
-
-  const std::shared_ptr<FileSystem>& GetBaseFileSystem() const override {
-    return base_fs_;
-  }
-
-  Logger* GetLogger() const override { return info_log_.get(); }
-
-  const std::shared_ptr<CloudStorageProvider>& GetStorageProvider()
-      const override {
-    return cloud_fs_options.storage_provider;
-  }
-
-  const std::shared_ptr<CloudLogController>& GetLogController() const {
-    return cloud_fs_options.cloud_log_controller;
-  }
-
-  const std::string& GetSrcBucketName() const override {
-    return cloud_fs_options.src_bucket.GetBucketName();
-  }
-  const std::string& GetSrcObjectPath() const override {
-    return cloud_fs_options.src_bucket.GetObjectPath();
-  }
-  bool HasSrcBucket() const override {
-    return cloud_fs_options.src_bucket.IsValid();
-  }
-
-  const std::string& GetDestBucketName() const override {
-    return cloud_fs_options.dest_bucket.GetBucketName();
-  }
-  const std::string& GetDestObjectPath() const override {
-    return cloud_fs_options.dest_bucket.GetObjectPath();
-  }
-
-  bool HasDestBucket() const override {
-    return cloud_fs_options.dest_bucket.IsValid();
-  }
-  bool SrcMatchesDest() const override {
-    if (HasSrcBucket() && HasDestBucket()) {
-      return cloud_fs_options.src_bucket == cloud_fs_options.dest_bucket;
-    } else {
-      return false;
-    }
-  }
-
-  // returns the options used to create this object
-  const CloudFileSystemOptions& GetCloudFileSystemOptions() const override {
-    return cloud_fs_options;
-  }
 
   // Create a new AWS file system.
   // src_bucket_name: bucket name suffix where db data is read from
