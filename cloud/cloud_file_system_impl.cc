@@ -1,6 +1,7 @@
 // Copyright (c) 2017 Rockset.
-#include "rocksdb/utilities/options_type.h"
 #ifndef ROCKSDB_LITE
+
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 
 #include <cinttypes>
 
@@ -14,7 +15,6 @@
 #include "file/writable_file_writer.h"
 #include "port/port_posix.h"
 #include "rocksdb/cloud/cloud_file_deletion_scheduler.h"
-#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/db.h"
@@ -22,6 +22,7 @@
 #include "rocksdb/io_status.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
+#include "rocksdb/utilities/options_type.h"
 #include "test_util/sync_point.h"
 #include "util/xxhash.h"
 

@@ -495,7 +495,7 @@ Status CloudFileSystemEnv::CreateFromString(
   std::string id;
   std::unordered_map<std::string, std::string> options;
   Status s;
-  if (value.find("=") == std::string::npos) {
+  if (value.find('=') == std::string::npos) {
     id = value;
   } else {
     s = StringToMap(value, &options);
