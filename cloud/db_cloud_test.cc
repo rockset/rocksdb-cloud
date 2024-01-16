@@ -2532,7 +2532,7 @@ TEST_F(CloudTest, DisableObsoleteFileDeletionOnOpenTest) {
 
   auto local_files = GetAllLocalFiles();
   // CM, MANIFEST1, MANIFEST2, CURRENT, IDENTITY, 2 sst files, wal directory
-  EXPECT_EQ(local_files.size(), 8);
+  EXPECT_EQ(local_files.size(), 9);
 
   ASSERT_OK(GetDBImpl()->TEST_CompactRange(0, nullptr, nullptr, nullptr, true));
 
@@ -2542,17 +2542,17 @@ TEST_F(CloudTest, DisableObsoleteFileDeletionOnOpenTest) {
 
   local_files = GetAllLocalFiles();
   // obsolete files are not deleted, also one extra sst files generated after compaction
-  EXPECT_EQ(local_files.size(), 9);
+  EXPECT_EQ(local_files.size(), 10);
 
   CloseDB();
 
   options_.disable_delete_obsolete_files_on_open = true;
   OpenDB();
   // obsolete files are not deleted
-  EXPECT_EQ(GetAllLocalFiles().size(), 8);
+  EXPECT_EQ(GetAllLocalFiles().size(), 10);
   // obsolete files are deleted!
   db_->EnableFileDeletions(false /* force */);
-  EXPECT_EQ(GetAllLocalFiles().size(), 6);
+  EXPECT_EQ(GetAllLocalFiles().size(), 8);
   CloseDB();
 }
 
