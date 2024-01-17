@@ -1237,6 +1237,8 @@ std::string DescribeVersionEdit(const VersionEdit& e, ColumnFamilyData* cfd) {
   oss << "Applying manifest update seq=" << e.GetManifestUpdateSequence()
       << ": ";
 
+  oss << e.DebugString(true) << "; OURS: ";
+
   if (!e.GetNewFiles().empty()) {
     oss << "New files: [";
     bool first = true;

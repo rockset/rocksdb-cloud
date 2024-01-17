@@ -5429,6 +5429,7 @@ Status VersionSet::ProcessManifestWrites(
         // No physical replication, skip
         continue;
       }
+      ROCKS_LOG_INFO(db_options_->info_log, "NEW VE: %s", e->DebugString(true).c_str());
 
       ++manifest_update_sequence_;
 
