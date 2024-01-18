@@ -1325,6 +1325,8 @@ class VersionSet {
     return last_sequence_.load(std::memory_order_acquire);
   }
 
+  uint64_t DescriptorLastSequence() const { return descriptor_last_sequence_; }
+
   // Note: memory_order_acquire must be sufficient.
   uint64_t LastAllocatedSequence() const {
     return last_allocated_sequence_.load(std::memory_order_seq_cst);

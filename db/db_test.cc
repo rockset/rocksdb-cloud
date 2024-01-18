@@ -3456,6 +3456,8 @@ class ModelDB : public DB {
 
   uint64_t GetNextFileNumber() const override { return 0; };
 
+  Status RewindLastSequence() override { return Status::OK(); }
+
  private:
   class ModelIter : public Iterator {
    public:

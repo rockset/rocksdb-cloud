@@ -564,11 +564,19 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       }
       WriteBatchInternal::SetSequence(&wb, current_sequence);
 
+      auto count = WriteBatchInternal::Count(&wb);
+
       ReplicationLogRecord rlr;
       rlr.contents = WriteBatchInternal::StealContents(&wb);
       rlr.type = ReplicationLogRecord::kMemtableWrite;
-      immutable_db_options_.replication_log_listener->OnReplicationLogRecord(
+      auto rxx = immutable_db_options_.replication_log_listener->OnReplicationLogRecord(
           std::move(rlr));
+
+      ROCKS_LOG_INFO(
+          immutable_db_options_.info_log,
+          "Recording memtable write with seqnum: %" PRIu64 " count: %" PRIu32
+          " seq: %s", current_sequence, count,
+          Slice(rxx).ToString(true).c_str());
     }
 
     // PreReleaseCallback is called after WAL write and before memtable write

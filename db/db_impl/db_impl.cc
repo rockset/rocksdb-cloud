@@ -1301,13 +1301,15 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         WriteBatch batch;
         s = WriteBatchInternal::SetContents(&batch, std::move(record.contents));
         assert(s.ok());
+        auto seq = WriteBatchInternal::Sequence(&batch);
 
         if (versions_->LastSequence() + 1 !=
             WriteBatchInternal::Sequence(&batch)) {
           std::ostringstream oss;
           oss << "Gap in sequence numbers, expected="
               << versions_->LastSequence() + 1
-              << " got=" << WriteBatchInternal::Sequence(&batch);
+              << " got=" << WriteBatchInternal::Sequence(&batch) << " at seq "
+              << Slice(replication_sequence).ToString(true).c_str();
           s = Status::Corruption(oss.str());
         }
 
@@ -1323,6 +1325,11 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         if (s.ok()) {
           versions_->SetLastSequence(next_seq - 1);
         }
+        ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                       "Applying memtable write with seqnum: %" PRIu64
+                       ", next seq: %" PRIu64 " replication sequence (hex): %s",
+                       seq, next_seq,
+                       Slice(replication_sequence).ToString(true).c_str());
         mutex_.Lock();
         break;
       }
@@ -1456,8 +1463,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           autovector<VersionEdit*> el;
           el.push_back(&e);
           edit_lists.push_back(std::move(el));
-          ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s",
-                         DescribeVersionEdit(e, cfd).c_str());
+          ROCKS_LOG_INFO(immutable_db_options_.info_log, "%s at %s",
+                         DescribeVersionEdit(e, cfd).c_str(),
+                         Slice(replication_sequence).ToString(true).c_str());
           if (!s.ok()) {
             break;
           }
@@ -7270,6 +7278,30 @@ ColumnFamilyData* DBImpl::GetAnyCFWithAutoFlushDisabled() const {
     }
   }
   return nullptr;
+}
+
+Status DBImpl::RewindLastSequence() {
+  WriteThread::Writer w;
+  InstrumentedMutexLock l(&mutex_);
+  write_thread_.EnterUnbatched(&w, &mutex_);
+  for (auto cfd : *versions_->GetColumnFamilySet()) {
+    if (!cfd->mem()->IsEmpty()) {
+      return Status::InvalidArgument(
+          "Can't rewind sequence, memtable not empty");
+    }
+  }
+
+  auto persistedLastSeq = versions_->DescriptorLastSequence();
+  if (persistedLastSeq != versions_->LastSequence()) {
+    ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                   "All memtables empty, moving last sequence from %" PRIu64
+                   " to %" PRIu64,
+                   versions_->LastSequence(), persistedLastSeq);
+    versions_->SetLastSequence(persistedLastSeq);
+  }
+
+  write_thread_.ExitUnbatched(&w);
+  return Status::OK();
 }
 
 namespace {

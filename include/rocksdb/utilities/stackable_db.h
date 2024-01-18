@@ -636,6 +636,10 @@ class StackableDB : public DB {
     return db_->GetNextFileNumber();
   }
 
+  Status RewindLastSequence() override {
+    return db_->RewindLastSequence();
+  }
+
   Status TryCatchUpWithPrimary() override {
     return db_->TryCatchUpWithPrimary();
   }
