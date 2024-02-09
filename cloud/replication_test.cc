@@ -18,6 +18,7 @@
 #include "rocksdb/table.h"
 #include "test_util/testharness.h"
 #include "util/cast_util.h"
+#include "util/coding.h"
 #include "util/random.h"
 #include "util/string_util.h"
 
@@ -35,6 +36,12 @@ class Listener : public ReplicationLogListener {
   enum State { OPEN, RECOVERY, TAILING };
 
   void setState(State state) { state_ = state; }
+
+  uint64_t EpochOfReplicationSequence(Slice replication_seq) override {
+    uint32_t seq;
+    assert(GetFixed32(&replication_seq, &seq));
+    return seq;
+  }
 
   std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
     // We should't be producing replication log records during open

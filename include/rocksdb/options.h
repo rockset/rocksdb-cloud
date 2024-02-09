@@ -507,6 +507,12 @@ class ReplicationLogListener {
   // the database needs to re-apply all replication log records since
   // DB::GetPersistedReplicationSequence() (non-inclusive).
   virtual std::string OnReplicationLogRecord(ReplicationLogRecord record) = 0;
+
+  // It's required that replication sequence contains an epoch number, which is
+  // an 8 bytes integer bumped whenever a new leader is elected.
+  //
+  // Returns replication epoch encoded in replication sequence.
+  virtual uint64_t EpochOfReplicationSequence(Slice replication_seq) = 0;
 };
 
 struct DBOptions {
@@ -1485,6 +1491,20 @@ struct DBOptions {
   //
   // Default: false
   bool disable_delete_obsolete_files_on_open = false;
+
+  // replication epoch when db is opened
+  uint64_t initial_replication_epoch = 0;
+
+  // Max number of replication epochs we maintain in manifest files.
+  // We maintain (replication epoch, first manifest update sequence in that
+  // epoch) for all epochs after the persisted replication sequence (including
+  // the epoch of persisted replication sequence). This is used to help detect
+  // divergence when recovering local replication log in leader follower mode.
+  // But it's possible that the replication epoch changes while there is no
+  // manfiest writes which update persisted replication sequence. To avoid
+  // maintaining a lot of replication epochs in manifest file for that case, we
+  // limit the max number of replication epochs. 
+  uint32_t max_num_replication_epochs = 100;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

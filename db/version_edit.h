@@ -17,6 +17,7 @@
 #include "db/blob/blob_file_addition.h"
 #include "db/blob/blob_file_garbage.h"
 #include "db/dbformat.h"
+#include "db/replication_epoch_edit.h"
 #include "db/wal_edit.h"
 #include "memory/arena.h"
 #include "port/malloc.h"
@@ -61,6 +62,7 @@ enum Tag : uint32_t {
   // RocksDB-Cloud additions to the manifest
   kReplicationSequence = 720,
   kManifestUpdateSequence = 721,
+  kReplicationEpochAdd = 722,
 
   // Mask for an unidentified tag from the future which can be safely ignored.
   kTagSafeIgnoreMask = 1 << 13,
@@ -421,6 +423,13 @@ class VersionEdit {
   bool HasManifestUpdateSequence() const { return has_manifest_update_sequence_; }
   uint64_t GetManifestUpdateSequence() const { return manifest_update_sequence_; }
 
+  void addReplicationEpoch(ReplicationEpochAddition epochAddition) {
+    replication_epoch_additions_.emplace_back(std::move(epochAddition));
+  }
+  const ReplicationEpochAdditions& GetReplicationEpochAdditions() const {
+    return replication_epoch_additions_;
+  }
+
   void SetPrevLogNumber(uint64_t num) {
     has_prev_log_number_ = true;
     prev_log_number_ = num;
@@ -690,6 +699,7 @@ class VersionEdit {
   uint64_t log_number_ = 0;
   std::string replication_sequence_ = "";
   uint64_t manifest_update_sequence_ = 0;
+  ReplicationEpochAdditions replication_epoch_additions_;
   uint64_t prev_log_number_ = 0;
   uint64_t next_file_number_ = 0;
   uint32_t max_column_family_ = 0;
@@ -701,6 +711,7 @@ class VersionEdit {
   bool has_log_number_ = false;
   bool has_replication_sequence_ = false;
   bool has_manifest_update_sequence_ = false;
+  bool has_manifest_update_epoch_ = false;
   bool has_prev_log_number_ = false;
   bool has_next_file_number_ = false;
   bool has_max_column_family_ = false;

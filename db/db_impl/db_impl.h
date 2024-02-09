@@ -1082,6 +1082,9 @@ class DBImpl : public DB {
   void NewManifestOnNextUpdate() override {
     versions_->NewManifestOnNextUpdate();
   }
+  void UpdateReplicationEpoch(uint64_t new_epoch) override {
+    versions_->UpdateReplicationEpoch(new_epoch);
+  }
 
   uint64_t GetNextFileNumber() const override {
     return versions_->current_next_file_number();

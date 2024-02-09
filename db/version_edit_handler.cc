@@ -483,6 +483,7 @@ void VersionEditHandler::CheckIterationResult(const log::Reader& reader,
       version_set_->replication_sequence_ =
           version_edit_params_.GetReplicationSequence();
     }
+    // TODO(wei): apply replication epoch changes as well???
   }
 }
 

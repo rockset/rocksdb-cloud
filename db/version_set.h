@@ -41,6 +41,7 @@
 #include "db/log_reader.h"
 #include "db/range_del_aggregator.h"
 #include "db/read_callback.h"
+#include "db/replication_epoch_edit.h"
 #include "db/table_cache.h"
 #include "db/version_builder.h"
 #include "db/version_edit.h"
@@ -1307,6 +1308,15 @@ class VersionSet {
   }
   // REQUIRED: DB mutex must be locked
   std::string GetReplicationSequence() const { return replication_sequence_; }
+  // REQUIRED: DB mutex must be locked
+  std::optional<uint64_t> GetReplicationEpochForMUS(uint64_t mus) const {
+    return replication_epochs_.GetEpochForMUS(mus);
+  }
+#ifndef NDEBUG
+  const ReplicationEpochSet& TEST_GetReplicationEpochSet() const {
+    return replication_epochs_;
+  }
+#endif
 
   // Note: memory_order_release must be sufficient
   void SetLastPublishedSequence(uint64_t s) {
@@ -1476,8 +1486,16 @@ class VersionSet {
   // The returned WalSet needs to be accessed with DB mutex held.
   const WalSet& GetWalSet() const { return wals_; }
 
+  // TODO(wei): remove this function once replication epoch based divergence
+  // detection is rolled out
   void NewManifestOnNextUpdate() {
     new_manifest_on_next_update_.store(true, std::memory_order_relaxed);
+  }
+
+  // Called when replication epoch has changed
+  void UpdateReplicationEpoch(uint64_t new_replication_epoch) {
+    new_manifest_on_next_update_.store(true, std::memory_order_relaxed);
+    current_replication_epoch_.store(new_replication_epoch, std::memory_order_relaxed);
   }
 
   void TEST_CreateAndAppendVersion(ColumnFamilyData* cfd) {
@@ -1594,6 +1612,7 @@ class VersionSet {
   // If true, on next update, we will reset descriptor_log_, and write latest
   // snapshot of VersionSet to a new MANIFEST file
   std::atomic_bool new_manifest_on_next_update_{false};
+  std::atomic<uint64_t> current_replication_epoch_{0};
 
   // generates a increasing version number for every new version
   uint64_t current_version_number_;
@@ -1601,7 +1620,13 @@ class VersionSet {
   // Protected by the DB mutex
   uint64_t manifest_update_sequence_{0};
   // Protected by the DB mutex
+  // Current persisted replication sequence
   std::string replication_sequence_;
+  // Protected by the DB mutex
+  // We maintain all the replication epochs after the
+  // persisted replication sequence, including the epoch
+  // of the persisted replication sequence
+  ReplicationEpochSet replication_epochs_;
 
   // Queue of writers to the manifest file
   std::deque<ManifestWriter*> manifest_writers_;
