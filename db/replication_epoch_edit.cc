@@ -98,8 +98,13 @@ void ReplicationEpochSet::DeleteEpochsBefore(
 }
 
 std::optional<uint64_t> ReplicationEpochSet::GetEpochForMUS(uint64_t mus) const {
-    if (empty() || epochs_.front().GetFirstMUS() > mus || epochs_.back().GetFirstMUS() < mus) {
+    if (empty() || epochs_.front().GetFirstMUS() > mus) {
         return std::nullopt;
+    }
+
+    // fast path
+    if (epochs_.back().GetFirstMUS() <= mus) {
+        return epochs_.back().GetEpoch();
     }
 
     auto it = std::upper_bound(epochs_.begin(), epochs_.end(), mus,

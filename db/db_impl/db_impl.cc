@@ -1356,6 +1356,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
 
         auto current_update_sequence = versions_->GetManifestUpdateSequence();
         uint64_t latest_applied_update_sequence = 0;
+        auto replication_epoch =
+            immutable_db_options_.replication_log_listener
+                ->EpochOfReplicationSequence(replication_sequence);
         for (auto& e : edits) {
           if (!e.HasManifestUpdateSequence()) {
             s = Status::InvalidArgument(
@@ -1363,6 +1366,11 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             break;
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
+          auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(latest_applied_update_sequence);
+          if (!inferred_epoch_of_mus || (*inferred_epoch_of_mus != replication_epoch)) {
+            info->diverged_manifest_writes = true;
+            break;
+          }
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
             // Ignore the update, we already have it
             continue;
@@ -1444,7 +1452,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             cfd->SetNextEpochNumber(newFiles.rbegin()->second.epoch_number + 1);
           }
         }
-        if (!s.ok()) {
+        // break early if there are errors or manifest write is diverged. DB should
+        // be reopened for this case
+        if (!s.ok() || info->diverged_manifest_writes) {
           break;
         }
         s = versions_->LogAndApply(cfds, mutable_cf_options_list, edit_lists,

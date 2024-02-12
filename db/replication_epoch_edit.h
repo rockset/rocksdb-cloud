@@ -62,8 +62,8 @@ class ReplicationEpochSet {
     void DeleteEpochsBefore(uint64_t epoch, uint32_t max_num_replication_epochs);
 
     // Find corresponding epoch for manifest update sequence.
-    // Return std::nullopt if `mus` is not coverred by the
-    // `ReplicationEpochSet`.
+    // Return std::nullopt if `mus` is smaller than the smallest
+    // manifest update sequence in the set
     std::optional<uint64_t> GetEpochForMUS(uint64_t mus) const;
 
     const auto& GetEpochs() const {
