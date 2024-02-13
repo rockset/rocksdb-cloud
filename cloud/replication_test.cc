@@ -240,6 +240,10 @@ class ReplicationTest : public testing::Test {
     return follower_db_.get();
   }
 
+  DBImpl* followerFull() const {
+    return static_cast_with_check<DBImpl>(currentFollower());
+  }
+
   // Check that CFs in leader and follower have the same next_log_num and
   // replication_sequence for all unflushed memtables
   void verifyNextLogNumAndReplSeqConsistency() const {
@@ -301,6 +305,14 @@ class ReplicationTest : public testing::Test {
           ASSERT_EQ(f1->unique_id, f2->unique_id);
         }
     }
+  }
+
+  void verifyReplicationEpochsEqual() {
+    auto leader = leaderFull(), follower = followerFull();
+    auto leaderEpochs = leader->GetVersionSet()->TEST_GetReplicationEpochSet(),
+         followerEpochs =
+             follower->GetVersionSet()->TEST_GetReplicationEpochSet();
+    ASSERT_EQ(leaderEpochs, followerEpochs);
   }
 
   void verifyEqual() {
@@ -1379,6 +1391,48 @@ TEST_F(ReplicationTest, SuperSnapshot) {
 
   follower->ReleaseSnapshot(snapshots[0]);
   follower->ReleaseSnapshot(snapshots[1]);
+}
+
+TEST_F(ReplicationTest, ReplicationEpochs) {
+  auto options = leaderOptions();
+  options.disable_auto_compactions = true;
+  options.initial_replication_epoch = 1;
+  auto leader = openLeader();
+  openFollower();
+
+  ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
+  ASSERT_TRUE(followerFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
+
+  auto cf = [](int i) { return "cf" + std::to_string(i); };
+
+  createColumnFamily(cf(0));
+  
+  ASSERT_OK(leader->Put(wo(), leaderCF(cf(0)), "k1", "v1"));
+  ASSERT_OK(leader->Flush(FlushOptions()));
+
+  catchUpFollower();
+
+  ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
+  ASSERT_TRUE(followerFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
+
+  leader->UpdateReplicationEpoch(2);
+
+  ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
+
+  ASSERT_OK(leader->Put(wo(), leaderCF(cf(0)), "k2", "v2"));
+  ASSERT_OK(leader->Flush(FlushOptions()));
+
+  catchUpFollower();
+
+  ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(), 1);
+  verifyReplicationEpochsEqual();
+
+  leader->UpdateReplicationEpoch(3);
+  ASSERT_OK(leader->Put(wo(), leaderCF(cf(0)), "k3", "v3"));
+  ASSERT_OK(leader->Flush(FlushOptions()));
+
+  ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(), 1);
+  verifyReplicationEpochsEqual();
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
