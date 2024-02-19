@@ -5482,9 +5482,9 @@ Status VersionSet::ProcessManifestWrites(
 
     replication_epochs_.AddEpochs(new_replication_epochs);
     if (pending_persist_replication_sequence) {
-      assert(db_options_->replication_log_listener);
+      assert(db_options_->replication_epoch_extractor);
       auto epoch =
-          db_options_->replication_log_listener->EpochOfReplicationSequence(
+          db_options_->replication_epoch_extractor->EpochOfReplicationSequence(
               *pending_persist_replication_sequence);
       replication_epochs_.DeleteEpochsBefore(epoch, db_options_->max_num_replication_epochs);
       replication_sequence_ = std::move(*pending_persist_replication_sequence);

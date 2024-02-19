@@ -1341,7 +1341,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         autovector<VersionEdit> edits;
         s = DeserializeReplicationLogManifestWrite(&contents_slice, &edits);
         if (!s.ok()) {
-            break;
+          break;
         }
 
         auto mutable_options =
@@ -1357,7 +1357,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         auto current_update_sequence = versions_->GetManifestUpdateSequence();
         uint64_t latest_applied_update_sequence = 0;
         auto replication_epoch =
-            immutable_db_options_.replication_log_listener
+            immutable_db_options_.replication_epoch_extractor
                 ->EpochOfReplicationSequence(replication_sequence);
         for (auto& e : edits) {
           if (!e.HasManifestUpdateSequence()) {
@@ -1366,13 +1366,20 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             break;
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
-          auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(latest_applied_update_sequence);
-          if (!inferred_epoch_of_mus || (*inferred_epoch_of_mus != replication_epoch)) {
-            info->diverged_manifest_writes = true;
-            break;
-          }
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
-            // Ignore the update, we already have it
+            // Ignore the update, we already have it, but still need to check manifest update divergence
+            if (versions_->IsReplicationEpochsEmpty()) {
+              // Either this is a newly opened db and no leader is elected, or epoch based divergence
+              // detection not enabled yet.
+              continue;
+            }
+            auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(
+                latest_applied_update_sequence);
+            if (!inferred_epoch_of_mus ||
+                (*inferred_epoch_of_mus != replication_epoch)) {
+              info->diverged_manifest_writes = true;
+              break;
+            }
             continue;
           }
           info->has_new_manifest_writes = true;

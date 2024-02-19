@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cinttypes>
+#include <memory>
 #include <optional>
 
 #include "cloud/filename.h"
@@ -27,6 +28,16 @@ namespace ROCKSDB_NAMESPACE {
 using LogRecordsVector =
     std::vector<std::pair<ReplicationLogRecord, std::string>>;
 
+
+class TestReplicationEpochExtractor: public ReplicationEpochExtractor {
+public:
+  uint64_t EpochOfReplicationSequence(Slice replication_seq) override {
+    uint64_t epoch;
+    assert(GetFixed64(&replication_seq, &epoch));
+    return epoch;
+  }
+};
+
 class Listener : public ReplicationLogListener {
  public:
   Listener(port::Mutex* log_records_mutex,
@@ -36,12 +47,6 @@ class Listener : public ReplicationLogListener {
   enum State { OPEN, RECOVERY, TAILING };
 
   void setState(State state) { state_ = state; }
-
-  uint64_t EpochOfReplicationSequence(Slice replication_seq) override {
-    uint32_t seq;
-    assert(GetFixed32(&replication_seq, &seq));
-    return seq;
-  }
 
   std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
     // We should't be producing replication log records during open
@@ -53,8 +58,8 @@ class Listener : public ReplicationLogListener {
     {
       MutexLock lock(log_records_mutex_);
       std::string replication_sequence;
-      PutFixed32(&replication_sequence,
-                 static_cast<uint32_t>(log_records_->size()));
+      PutFixed64(&replication_sequence, epoch_);
+      PutFixed64(&replication_sequence, log_records_->size());
       log_records_->emplace_back(
         std::move(record),
         replication_sequence);
@@ -66,6 +71,7 @@ class Listener : public ReplicationLogListener {
   port::Mutex* log_records_mutex_;
   LogRecordsVector* log_records_;
   State state_{OPEN};
+  uint64_t epoch_{0};
 };
 
 class FollowerEnv : public EnvWrapper {
@@ -102,10 +108,12 @@ int getPersistedSequence(DB* db) {
     return -1;
   }
   auto outSlice = Slice(out);
-  uint32_t val{0};
-  auto ok = GetFixed32(&outSlice, &val);
+  uint64_t epoch{0}, sequence{0};
+  auto ok = GetFixed64(&outSlice, &epoch);
   assert(ok);
-  return (int)val;
+  ok = GetFixed64(&outSlice, &sequence);
+  assert(ok);
+  return (int)sequence;
 }
 
 int getMemtableEntries(DB* db) {
@@ -371,6 +379,8 @@ Options ReplicationTest::leaderOptions() const {
   options.max_open_files = 500;
   options.max_bytes_for_level_base = 1 << 20;
   options.info_log = info_log_;
+  options.replication_epoch_extractor =
+      std::make_shared<TestReplicationEpochExtractor>();
   return options;
 }
 
@@ -423,6 +433,7 @@ DB* ReplicationTest::openLeader(Options options) {
           true /* allow_new_manifest_writes */, &info,
           DB::AR_EVICT_OBSOLETE_FILES);
       assert(s.ok());
+      assert(!info.diverged_manifest_writes);
     }
     listener->setState(Listener::TAILING);
   }

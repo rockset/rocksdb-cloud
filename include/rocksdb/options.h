@@ -507,6 +507,13 @@ class ReplicationLogListener {
   // the database needs to re-apply all replication log records since
   // DB::GetPersistedReplicationSequence() (non-inclusive).
   virtual std::string OnReplicationLogRecord(ReplicationLogRecord record) = 0;
+};
+
+// TODO(wei): a temporary hack so that we can get epoch from replication_sequence.
+// Will be removed once we move the replication_sequence serde into RocksdbCloud
+class ReplicationEpochExtractor {
+ public:
+  virtual ~ReplicationEpochExtractor() = default;
 
   // It's required that replication sequence contains an epoch number, which is
   // an 8 bytes integer bumped whenever a new leader is elected.
@@ -1472,6 +1479,9 @@ struct DBOptions {
   // See comments above ReplicationLogListener class definition.
   // Status: Experimental.
   std::shared_ptr<ReplicationLogListener> replication_log_listener = nullptr;
+  // See comments above ReplicationEpochExtractor class definition.
+  // Status: Experimental.
+  std::shared_ptr<ReplicationEpochExtractor> replication_epoch_extractor = nullptr;
 
   // If set to false, when compaction or flush sees a SingleDelete followed by
   // a Delete for the same user key, compaction job will not fail.

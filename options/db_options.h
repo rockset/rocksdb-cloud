@@ -22,6 +22,7 @@ struct ImmutableDBOptions {
 
   bool create_if_missing;
   std::shared_ptr<ReplicationLogListener> replication_log_listener;
+  std::shared_ptr<ReplicationEpochExtractor> replication_epoch_extractor;
   bool create_missing_column_families;
   bool error_if_exists;
   bool paranoid_checks;

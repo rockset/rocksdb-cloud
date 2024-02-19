@@ -1309,6 +1309,9 @@ class VersionSet {
   // REQUIRED: DB mutex must be locked
   std::string GetReplicationSequence() const { return replication_sequence_; }
   // REQUIRED: DB mutex must be locked
+  bool IsReplicationEpochsEmpty() const {
+    return replication_epochs_.empty();
+  }
   std::optional<uint64_t> GetReplicationEpochForMUS(uint64_t mus) const {
     return replication_epochs_.GetEpochForMUS(mus);
   }

@@ -120,9 +120,7 @@ bool VersionEdit::EncodeTo(std::string* dst) const {
   }
   for (const auto &replication_epoch_addition: replication_epoch_additions_) {
     PutVarint32(dst, kReplicationEpochAdd);
-    std::string encoded;
-    replication_epoch_addition.EncodeTo(&encoded);
-    PutLengthPrefixedSlice(dst, encoded);
+    replication_epoch_addition.EncodeTo(dst);
   }
   if (has_prev_log_number_) {
     PutVarint32Varint64(dst, kPrevLogNumber, prev_log_number_);
