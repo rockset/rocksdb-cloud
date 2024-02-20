@@ -111,7 +111,6 @@ struct ImmutableDBOptions {
   std::shared_ptr<CompactionService> compaction_service;
   bool enforce_single_del_contracts;
   bool disable_delete_obsolete_files_on_open;
-  uint64_t initial_replication_epoch;
   uint32_t max_num_replication_epochs;
 
   bool IsWalDirSameAsDBPath() const;

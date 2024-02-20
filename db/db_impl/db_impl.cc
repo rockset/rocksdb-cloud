@@ -6599,6 +6599,11 @@ ColumnFamilyData* DBImpl::GetAnyCFWithAutoFlushDisabled() const {
   return nullptr;
 }
 
+void DBImpl::UpdateReplicationEpoch(uint64_t next_replication_epoch) {
+  InstrumentedMutexLock l(&mutex_);
+  versions_->UpdateReplicationEpoch(next_replication_epoch);
+}
+
 namespace {
 thread_local bool threadLogging{false};
 }

@@ -39,22 +39,27 @@ std::ostream& operator<<(std::ostream& os, const ReplicationEpochAddition& ea) {
     return os;
 }
 
-Status ReplicationEpochSet::AddEpoch(const ReplicationEpochAddition& epoch) {
-    if (!epochs_.empty() && epochs_.back() >= epoch) {
-        std::stringstream ss;
-        ss << "Misordered replication epoch. prev: " << epochs_.back()
-            << ", next: " << epoch;
-        return Status::Corruption(ss.str());
-    }
-    epochs_.push_back(epoch);
-    return Status::OK();
+Status ReplicationEpochSet::AddEpoch(const ReplicationEpochAddition& epoch,
+                                     uint32_t max_num_replication_epochs) {
+  if (!epochs_.empty() && epochs_.back() >= epoch) {
+    std::stringstream ss;
+    ss << "Misordered replication epoch. prev: " << epochs_.back()
+       << ", next: " << epoch;
+    return Status::Corruption(ss.str());
+  }
+
+  while (epochs_.size() + 1 >= max_num_replication_epochs) {
+    epochs_.pop_front();
+  }
+  epochs_.push_back(epoch);
+  return Status::OK();
 }
 
-Status ReplicationEpochSet::AddEpochs(const ReplicationEpochAdditions& epochs) {
+Status ReplicationEpochSet::AddEpochs(const ReplicationEpochAdditions& epochs, uint32_t max_num_replication_epochs) {
     for (auto& epoch: epochs) {
-        auto s = AddEpoch(epoch);
-        if (!s.ok()) {
-            return s;
+      auto s = AddEpoch(epoch, max_num_replication_epochs);
+      if (!s.ok()) {
+        return s;
         }
     }
     return Status::OK();
@@ -68,9 +73,9 @@ Status ReplicationEpochSet::VerifyNewEpochs(const ReplicationEpochAdditions& new
 
     std::optional<ReplicationEpochAddition> prev;
     if (!epochs_.empty()) {
-        prev = epochs_.back();
+      prev = epochs_.back();
     }
-    
+
     for (auto& epoch: new_epochs) {
         if (!prev) {
             prev = epoch;
@@ -89,10 +94,8 @@ Status ReplicationEpochSet::VerifyNewEpochs(const ReplicationEpochAdditions& new
     return Status::OK();
 }
 
-void ReplicationEpochSet::DeleteEpochsBefore(
-    uint64_t epoch, uint32_t max_num_replication_epochs) {
-  while (!epochs_.empty() && (epochs_.front().GetEpoch() < epoch ||
-                              epochs_.size() > max_num_replication_epochs)) {
+void ReplicationEpochSet::DeleteEpochsBefore(uint64_t epoch) {
+  while (!epochs_.empty() && (epochs_.front().GetEpoch() < epoch)) {
     epochs_.pop_front();
   }
 }
@@ -127,6 +130,13 @@ bool operator==(const ReplicationEpochSet& es1, const ReplicationEpochSet& es2) 
         }
     }
     return true;
+}
+
+std::ostream& operator<<(std::ostream& os, const ReplicationEpochSet& es) {
+    for (const auto& e: es.GetEpochs()) {
+        os << e << "; ";
+    }
+    return os;
 }
 
 }

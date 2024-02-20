@@ -1502,9 +1502,6 @@ struct DBOptions {
   // Default: false
   bool disable_delete_obsolete_files_on_open = false;
 
-  // replication epoch when db is opened
-  uint64_t initial_replication_epoch = 0;
-
   // Max number of replication epochs we maintain in manifest files.
   // We maintain (replication epoch, first manifest update sequence in that
   // epoch) for all epochs after the persisted replication sequence (including
@@ -1513,7 +1510,11 @@ struct DBOptions {
   // But it's possible that the replication epoch changes while there is no
   // manfiest writes which update persisted replication sequence. To avoid
   // maintaining a lot of replication epochs in manifest file for that case, we
-  // limit the max number of replication epochs. 
+  // limit the max number of replication epochs.
+  //
+  // NOTE: usually we don't expect too many new replication epochs after
+  // persisted replication sequence, so the max limit here shouldn't be quite
+  // large
   uint32_t max_num_replication_epochs = 100;
 };
 

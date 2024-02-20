@@ -4855,7 +4855,6 @@ VersionSet::VersionSet(const std::string& dbname,
       last_allocated_sequence_(0),
       last_published_sequence_(0),
       prev_log_number_(0),
-      current_replication_epoch_(_db_options->initial_replication_epoch),
       current_version_number_(0),
       manifest_file_size_(0),
       file_options_(storage_options),
@@ -4907,7 +4906,7 @@ void VersionSet::Reset() {
   obsolete_files_.clear();
   obsolete_manifests_.clear();
   wals_.Reset();
-  new_manifest_on_next_update_.store(false, std::memory_order_relaxed);
+  next_replication_epoch_.reset();
 }
 
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
@@ -5173,22 +5172,18 @@ Status VersionSet::ProcessManifestWrites(
   }
 
   assert(pending_manifest_file_number_ == 0);
-  auto new_manifest_force =
-      new_manifest_on_next_update_.exchange(false, std::memory_order_relaxed);
 
   // Generate new replication epochs when replication epoch has changed.
-  // `new_manifest_on_next_update_` will only be true when epoch has changed
-  if (new_manifest_force && is_leader) {
+  if (next_replication_epoch_ && is_leader) {
     auto firstMUS = first_writer.edit_list.front()->GetManifestUpdateSequence();
-    auto currentEpoch = current_replication_epoch_.load(std::memory_order_relaxed);
-    ReplicationEpochAddition epochAddition(currentEpoch, firstMUS);
-    first_writer.edit_list.front()->addReplicationEpoch(epochAddition);
+    ReplicationEpochAddition epochAddition(*next_replication_epoch_, firstMUS);
+    first_writer.edit_list.front()->AddReplicationEpoch(epochAddition);
     new_replication_epochs.emplace_back(std::move(epochAddition));
   }
 
   if (!descriptor_log_ ||
       manifest_file_size_ > db_options_->max_manifest_file_size ||
-      new_manifest_force) {
+      next_replication_epoch_) {
     TEST_SYNC_POINT("VersionSet::ProcessManifestWrites:BeforeNewManifest");
     TEST_SYNC_POINT_CALLBACK(
         "VersionSet::ProcessManifestWrites:BeforeNewManifest", nullptr);
@@ -5480,16 +5475,18 @@ Status VersionSet::ProcessManifestWrites(
     manifest_file_size_ = new_manifest_file_size;
     prev_log_number_ = first_writer.edit_list.front()->prev_log_number_;
 
-    replication_epochs_.AddEpochs(new_replication_epochs);
+    replication_epochs_.AddEpochs(new_replication_epochs,
+                                  db_options_->max_num_replication_epochs);
     if (pending_persist_replication_sequence) {
       assert(db_options_->replication_epoch_extractor);
       auto epoch =
           db_options_->replication_epoch_extractor->EpochOfReplicationSequence(
               *pending_persist_replication_sequence);
-      replication_epochs_.DeleteEpochsBefore(epoch, db_options_->max_num_replication_epochs);
+      replication_epochs_.DeleteEpochsBefore(epoch);
       replication_sequence_ = std::move(*pending_persist_replication_sequence);
     }
     manifest_update_sequence_ = pending_manifest_update_sequence;
+    next_replication_epoch_.reset();
   } else {
     std::string version_edits;
     for (auto& e : batch_edits) {
@@ -6455,7 +6452,7 @@ Status VersionSet::WriteCurrentStateToManifest(
   if (!replication_epochs_.empty()) {
     VersionEdit replication_epoch_additions;
     for (const auto& addition : replication_epochs_.GetEpochs()) {
-      replication_epoch_additions.addReplicationEpoch(addition);
+      replication_epoch_additions.AddReplicationEpoch(addition);
     }
     std::string record;
     if (!replication_epoch_additions.EncodeTo(&record)) {

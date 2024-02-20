@@ -587,11 +587,8 @@ class StackableDB : public DB {
     return db_->DefaultColumnFamily();
   }
 
-  void NewManifestOnNextUpdate() override {
-    db_->NewManifestOnNextUpdate();
-  }
-  void UpdateReplicationEpoch(uint64_t new_epoch) override {
-    db_->UpdateReplicationEpoch(new_epoch);
+  void UpdateReplicationEpoch(uint64_t next_replication_epoch) override {
+    db_->UpdateReplicationEpoch(next_replication_epoch);
   }
 
   uint64_t GetNextFileNumber() const override {

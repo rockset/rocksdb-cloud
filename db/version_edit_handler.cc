@@ -480,10 +480,14 @@ void VersionEditHandler::CheckIterationResult(const log::Reader& reader,
           version_edit_params_.GetManifestUpdateSequence();
     }
     if (version_edit_params_.HasReplicationSequence()) {
+      auto epoch =
+          version_set_->db_options()
+              ->replication_epoch_extractor->EpochOfReplicationSequence(
+                  version_edit_params_.GetReplicationSequence());
       version_set_->replication_sequence_ =
           version_edit_params_.GetReplicationSequence();
+      version_set_->replication_epochs_.DeleteEpochsBefore(epoch);
     }
-    // TODO(wei): apply replication epoch changes as well???
   }
 }
 
@@ -649,6 +653,12 @@ Status VersionEditHandler::ExtractInfoFromVersionEdit(ColumnFamilyData* cfd,
     if (!version_edit_params_.has_prev_log_number_) {
       version_edit_params_.SetPrevLogNumber(0);
     }
+
+    // Add all replication epochs temporarily, epochs before persisted
+    // replication sequence will be pruned later
+    version_set_->replication_epochs_.AddEpochs(
+        edit.GetReplicationEpochAdditions(),
+        version_set_->db_options()->max_num_replication_epochs);
     if (edit.has_replication_sequence_) {
       version_edit_params_.SetReplicationSequence(edit.replication_sequence_);
     }

@@ -423,11 +423,14 @@ class VersionEdit {
   bool HasManifestUpdateSequence() const { return has_manifest_update_sequence_; }
   uint64_t GetManifestUpdateSequence() const { return manifest_update_sequence_; }
 
-  void addReplicationEpoch(ReplicationEpochAddition epochAddition) {
+  void AddReplicationEpoch(ReplicationEpochAddition epochAddition) {
     replication_epoch_additions_.emplace_back(std::move(epochAddition));
   }
   const ReplicationEpochAdditions& GetReplicationEpochAdditions() const {
     return replication_epoch_additions_;
+  }
+  bool HasReplicationEpochAdditions() const {
+    return !replication_epoch_additions_.empty();
   }
 
   void SetPrevLogNumber(uint64_t num) {

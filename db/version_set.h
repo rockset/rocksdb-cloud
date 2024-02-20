@@ -1489,16 +1489,9 @@ class VersionSet {
   // The returned WalSet needs to be accessed with DB mutex held.
   const WalSet& GetWalSet() const { return wals_; }
 
-  // TODO(wei): remove this function once replication epoch based divergence
-  // detection is rolled out
-  void NewManifestOnNextUpdate() {
-    new_manifest_on_next_update_.store(true, std::memory_order_relaxed);
-  }
-
   // Called when replication epoch has changed
   void UpdateReplicationEpoch(uint64_t new_replication_epoch) {
-    new_manifest_on_next_update_.store(true, std::memory_order_relaxed);
-    current_replication_epoch_.store(new_replication_epoch, std::memory_order_relaxed);
+    next_replication_epoch_ = new_replication_epoch;
   }
 
   void TEST_CreateAndAppendVersion(ColumnFamilyData* cfd) {
@@ -1571,6 +1564,9 @@ class VersionSet {
   Status VerifyFileMetadata(ColumnFamilyData* cfd, const std::string& fpath,
                             int level, const FileMetaData& meta);
 
+  uint64_t GetCurrentReplicationEpoch() const;
+  bool HasReplicationEpochChanged();
+
   // Protected by DB mutex.
   WalSet wals_;
 
@@ -1614,8 +1610,11 @@ class VersionSet {
   std::unique_ptr<log::Writer> descriptor_log_;
   // If true, on next update, we will reset descriptor_log_, and write latest
   // snapshot of VersionSet to a new MANIFEST file
-  std::atomic_bool new_manifest_on_next_update_{false};
-  std::atomic<uint64_t> current_replication_epoch_{0};
+
+  // Replication epoch we are switching to.  Value is only set when
+  // `UpdateReplicationEpoch` is called, and reset to empty on when first
+  // manifest update is done successfully. Protected by DB mutex
+  std::optional<uint64_t> next_replication_epoch_;
 
   // generates a increasing version number for every new version
   uint64_t current_version_number_;

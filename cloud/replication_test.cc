@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cinttypes>
-#include <memory>
 #include <optional>
 
 #include "cloud/filename.h"
@@ -65,6 +64,10 @@ class Listener : public ReplicationLogListener {
         replication_sequence);
       return replication_sequence;
     }
+  }
+
+  void UpdateEpoch(uint64_t epoch) {
+    epoch_ = epoch;
   }
 
  private:
@@ -348,6 +351,13 @@ class ReplicationTest : public testing::Test {
   }
 
 protected:
+  void UpdateLeaderEpoch(uint64_t epoch) {
+    // assuming leader db is opened
+    assert(leader_db_ && listener_);
+    leader_db_->UpdateReplicationEpoch(epoch);
+    listener_->UpdateEpoch(epoch);
+  }
+
   std::shared_ptr<Logger> info_log_;
   bool replicate_epoch_number_{true};
   bool consistency_check_on_epoch_replication{true};
@@ -366,6 +376,7 @@ protected:
   ColumnFamilyMap leader_cfs_;
   std::unique_ptr<DB> follower_db_;
   ColumnFamilyMap follower_cfs_;
+  std::shared_ptr<Listener> listener_;
 };
 
 Options ReplicationTest::leaderOptions() const {
@@ -395,11 +406,11 @@ DB* ReplicationTest::openLeader(Options options) {
     cf_names.push_back(kDefaultColumnFamilyName);
   }
 
-  auto listener =
+  listener_ =
       std::make_shared<Listener>(&log_records_mutex_, &log_records_);
-  options.replication_log_listener = listener;
+  options.replication_log_listener = listener_;
 
-  listener->setState(firstOpen ? Listener::TAILING : Listener::OPEN);
+  listener_->setState(firstOpen ? Listener::TAILING : Listener::OPEN);
 
   std::vector<ColumnFamilyDescriptor> column_families;
   for (auto& name : cf_names) {
@@ -422,7 +433,7 @@ DB* ReplicationTest::openLeader(Options options) {
 
   if (!firstOpen) {
     MutexLock lock(&log_records_mutex_);
-    listener->setState(Listener::RECOVERY);
+    listener_->setState(Listener::RECOVERY);
     // recover leader
     DB::ApplyReplicationLogRecordInfo info;
     auto leaderSeq = getPersistedSequence(db) + 1;
@@ -435,7 +446,7 @@ DB* ReplicationTest::openLeader(Options options) {
       assert(s.ok());
       assert(!info.diverged_manifest_writes);
     }
-    listener->setState(Listener::TAILING);
+    listener_->setState(Listener::TAILING);
   }
 
   return db;
@@ -1407,8 +1418,7 @@ TEST_F(ReplicationTest, SuperSnapshot) {
 TEST_F(ReplicationTest, ReplicationEpochs) {
   auto options = leaderOptions();
   options.disable_auto_compactions = true;
-  options.initial_replication_epoch = 1;
-  auto leader = openLeader();
+  auto leader = openLeader(options);
   openFollower();
 
   ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
@@ -1426,7 +1436,7 @@ TEST_F(ReplicationTest, ReplicationEpochs) {
   ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
   ASSERT_TRUE(followerFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
 
-  leader->UpdateReplicationEpoch(2);
+  UpdateLeaderEpoch(2);
 
   ASSERT_TRUE(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().empty());
 
@@ -1438,12 +1448,18 @@ TEST_F(ReplicationTest, ReplicationEpochs) {
   ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(), 1);
   verifyReplicationEpochsEqual();
 
-  leader->UpdateReplicationEpoch(3);
+  UpdateLeaderEpoch(3);
   ASSERT_OK(leader->Put(wo(), leaderCF(cf(0)), "k3", "v3"));
   ASSERT_OK(leader->Flush(FlushOptions()));
 
+  catchUpFollower();
   ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(), 1);
   verifyReplicationEpochsEqual();
+
+  closeLeader();
+  leader = openLeader(options);
+
+  ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(), 1);
 }
 
 }  //  namespace ROCKSDB_NAMESPACE
