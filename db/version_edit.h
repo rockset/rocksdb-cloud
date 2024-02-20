@@ -62,7 +62,6 @@ enum Tag : uint32_t {
   // RocksDB-Cloud additions to the manifest
   kReplicationSequence = 720,
   kManifestUpdateSequence = 721,
-  kReplicationEpochAdd = 722,
 
   // Mask for an unidentified tag from the future which can be safely ignored.
   kTagSafeIgnoreMask = 1 << 13,
@@ -76,6 +75,9 @@ enum Tag : uint32_t {
   kFullHistoryTsLow,
   kWalAddition2,
   kWalDeletion2,
+
+  // RocksDB-Cloud forward compatible records
+  kReplicationEpochAdd = ((1 << 16) | kTagSafeIgnoreMask)
 };
 
 enum NewFileCustomTag : uint32_t {

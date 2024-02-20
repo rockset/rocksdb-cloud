@@ -1348,6 +1348,7 @@ class DB {
   // REQUIRES: info needs to be provided, can't be nullptr.
   enum ApplyReplicationLogRecordFlags : unsigned {
     AR_EVICT_OBSOLETE_FILES = 1U << 0,
+    AR_EPOCH_BASED_DIVERGENCE_DETECTION = 1U << 1,
   };
   using CFOptionsFactory = std::function<ColumnFamilyOptions(Slice)>;
   virtual Status ApplyReplicationLogRecord(ReplicationLogRecord record,

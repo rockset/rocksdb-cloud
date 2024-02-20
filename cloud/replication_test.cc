@@ -18,7 +18,6 @@
 #include "rocksdb/table.h"
 #include "test_util/testharness.h"
 #include "util/cast_util.h"
-#include "util/coding.h"
 #include "util/random.h"
 #include "util/string_util.h"
 
@@ -442,7 +441,8 @@ DB* ReplicationTest::openLeader(Options options) {
           log_records_[leaderSeq].first, log_records_[leaderSeq].second,
           [this](Slice) { return ColumnFamilyOptions(leaderOptions()); },
           true /* allow_new_manifest_writes */, &info,
-          DB::AR_EVICT_OBSOLETE_FILES);
+          DB::AR_EVICT_OBSOLETE_FILES |
+              DB::AR_EPOCH_BASED_DIVERGENCE_DETECTION);
       assert(s.ok());
       assert(!info.diverged_manifest_writes);
     }

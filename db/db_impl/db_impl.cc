@@ -1258,6 +1258,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
   JobContext job_context(0, false);
   Status s;
   bool evictObsoleteFiles = flags & AR_EVICT_OBSOLETE_FILES;
+  bool enableEpochBasedDivergenceDetection = flags & AR_EPOCH_BASED_DIVERGENCE_DETECTION;
 
   {
     WriteThread::Writer w;
@@ -1367,8 +1368,8 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
-            // Ignore the update, we already have it, but still need to check manifest update divergence
-            if (versions_->IsReplicationEpochsEmpty()) {
+            if (!enableEpochBasedDivergenceDetection &&
+                versions_->IsReplicationEpochsEmpty()) {
               // Either this is a newly opened db and no leader is elected, or epoch based divergence
               // detection not enabled yet.
               continue;
@@ -1377,6 +1378,12 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
                 latest_applied_update_sequence);
             if (!inferred_epoch_of_mus ||
                 (*inferred_epoch_of_mus != replication_epoch)) {
+              // - If inferred_epoch_of_mus is not set, either we are recovering manifest writes
+              // before persisted replication sequence, or there are two many manifest writes after
+              // the persisted replication sequence. For either case, we report divergence and clear
+              // local log
+              // - If inferred_epoch_of_mus doesn't match epoch in VersionEdit, the applied version edit
+              // is diverged
               info->diverged_manifest_writes = true;
               break;
             }

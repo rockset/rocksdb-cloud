@@ -120,7 +120,9 @@ bool VersionEdit::EncodeTo(std::string* dst) const {
   }
   for (const auto &replication_epoch_addition: replication_epoch_additions_) {
     PutVarint32(dst, kReplicationEpochAdd);
-    replication_epoch_addition.EncodeTo(dst);
+    std::string encoded;
+    replication_epoch_addition.EncodeTo(&encoded);
+    PutLengthPrefixedSlice(dst, encoded);
   }
   if (has_prev_log_number_) {
     PutVarint32Varint64(dst, kPrevLogNumber, prev_log_number_);
@@ -515,8 +517,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
       case kReplicationEpochAdd: {
+        Slice encoded;
+        if (!GetLengthPrefixedSlice(&input, &encoded)) {
+          msg = "ReplicationAdd not prefixed by length";
+          break;
+        }
+
         ReplicationEpochAddition replication_epoch_addition;
-        auto s = replication_epoch_addition.DecodeFrom(&input);
+        auto s = replication_epoch_addition.DecodeFrom(&encoded);
         if (!s.ok()) {
           return s;
         }
