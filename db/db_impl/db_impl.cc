@@ -1370,20 +1370,21 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
             if (!enableEpochBasedDivergenceDetection &&
                 versions_->IsReplicationEpochsEmpty()) {
-              // Either this is a newly opened db and no leader is elected, or epoch based divergence
-              // detection not enabled yet.
+              // Either this is a newly opened db and no leader is elected, or
+              // epoch based divergence detection not enabled yet.
               continue;
             }
             auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(
                 latest_applied_update_sequence);
             if (!inferred_epoch_of_mus ||
                 (*inferred_epoch_of_mus != replication_epoch)) {
-              // - If inferred_epoch_of_mus is not set, either we are recovering manifest writes
-              // before persisted replication sequence, or there are two many manifest writes after
-              // the persisted replication sequence. For either case, we report divergence and clear
-              // local log
-              // - If inferred_epoch_of_mus doesn't match epoch in VersionEdit, the applied version edit
-              // is diverged
+              // - If inferred_epoch_of_mus is not set, either we are recovering
+              // manifest writes before persisted replication sequence, or there
+              // are too many manifest writes after the persisted replication
+              // sequence. For either case, we report divergence and clear local
+              // log
+              // - If inferred_epoch_of_mus doesn't match epoch in VersionEdit,
+              // the applied version edit is diverged
               info->diverged_manifest_writes = true;
               break;
             }

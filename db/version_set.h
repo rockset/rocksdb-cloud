@@ -1490,8 +1490,8 @@ class VersionSet {
   const WalSet& GetWalSet() const { return wals_; }
 
   // Called when replication epoch has changed
-  void UpdateReplicationEpoch(uint64_t new_replication_epoch) {
-    next_replication_epoch_ = new_replication_epoch;
+  void UpdateReplicationEpoch(uint64_t epoch) {
+    next_replication_epoch_.emplace(epoch);
   }
 
   void TEST_CreateAndAppendVersion(ColumnFamilyData* cfd) {

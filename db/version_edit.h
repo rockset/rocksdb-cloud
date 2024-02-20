@@ -716,7 +716,6 @@ class VersionEdit {
   bool has_log_number_ = false;
   bool has_replication_sequence_ = false;
   bool has_manifest_update_sequence_ = false;
-  bool has_manifest_update_epoch_ = false;
   bool has_prev_log_number_ = false;
   bool has_next_file_number_ = false;
   bool has_max_column_family_ = false;
