@@ -1080,6 +1080,7 @@ class DBImpl : public DB {
   Status WaitForCompact(bool waitUnscheduled = false);
 
   void UpdateReplicationEpoch(uint64_t new_replication_epoch) override;
+  void NewManifestOnNextUpdate() override;
 
   uint64_t GetNextFileNumber() const override {
     return versions_->current_next_file_number();

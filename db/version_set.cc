@@ -4907,6 +4907,7 @@ void VersionSet::Reset() {
   obsolete_manifests_.clear();
   wals_.Reset();
   next_replication_epoch_.reset();
+  new_manifest_on_next_update_.store(false, std::memory_order_relaxed);
 }
 
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
@@ -5172,6 +5173,8 @@ Status VersionSet::ProcessManifestWrites(
   }
 
   assert(pending_manifest_file_number_ == 0);
+  auto new_manifest_force =
+      new_manifest_on_next_update_.exchange(false, std::memory_order_relaxed);
 
   // Generate new replication epochs when replication epoch has changed.
   if (next_replication_epoch_ && is_leader) {
@@ -5183,7 +5186,7 @@ Status VersionSet::ProcessManifestWrites(
 
   if (!descriptor_log_ ||
       manifest_file_size_ > db_options_->max_manifest_file_size ||
-      next_replication_epoch_) {
+      (next_replication_epoch_ || new_manifest_force)) {
     TEST_SYNC_POINT("VersionSet::ProcessManifestWrites:BeforeNewManifest");
     TEST_SYNC_POINT_CALLBACK(
         "VersionSet::ProcessManifestWrites:BeforeNewManifest", nullptr);
@@ -5478,15 +5481,16 @@ Status VersionSet::ProcessManifestWrites(
     replication_epochs_.AddEpochs(new_replication_epochs,
                                   db_options_->max_num_replication_epochs);
     if (pending_persist_replication_sequence) {
-      assert(db_options_->replication_epoch_extractor);
-      auto epoch =
-          db_options_->replication_epoch_extractor->EpochOfReplicationSequence(
-              *pending_persist_replication_sequence);
-      bool replication_epoch_set_empty = replication_epochs_.empty();
-      replication_epochs_.DeleteEpochsBefore(epoch);
-      // If replication epoch set is not empty before pruning, then it won't be
-      // empty after pruning
-      assert(replication_epoch_set_empty || !replication_epochs_.empty());
+      if (db_options_->replication_epoch_extractor) {
+        auto epoch = db_options_->replication_epoch_extractor
+                         ->EpochOfReplicationSequence(
+                             *pending_persist_replication_sequence);
+        bool replication_epoch_set_empty = replication_epochs_.empty();
+        replication_epochs_.DeleteEpochsBefore(epoch);
+        // If replication epoch set is not empty before pruning, then it won't
+        // be empty after pruning
+        assert(replication_epoch_set_empty || !replication_epochs_.empty());
+      }
       replication_sequence_ = std::move(*pending_persist_replication_sequence);
     }
     manifest_update_sequence_ = pending_manifest_update_sequence;

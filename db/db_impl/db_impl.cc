@@ -1357,9 +1357,12 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
 
         auto current_update_sequence = versions_->GetManifestUpdateSequence();
         uint64_t latest_applied_update_sequence = 0;
-        auto replication_epoch =
-            immutable_db_options_.replication_epoch_extractor
-                ->EpochOfReplicationSequence(replication_sequence);
+        uint64_t replication_epoch{0};
+        if (immutable_db_options_.replication_epoch_extractor) {
+          replication_epoch =
+              immutable_db_options_.replication_epoch_extractor
+                  ->EpochOfReplicationSequence(replication_sequence);
+        }
         for (auto& e : edits) {
           if (!e.HasManifestUpdateSequence()) {
             s = Status::InvalidArgument(
@@ -6621,6 +6624,10 @@ ColumnFamilyData* DBImpl::GetAnyCFWithAutoFlushDisabled() const {
 void DBImpl::UpdateReplicationEpoch(uint64_t next_replication_epoch) {
   InstrumentedMutexLock l(&mutex_);
   versions_->UpdateReplicationEpoch(next_replication_epoch);
+}
+
+void DBImpl::NewManifestOnNextUpdate() {
+  versions_->NewManifestOnNextUpdate();
 }
 
 namespace {

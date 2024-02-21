@@ -480,13 +480,15 @@ void VersionEditHandler::CheckIterationResult(const log::Reader& reader,
           version_edit_params_.GetManifestUpdateSequence();
     }
     if (version_edit_params_.HasReplicationSequence()) {
-      auto epoch =
-          version_set_->db_options()
-              ->replication_epoch_extractor->EpochOfReplicationSequence(
-                  version_edit_params_.GetReplicationSequence());
       version_set_->replication_sequence_ =
           version_edit_params_.GetReplicationSequence();
-      version_set_->replication_epochs_.DeleteEpochsBefore(epoch);
+      if (version_set_->db_options()->replication_epoch_extractor) {
+        auto epoch =
+            version_set_->db_options()
+                ->replication_epoch_extractor->EpochOfReplicationSequence(
+                    version_edit_params_.GetReplicationSequence());
+        version_set_->replication_epochs_.DeleteEpochsBefore(epoch);
+      }
     }
   }
 }

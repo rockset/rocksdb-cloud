@@ -1493,6 +1493,9 @@ class VersionSet {
   void UpdateReplicationEpoch(uint64_t epoch) {
     next_replication_epoch_.emplace(epoch);
   }
+  void NewManifestOnNextUpdate() {
+    new_manifest_on_next_update_.store(true, std::memory_order_relaxed);
+  }
 
   void TEST_CreateAndAppendVersion(ColumnFamilyData* cfd) {
     assert(cfd);
@@ -1615,6 +1618,8 @@ class VersionSet {
   // `UpdateReplicationEpoch` is called, and reset to empty on when first
   // manifest update is done successfully. Protected by DB mutex
   std::optional<uint64_t> next_replication_epoch_;
+  // Protected by DB mutex.
+  std::atomic_bool new_manifest_on_next_update_{false};
 
   // generates a increasing version number for every new version
   uint64_t current_version_number_;
