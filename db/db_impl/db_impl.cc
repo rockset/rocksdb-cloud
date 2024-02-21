@@ -1368,26 +1368,37 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
-            if (!enableEpochBasedDivergenceDetection &&
-                versions_->IsReplicationEpochsEmpty()) {
-              // Either this is a newly opened db and no leader is elected, or
-              // epoch based divergence detection not enabled yet.
-              continue;
-            }
-            auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(
-                latest_applied_update_sequence);
-            if (!inferred_epoch_of_mus ||
-                (*inferred_epoch_of_mus != replication_epoch)) {
-              // - If inferred_epoch_of_mus is not set, either we are recovering
-              // manifest writes before persisted replication sequence, or there
-              // are too many manifest writes after the persisted replication
-              // sequence. For either case, we report divergence and clear local
-              // log
-              // - If inferred_epoch_of_mus doesn't match epoch in VersionEdit,
-              // the applied version edit is diverged
-              info->diverged_manifest_writes = true;
-              break;
-            }
+            // It's possible that applied MUS to be smaller than the current MUS
+            // in VersionSet when recovering based on local log. We rely on the
+            // `ReplicationEpochSet` maintained in `VersionSet` to help detect
+            // diverged local log. NOTE:
+            // 1. if epoch based divergence detection is
+            // enabled, `ReplicationEpochSet` can only be empty when this is a
+            // new db opening with epoch 0, i.e., no new epoch is generated yet,
+            // and follower starts tailing from leader when epoch is 0.
+            // Currently, this is only possible in tests. In practice, follower
+            // will always have non empty replication epoch set when applying
+            // version edits.
+            // 2. we can only detect diverged manifest write with mus <= db's
+            // mus. For mus > db's mus, divergence is only detected when the
+            // follower connects to leader
+            if (enableEpochBasedDivergenceDetection &&
+                !versions_->IsReplicationEpochsEmpty()) {
+              auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(
+                  latest_applied_update_sequence);
+              if (!inferred_epoch_of_mus ||
+                  (*inferred_epoch_of_mus != replication_epoch)) {
+                // - If inferred_epoch_of_mus is not set, either we are
+                // recovering manifest writes before persisted replication
+                // sequence, or there are too many manifest writes after the
+                // persisted replication sequence. For either case, we report
+                // divergence and clear local log
+                // - If inferred_epoch_of_mus doesn't match epoch in
+                // VersionEdit, the applied version edit is diverged
+                info->diverged_manifest_writes = true;
+                break;
+              }
+            }  // else Old manifest write which is not diverged
             continue;
           }
           info->has_new_manifest_writes = true;
