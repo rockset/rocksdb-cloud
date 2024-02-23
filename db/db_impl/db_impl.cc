@@ -1287,6 +1287,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
   JobContext job_context(0, false);
   Status s;
   bool evictObsoleteFiles = flags & AR_EVICT_OBSOLETE_FILES;
+  bool enableEpochBasedDivergenceDetection = flags & AR_EPOCH_BASED_DIVERGENCE_DETECTION;
 
   {
     WriteThread::Writer w;
@@ -1370,7 +1371,7 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
         autovector<VersionEdit> edits;
         s = DeserializeReplicationLogManifestWrite(&contents_slice, &edits);
         if (!s.ok()) {
-            break;
+          break;
         }
 
         auto mutable_options =
@@ -1385,6 +1386,12 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
 
         auto current_update_sequence = versions_->GetManifestUpdateSequence();
         uint64_t latest_applied_update_sequence = 0;
+        uint64_t replication_epoch{0};
+        if (immutable_db_options_.replication_epoch_extractor) {
+          replication_epoch =
+              immutable_db_options_.replication_epoch_extractor
+                  ->EpochOfReplicationSequence(replication_sequence);
+        }
         for (auto& e : edits) {
           if (!e.HasManifestUpdateSequence()) {
             s = Status::InvalidArgument(
@@ -1393,11 +1400,37 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
           }
           latest_applied_update_sequence = e.GetManifestUpdateSequence();
           if (e.GetManifestUpdateSequence() <= current_update_sequence) {
-            if (e.IsColumnFamilyAdd() || e.IsColumnFamilyDrop()) {
-              info->has_ignored_column_family_manipulations = true;
-            }
-
-            // Ignore the update, we already have it
+            // It's possible that applied MUS to be smaller than the current MUS
+            // in VersionSet when recovering based on local log. We rely on the
+            // `ReplicationEpochSet` maintained in `VersionSet` to help detect
+            // diverged local log. NOTE:
+            // 1. if epoch based divergence detection is
+            // enabled, `ReplicationEpochSet` can only be empty when this is a
+            // new db opening with epoch 0, i.e., no new epoch is generated yet,
+            // and follower starts tailing from leader when epoch is 0.
+            // Currently, this is only possible in tests. In practice, follower
+            // will always have non empty replication epoch set when applying
+            // version edits.
+            // 2. we can only detect diverged manifest write with mus <= db's
+            // mus. For mus > db's mus, divergence is only detected when the
+            // follower connects to leader
+            if (enableEpochBasedDivergenceDetection &&
+                !versions_->IsReplicationEpochsEmpty()) {
+              auto inferred_epoch_of_mus = versions_->GetReplicationEpochForMUS(
+                  latest_applied_update_sequence);
+              if (!inferred_epoch_of_mus ||
+                  (*inferred_epoch_of_mus != replication_epoch)) {
+                // - If inferred_epoch_of_mus is not set, either we are
+                // recovering manifest writes before persisted replication
+                // sequence, or there are too many manifest writes after the
+                // persisted replication sequence. For either case, we report
+                // divergence and clear local log
+                // - If inferred_epoch_of_mus doesn't match epoch in
+                // VersionEdit, the applied version edit is diverged
+                info->diverged_manifest_writes = true;
+                break;
+              }
+            }  // else Old manifest write which is not diverged
             continue;
           }
           info->has_new_manifest_writes = true;
@@ -1477,7 +1510,9 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             cfd->SetNextEpochNumber(newFiles.rbegin()->second.epoch_number + 1);
           }
         }
-        if (!s.ok()) {
+        // break early if there are errors or manifest write is diverged. DB should
+        // be reopened for this case
+        if (!s.ok() || info->diverged_manifest_writes) {
           break;
         }
         s = versions_->LogAndApply(cfds, mutable_cf_options_list, ReadOptions(),
@@ -7272,6 +7307,15 @@ ColumnFamilyData* DBImpl::GetAnyCFWithAutoFlushDisabled() const {
     }
   }
   return nullptr;
+}
+
+void DBImpl::UpdateReplicationEpoch(uint64_t next_replication_epoch) {
+  InstrumentedMutexLock l(&mutex_);
+  versions_->UpdateReplicationEpoch(next_replication_epoch);
+}
+
+void DBImpl::NewManifestOnNextUpdate() {
+  versions_->NewManifestOnNextUpdate();
 }
 
 namespace {

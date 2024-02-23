@@ -494,6 +494,13 @@ void VersionEditHandler::CheckIterationResult(const log::Reader& reader,
     if (version_edit_params_.HasReplicationSequence()) {
       version_set_->replication_sequence_ =
           version_edit_params_.GetReplicationSequence();
+      if (version_set_->db_options()->replication_epoch_extractor) {
+        auto epoch =
+            version_set_->db_options()
+                ->replication_epoch_extractor->EpochOfReplicationSequence(
+                    version_edit_params_.GetReplicationSequence());
+        version_set_->replication_epochs_.DeleteEpochsBefore(epoch);
+      }
     }
   }
 }
@@ -668,6 +675,12 @@ Status VersionEditHandler::ExtractInfoFromVersionEdit(ColumnFamilyData* cfd,
     if (!version_edit_params_.HasPrevLogNumber()) {
       version_edit_params_.SetPrevLogNumber(0);
     }
+
+    // Add all replication epochs temporarily, epochs before persisted
+    // replication sequence will be pruned later
+    version_set_->replication_epochs_.AddEpochs(
+        edit.GetReplicationEpochAdditions(),
+        version_set_->db_options()->max_num_replication_epochs);
     if (edit.HasReplicationSequence()) {
       version_edit_params_.SetReplicationSequence(edit.GetReplicationSequence());
     }

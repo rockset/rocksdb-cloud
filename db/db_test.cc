@@ -3452,6 +3452,7 @@ class ModelDB : public DB {
     return Status::NotSupported("Not supported in Model DB");
   }
 
+  void UpdateReplicationEpoch(uint64_t) override {}
   void NewManifestOnNextUpdate() override {}
 
   uint64_t GetNextFileNumber() const override { return 0; };
