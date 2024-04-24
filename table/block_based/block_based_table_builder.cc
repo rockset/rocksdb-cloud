@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include <atomic>
+#include <iostream>
 #include <list>
 #include <map>
 #include <memory>
@@ -346,7 +347,7 @@ struct BlockBasedTableBuilder::Rep {
       compression_dict_buffer_cache_res_mgr;
   const bool use_delta_encoding_for_index_values;
   std::unique_ptr<FilterBlockBuilder> filter_builder;
-  OffsetableCacheKey base_cache_key;
+  IndexCacheKey base_cache_key;
   const TableFileCreationReason reason;
 
   BlockHandle pending_handle;  // Handle to add to index block
@@ -968,8 +969,12 @@ BlockBasedTableBuilder::BlockBasedTableBuilder(
       "BlockBasedTableBuilder::BlockBasedTableBuilder:PreSetupBaseCacheKey",
       const_cast<TableProperties*>(&rep_->props));
 
+  std::cout << "storage index: " << rep_->ioptions.storageProviderIdx;
+
   BlockBasedTable::SetupBaseCacheKey(&rep_->props, tbo.db_session_id,
-                                     tbo.cur_file_num, &rep_->base_cache_key);
+                                     (static_cast<uint64_t>(rep_->ioptions.storageProviderIdx) << 32) + tbo.cur_file_num, &rep_->base_cache_key);
+
+  std::cout << "BlockBasedTableBuilder: we set up a base key of: " << rep_->base_cache_key.Print() << " filename: " << file->file_name() << std::endl;
 
   if (rep_->IsParallelCompressionEnabled()) {
     StartParallelCompression();

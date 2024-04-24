@@ -184,6 +184,7 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
   options.disable_delete_obsolete_files_on_open =
       immutable_db_options.disable_delete_obsolete_files_on_open;
   options.daily_offpeak_time_utc = mutable_db_options.daily_offpeak_time_utc;
+  options.storageProviderIdx = immutable_db_options.storageProviderIdx;
   return options;
 }
 

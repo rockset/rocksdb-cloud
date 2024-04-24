@@ -351,6 +351,20 @@ void LRUCacheShard::NotifyEvicted(
   }
 }
 
+void LRUCacheShard::Visit(VisitCallback visitCb) {
+  DMutexLock l(mutex_);
+  int length_bits = table_.GetLengthBits();
+  size_t length = size_t{1} << length_bits;
+  table_.ApplyToEntriesRange(visitCb, 0, length);
+
+  // something wrong here
+  // LRUHandle* h = &lru_;
+  // while (h != nullptr) { // h->next ? what is the difference
+  //   visitCb(h);
+  //   h = h->next_hash;
+  // }
+}
+
 void LRUCacheShard::SetCapacity(size_t capacity) {
   autovector<LRUHandle*> last_reference_list;
   {
@@ -682,6 +696,14 @@ size_t LRUCache::TEST_GetLRUSize() {
 
 double LRUCache::GetHighPriPoolRatio() {
   return GetShard(0).GetHighPriPoolRatio();
+}
+
+void LRUCache::Visit(std::function<void(const Slice& key, size_t charge)> func) {
+  ForEachShard([visitCb=std::move(func)](LRUCacheShard *shard){
+    shard->Visit([&visitCb](LRUHandle* handle) {
+      visitCb(handle->key(), handle->total_charge);
+    });
+  });
 }
 
 }  // namespace lru_cache

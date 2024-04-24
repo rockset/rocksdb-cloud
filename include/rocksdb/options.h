@@ -1566,6 +1566,8 @@ struct DBOptions {
   // persisted replication sequence, so the max limit here shouldn't be quite
   // large
   uint32_t max_num_replication_epochs = 100;
+  
+  uint32_t storageProviderIdx = 0;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

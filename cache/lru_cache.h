@@ -278,10 +278,14 @@ class ALIGN_AS(CACHE_LINE_SIZE) LRUCacheShard final : public CacheShardBase {
   using HashVal = uint32_t;
   using HashCref = uint32_t;
 
+  using VisitCallback = std::function<void(LRUHandle* handle)>;
+
  public:  // Function definitions expected as parameter to ShardedCache
   static inline HashVal ComputeHash(const Slice& key, uint32_t seed) {
     return Lower32of64(GetSliceNPHash64(key, seed));
   }
+
+  void Visit(VisitCallback visitCb);
 
   // Separate from constructor so caller can easily make an array of LRUCache
   // if current usage is more than new capacity, the function will attempt to
@@ -456,6 +460,8 @@ class LRUCache
   size_t TEST_GetLRUSize();
   // Retrieves high pri pool ratio.
   double GetHighPriPoolRatio();
+
+  void Visit(std::function<void(const Slice& key, size_t charge)> func) override;
 };
 
 }  // namespace lru_cache

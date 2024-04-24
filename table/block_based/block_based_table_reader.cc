@@ -12,6 +12,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -511,41 +512,45 @@ Status GetGlobalSequenceNumber(const TableProperties& table_properties,
 
 void BlockBasedTable::SetupBaseCacheKey(const TableProperties* properties,
                                         const std::string& cur_db_session_id,
-                                        uint64_t cur_file_number,
-                                        OffsetableCacheKey* out_base_cache_key,
+                                        uint64_t prefix,
+                                        IndexCacheKey* out_base_cache_key,
                                         bool* out_is_stable) {
-  // Use a stable cache key if sufficient data is in table properties
-  std::string db_session_id;
-  uint64_t file_num;
-  std::string db_id;
-  if (properties && !properties->db_session_id.empty() &&
-      properties->orig_file_number > 0) {
-    // (Newer SST file case)
-    // We must have both properties to get a stable unique id because
-    // CreateColumnFamilyWithImport or IngestExternalFiles can change the
-    // file numbers on a file.
-    db_session_id = properties->db_session_id;
-    file_num = properties->orig_file_number;
-    // Less critical, populated in earlier release than above
-    db_id = properties->db_id;
-    if (out_is_stable) {
-      *out_is_stable = true;
-    }
-  } else {
-    // (Old SST file case)
-    // We use (unique) cache keys based on current identifiers. These are at
-    // least stable across table file close and re-open, but not across
-    // different DBs nor DB close and re-open.
-    db_session_id = cur_db_session_id;
-    file_num = cur_file_number;
-    // Plumbing through the DB ID to here would be annoying, and of limited
-    // value because of the case of VersionSet::Recover opening some table
-    // files and later setting the DB ID. So we just rely on uniqueness
-    // level provided by session ID.
-    db_id = "unknown";
-    if (out_is_stable) {
-      *out_is_stable = false;
-    }
+  // // Use a stable cache key if sufficient data is in table properties
+  // std::string db_session_id;
+  // uint64_t file_num;
+  // std::string db_id;
+  // if (properties && !properties->db_session_id.empty() &&
+  //     properties->orig_file_number > 0) {
+  //   // (Newer SST file case)
+  //   // We must have both properties to get a stable unique id because
+  //   // CreateColumnFamilyWithImport or IngestExternalFiles can change the
+  //   // file numbers on a file.
+  //   db_session_id = properties->db_session_id;
+  //   file_num = properties->orig_file_number;
+  //   // Less critical, populated in earlier release than above
+  //   db_id = properties->db_id;
+  //   if (out_is_stable) {
+  //     *out_is_stable = true;
+  //   }
+  // } else {
+  //   // (Old SST file case)
+  //   // We use (unique) cache keys based on current identifiers. These are at
+  //   // least stable across table file close and re-open, but not across
+  //   // different DBs nor DB close and re-open.
+  //   db_session_id = cur_db_session_id;
+  //   file_num = cur_file_number;
+  //   // Plumbing through the DB ID to here would be annoying, and of limited
+  //   // value because of the case of VersionSet::Recover opening some table
+  //   // files and later setting the DB ID. So we just rely on uniqueness
+  //   // level provided by session ID.
+  //   db_id = "unknown";
+  //   if (out_is_stable) {
+  //     *out_is_stable = false;
+  //   }
+  // }
+
+  if (out_is_stable) {
+    *out_is_stable = false;
   }
 
   // Too many tests to update to get these working
@@ -555,14 +560,13 @@ void BlockBasedTable::SetupBaseCacheKey(const TableProperties* properties,
 
   // Minimum block size is 5 bytes; therefore we can trim off two lower bits
   // from offsets. See GetCacheKey.
-  *out_base_cache_key = OffsetableCacheKey(db_id, db_session_id, file_num);
+  // cur_file_number is reverse dict key right now for file name
+  *out_base_cache_key = IndexCacheKey(prefix);
 }
 
-CacheKey BlockBasedTable::GetCacheKey(const OffsetableCacheKey& base_cache_key,
+CacheKey BlockBasedTable::GetCacheKey(const IndexCacheKey& base_cache_key,
                                       const BlockHandle& handle) {
-  // Minimum block size is 5 bytes; therefore we can trim off two lower bits
-  // from offet.
-  return base_cache_key.WithOffset(handle.offset() >> 2);
+  return base_cache_key.WithOffset(handle.offset(), handle.size());
 }
 
 Status BlockBasedTable::Open(
@@ -647,6 +651,8 @@ Status BlockBasedTable::Open(
       file_size, level, immortal_table, user_defined_timestamps_persisted);
   rep->file = std::move(file);
   rep->footer = footer;
+
+  std::cout << "rep->file->file_name() is : '" << rep->file->file_name() << "'" << std::endl;
 
   // For fully portable/stable cache keys, we need to read the properties
   // block before setting up cache keys. TODO: consider setting up a bootstrap
@@ -766,9 +772,13 @@ Status BlockBasedTable::Open(
     }
   }
 
+  std::cout << "storage index: " << rep->ioptions.storageProviderIdx;
+
   // With properties loaded, we can set up portable/stable cache keys
   SetupBaseCacheKey(rep->table_properties.get(), cur_db_session_id,
-                    cur_file_num, &rep->base_cache_key);
+                    (static_cast<uint64_t>(ioptions.storageProviderIdx) << 32) + cur_file_num, &rep->base_cache_key);
+
+  std::cout << "BlockBasedTableReader: we set up a base key of: " << rep->base_cache_key.Print() << " filename: " << rep->file->file_name() << std::endl;
 
   rep->persistent_cache_options =
       PersistentCacheOptions(rep->table_options.persistent_cache,

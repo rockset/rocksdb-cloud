@@ -530,6 +530,10 @@ void CacheWithSecondaryAdapter::SetCapacity(size_t capacity) {
   }
 }
 
+void CacheWithSecondaryAdapter::Visit(std::function<void(const Slice& key, size_t charge)> func) {
+  return target_->Visit(std::move(func));
+}
+
 Status CacheWithSecondaryAdapter::GetSecondaryCacheCapacity(
     size_t& size) const {
   return secondary_cache_->GetCapacity(size);

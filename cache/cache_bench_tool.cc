@@ -1020,7 +1020,7 @@ class StressCacheKey {
         ResetProcess(/*newdbs*/ false);
       }
       // Simulate next file
-      OffsetableCacheKey ock;
+      IndexCacheKey ock;
       dbs_[db_i].orig_file_number += 1;
       // skip some file numbers for other file kinds, except in footer unique
       // ID, orig_file_number here tracks process-wide generated SST file

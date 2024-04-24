@@ -131,7 +131,7 @@ class RandomAccessFileReader {
       Temperature file_temperature = Temperature::kUnknown,
       bool is_last_level = false)
       : file_(std::move(raf), io_tracer, _file_name),
-        file_name_(std::move(_file_name)),
+        file_name_(_file_name),
         clock_(clock),
         stats_(stats),
         hist_type_(hist_type),

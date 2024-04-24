@@ -31,6 +31,8 @@
 #include "util/coding.h"
 #include "util/stop_watch.h"
 
+#include <iostream>
+
 // Generate the regular and coroutine versions of some methods by
 // including table_cache_sync_and_async.h twice
 // Macros in the header will expand differently based on whether
@@ -98,6 +100,7 @@ Status TableCache::GetTableReader(
     size_t max_file_size_for_l0_meta_pin, Temperature file_temperature) {
   std::string fname = TableFileName(
       ioptions_.cf_paths, file_meta.fd.GetNumber(), file_meta.fd.GetPathId());
+  std::cerr << "in table cache, here is fname: '" << fname << "' number: " << file_meta.fd.GetNumber() << ", path_id: " << file_meta.fd.GetPathId() << std::endl;
   std::unique_ptr<FSRandomAccessFile> file;
   FileOptions fopts = file_options;
   fopts.temperature = file_temperature;

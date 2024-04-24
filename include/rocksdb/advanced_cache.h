@@ -263,6 +263,10 @@ class Cache {
       Priority priority = Priority::LOW, const Slice& compressed = Slice(),
       CompressionType type = CompressionType::kNoCompression) = 0;
 
+  virtual void Visit(std::function<void(const Slice& key, size_t charge)>) {
+    return;
+  }
+
   // Similar to Insert, but used for creating cache entries that cannot
   // be found with Lookup, such as for memory charging purposes. The
   // key is needed for cache sharding purposes.

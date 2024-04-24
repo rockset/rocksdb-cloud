@@ -33,7 +33,7 @@ Status CacheDumperImpl::SetDumpFilter(std::vector<DB*> db_list) {
       return s;
     }
     for (auto id = ptc.begin(); id != ptc.end(); id++) {
-      OffsetableCacheKey base;
+      IndexCacheKey base;
       // We only want to save cache entries that are portable to another
       // DB::Open, so only save entries with stable keys.
       bool is_stable;

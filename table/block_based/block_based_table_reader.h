@@ -241,11 +241,11 @@ class BlockBasedTable : public TableReader {
 
   static void SetupBaseCacheKey(const TableProperties* properties,
                                 const std::string& cur_db_session_id,
-                                uint64_t cur_file_number,
-                                OffsetableCacheKey* out_base_cache_key,
+                                uint64_t prefix,
+                                IndexCacheKey* out_base_cache_key,
                                 bool* out_is_stable = nullptr);
 
-  static CacheKey GetCacheKey(const OffsetableCacheKey& base_cache_key,
+  static CacheKey GetCacheKey(const IndexCacheKey& base_cache_key,
                               const BlockHandle& handle);
 
   static void UpdateCacheInsertionMetrics(BlockType block_type,
@@ -584,7 +584,7 @@ struct BlockBasedTable::Rep {
   const InternalKeyComparator& internal_comparator;
   Status status;
   std::unique_ptr<RandomAccessFileReader> file;
-  OffsetableCacheKey base_cache_key;
+  IndexCacheKey base_cache_key;
   PersistentCacheOptions persistent_cache_options;
 
   // Footer contains the fixed table information

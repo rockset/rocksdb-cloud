@@ -783,7 +783,8 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       compaction_service(options.compaction_service),
       enforce_single_del_contracts(options.enforce_single_del_contracts),
       disable_delete_obsolete_files_on_open(options.disable_delete_obsolete_files_on_open),
-      max_num_replication_epochs(options.max_num_replication_epochs) {
+      max_num_replication_epochs(options.max_num_replication_epochs),
+      storageProviderIdx(options.storageProviderIdx) {
   fs = env->GetFileSystem();
   clock = env->GetSystemClock().get();
   logger = info_log.get();
@@ -966,6 +967,8 @@ void ImmutableDBOptions::Dump(Logger* log) const {
                    disable_delete_obsolete_files_on_open ? "true" : "false");
   ROCKS_LOG_HEADER(log, "              Options.max_num_replication_epochs: %d",
                    max_num_replication_epochs);
+  ROCKS_LOG_HEADER(log, "              Options.storageProviderIdx: %d",
+                   storageProviderIdx);
 }
 
 bool ImmutableDBOptions::IsWalDirSameAsDBPath() const {

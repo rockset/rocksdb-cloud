@@ -91,6 +91,9 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
   Status st;
   Options options = opt;
 
+  CHECK(opt.storageProviderIdx);
+  CHECK(options.storageProviderIdx);
+
   // Created logger if it is not already pre-created by user.
   if (!options.info_log) {
     CreateLoggerFromOptions(local_dbname, options, &options.info_log);

@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Rockset.
+#include <iostream>
 #ifndef ROCKSDB_LITE
 
 #include "rocksdb/cloud/cloud_file_system_impl.h"
@@ -226,6 +227,9 @@ IOStatus CloudFileSystemImpl::NewRandomAccessFile(
   result->reset();
 
   auto fname = RemapFilename(logical_fname);
+
+  std::cout << "cloud file system, remap file: '" << logical_fname << "' to '" << fname << "'" << std::endl;
+
   auto file_type = GetFileType(fname);
   bool sstfile = (file_type == RocksDBFileType::kSstFile),
        manifest = (file_type == RocksDBFileType::kManifestFile),

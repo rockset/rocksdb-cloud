@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <format>
 
 #include "rocksdb/rocksdb_namespace.h"
 #include "rocksdb/slice.h"
@@ -60,6 +61,7 @@ class CacheKey {
 
  protected:
   friend class OffsetableCacheKey;
+  friend class IndexCacheKey;
   CacheKey(uint64_t file_num_etc64, uint64_t offset_etc64)
       : file_num_etc64_(file_num_etc64), offset_etc64_(offset_etc64) {}
   uint64_t file_num_etc64_;
@@ -137,6 +139,51 @@ class OffsetableCacheKey : private CacheKey {
     assert(&this->file_num_etc64_ == static_cast<const void *>(this));
 
     return Slice(reinterpret_cast<const char *>(this), kCommonPrefixSize);
+  }
+};
+
+class IndexCacheKey : private CacheKey {
+ public:
+  // For convenience, constructs an "empty" cache key that should not be used.
+  inline IndexCacheKey() : CacheKey() {}
+
+  // Constructs an OffsetableCacheKey with the given information about a file.
+  // This constructor never generates an "empty" base key.
+  IndexCacheKey(uint32_t cloudProviderIdx, uint32_t fileNo) : val((static_cast<uint64_t>(cloudProviderIdx) << 32) + fileNo) {
+  }
+  IndexCacheKey(uint64_t prefix) : val(prefix) {
+  }
+
+  inline bool IsEmpty() const {return val == 0;
+  }
+
+  // Construct a CacheKey for an offset within a file. An offset is not
+  // necessarily a byte offset if a smaller unique identifier of keyable
+  // offsets is used.
+  //
+  // This class was designed to make this hot code extremely fast.
+  inline CacheKey WithOffset(uint32_t offset, uint32_t size) const {
+    assert(!IsEmpty());
+    return CacheKey(val, (static_cast<uint64_t>(offset) << 32) + size);
+  }
+
+  Slice CommonPrefixSlice() const {
+    static_assert(sizeof(val) == kCommonPrefixSize,
+                  "8 byte common prefix expected");
+    assert(!IsEmpty());
+    assert(&this->val == static_cast<const void *>(this));
+
+    return Slice(reinterpret_cast<const char *>(this), kCommonPrefixSize);
+  }
+
+  // The "common prefix" is a shared prefix for all the returned CacheKeys.
+  // It is specific to the file but the same for all offsets within the file.
+  static constexpr size_t kCommonPrefixSize = 8;
+
+  uint64_t val = 0;
+
+  std::string Print() const {
+    return std::format("{:#16x}", val);
   }
 };
 

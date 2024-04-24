@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iostream>
 #include <mutex>
 #include <utility>
 
@@ -100,8 +101,19 @@ IOStatus RandomAccessFileReader::Create(
     std::unique_ptr<RandomAccessFileReader>* reader, IODebugContext* dbg) {
   std::unique_ptr<FSRandomAccessFile> file;
   IOStatus io_s = fs->NewRandomAccessFile(fname, file_opts, &file, dbg);
+  std::string fileName = fname;
   if (io_s.ok()) {
-    reader->reset(new RandomAccessFileReader(std::move(file), fname));
+    {
+      // auto cloudFs = dynamic_cast<CloudFileSystemImpl*>(fs.get());
+      // if (cloudFs == nullptr) {
+      //   std::cout << "cloudFs is null here at RandomAccessFileReader::Create";
+      // } else {
+      //   auto qualifiedFnameIdentifier = cloudFs->RemapFilename(fname);
+      //   std::cout << "in RandomAccessFileReader::Create, new file: '" << fname << "', map to '" << qualifiedFnameIdentifier << "'" << std::endl;
+      //   fileName = qualifiedFnameIdentifier;
+      // }
+    }
+    reader->reset(new RandomAccessFileReader(std::move(file), fileName));
   }
   return io_s;
 }

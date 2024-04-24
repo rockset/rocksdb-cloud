@@ -112,6 +112,8 @@ struct ImmutableDBOptions {
   bool disable_delete_obsolete_files_on_open;
   uint32_t max_num_replication_epochs;
 
+  uint32_t storageProviderIdx;
+
   bool IsWalDirSameAsDBPath() const;
   bool IsWalDirSameAsDBPath(const std::string& path) const;
   const std::string& GetWalDir() const;

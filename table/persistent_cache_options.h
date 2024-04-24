@@ -20,12 +20,12 @@ struct PersistentCacheOptions {
   PersistentCacheOptions() {}
   explicit PersistentCacheOptions(
       const std::shared_ptr<PersistentCache>& _persistent_cache,
-      const OffsetableCacheKey& _base_cache_key, Statistics* const _statistics)
+      const IndexCacheKey& _base_cache_key, Statistics* const _statistics)
       : persistent_cache(_persistent_cache),
         base_cache_key(_base_cache_key),
         statistics(_statistics) {}
   std::shared_ptr<PersistentCache> persistent_cache;
-  OffsetableCacheKey base_cache_key;
+  IndexCacheKey base_cache_key;
   Statistics* statistics = nullptr;
 
   static const PersistentCacheOptions kEmpty;

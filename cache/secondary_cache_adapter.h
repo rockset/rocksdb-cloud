@@ -47,6 +47,8 @@ class CacheWithSecondaryAdapter : public CacheWrapper {
 
   void SetCapacity(size_t capacity) override;
 
+  void Visit(std::function<void(const Slice& key, size_t charge)>) override;
+
   Status GetSecondaryCacheCapacity(size_t& size) const override;
 
   Status GetSecondaryCachePinnedUsage(size_t& size) const override;

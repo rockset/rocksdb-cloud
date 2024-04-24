@@ -1415,6 +1415,13 @@ Status ColumnFamilyData::ValidateOptions(
     return s;
   }
 
+  if (db_options.storageProviderIdx == 0) {
+    s = Status::InvalidArgument("storage provider index cannot be 0");
+  }
+  if (!s.ok()) {
+    return s;
+  }
+
   if (cf_options.ttl > 0 && cf_options.ttl != kDefaultTtl) {
     if (!cf_options.table_factory->IsInstanceOf(
             TableFactory::kBlockBasedTableName())) {
