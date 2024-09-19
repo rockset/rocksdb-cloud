@@ -272,9 +272,8 @@ class CloudFileSystemOptions {
   // means the default timeout assigned by the underlying cloud storage.
   uint64_t request_timeout_ms;
 
-  // Use this to turn off the purger. You can do this if you don't use the clone
-  // feature of RocksDB cloud
-  // Default: true
+  // Use this to turn on the purger (this is currently not recommended).
+  // Default: false
   bool run_purger;
 
   // If true, we will sync local snapshot(i.e, CLOUDMANIFEST and MANIFEST files)
