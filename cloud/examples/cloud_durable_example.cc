@@ -56,7 +56,7 @@ int main() {
 
   // Create a new AWS cloud env Status
   CloudFileSystem* cfs;
-  Status s = CloudFileSystem::NewAwsFileSystem(
+  Status s = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), kBucketSuffix, kDBPath, kRegion, kBucketSuffix,
       kDBPath, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!s.ok()) {
