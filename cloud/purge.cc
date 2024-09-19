@@ -34,7 +34,7 @@ void CloudFileSystemImpl::Purger() {
 
   while (true) {
     std::unique_lock<std::mutex> lk(purger_lock_);
-    purger_cv_.wait_for(lk, period, [&]() { return purger_is_running_; });
+    purger_cv_.wait_for(lk, period, [&]() { return !purger_is_running_; });
     if (!purger_is_running_) {
       break;
     }
