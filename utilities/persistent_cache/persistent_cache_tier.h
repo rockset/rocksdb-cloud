@@ -160,7 +160,7 @@ struct PersistentCacheConfig {
   // Cache consists of multiples of small files. This parameter defines the
   // size of an individual cache file
   //
-  // default: 1M
+  // default: 100M
   uint32_t cache_file_size = 100ULL * 1024 * 1024;
 
   // writer-qdepth
