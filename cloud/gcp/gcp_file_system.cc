@@ -2,13 +2,13 @@
 
 #ifdef USE_GCP
 
+#include "cloud/gcp/gcp_file_system.h"
+
 #include <string>
 
+#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/utilities/object_registry.h"
-
-#include "cloud/gcp/gcp_file_system.h"
-#include "cloud/cloud_storage_provider_impl.h"
 
 namespace ROCKSDB_NAMESPACE {
 GcpFileSystem::GcpFileSystem(std::shared_ptr<FileSystem> const& underlying_fs,
@@ -28,7 +28,8 @@ Status GcpFileSystem::NewGcpFileSystem(
   }
   std::unique_ptr<GcpFileSystem> gfs(
       new GcpFileSystem(fs, cloud_options, info_log));
-  auto env = gfs->NewCompositeEnvFromThis(Env::Default());
+  auto env =
+      CloudFileSystemEnv::NewCompositeEnvFromFs(gfs.get(), Env::Default());
   ConfigOptions config_options;
   config_options.env = env.get();
   status = gfs->PrepareOptions(config_options);

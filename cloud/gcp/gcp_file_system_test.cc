@@ -2,14 +2,15 @@
 
 #ifndef ROCKSDB_LITE
 
+#include <cstdio>
+
 #ifdef USE_GCP
 
-#include "rocksdb/cloud/cloud_file_system.h"
-
 #include "cloud/cloud_log_controller_impl.h"
-#include "cloud/cloud_storage_provider_impl.h"
+#include "rocksdb/cloud/cloud_file_system.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
+#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/env.h"
 #include "test_util/testharness.h"
@@ -114,7 +115,7 @@ TEST(CloudFileSystemTest, ConfigureEnv) {
 
   ConfigOptions config_options;
   config_options.invoke_prepare_options = false;
-  ASSERT_OK(CloudFileSystem::CreateFromString(
+  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
       config_options, "keep_local_sst_files=true", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -128,7 +129,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   BucketOptions bucket;
   ConfigOptions config_options;
   config_options.invoke_prepare_options = false;
-  ASSERT_OK(CloudFileSystem::CreateFromString(
+  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
       config_options, "id=cloud; TEST=cloudenvtest:/test/path", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -138,7 +139,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetSrcObjectPath(), "/test/path");
   ASSERT_TRUE(cfs->SrcMatchesDest());
 
-  ASSERT_OK(CloudFileSystem::CreateFromString(
+  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
       config_options, "id=cloud; TEST=cloudenvtest2:/test/path2?here", &cfs));
   ASSERT_NE(cfs, nullptr);
   ASSERT_STREQ(cfs->Name(), "cloud");
@@ -148,7 +149,7 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetCloudFileSystemOptions().src_bucket.GetRegion(), "here");
   ASSERT_TRUE(cfs->SrcMatchesDest());
 
-  ASSERT_OK(CloudFileSystem::CreateFromString(
+  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
       config_options,
       "id=cloud; TEST=cloudenvtest3:/test/path3; "
       "src.bucket=my_bucket; dest.object=/my_path",
@@ -166,7 +167,7 @@ TEST(CloudFileSystemTest, ConfigureGcpEnv) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s = CloudFileSystem::CreateFromString(
+  Status s = CloudFileSystemEnv::CreateFromString(
       config_options, "id=gcp; keep_local_sst_files=true", &cfs);
 #ifdef USE_GCP
   ASSERT_OK(s);
@@ -188,14 +189,14 @@ TEST(CloudFileSystemTest, ConfigureGcsProvider) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s =
-      CloudFileSystem::CreateFromString(config_options, "provider=gcs", &cfs);
+  Status s = CloudFileSystemEnv::CreateFromString(config_options,
+                                                  "provider=gcs", &cfs);
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 
 #ifdef USE_GCP
-  ASSERT_OK(CloudFileSystem::CreateFromString(config_options,
-                                              "id=gcp; provider=gcs", &cfs));
+  ASSERT_OK(CloudFileSystemEnv::CreateFromString(config_options,
+                                                 "id=gcp; provider=gcs", &cfs));
   ASSERT_STREQ(cfs->Name(), "gcp");
   ASSERT_NE(cfs->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cfs->GetStorageProvider()->Name(),
@@ -203,7 +204,6 @@ TEST(CloudFileSystemTest, ConfigureGcsProvider) {
 #endif
 }
 }  // namespace ROCKSDB_NAMESPACE
-
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
@@ -220,7 +220,7 @@ int main(int, char**) {
 }
 #endif  // USE_GCP
 
-#else   // ROCKSDB_LITE
+#else  // ROCKSDB_LITE
 #include <stdio.h>
 
 int main(int, char**) {

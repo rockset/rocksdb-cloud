@@ -1,7 +1,8 @@
 #pragma once
 
 #include <memory>
-#include "cloud/cloud_file_system_impl.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
+#include "cloud/filename.h"
 
 #ifdef USE_GCP
 

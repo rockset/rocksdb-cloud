@@ -12,10 +12,11 @@
 #include <cinttypes>
 #include <filesystem>
 
-#include "cloud/cloud_file_deletion_scheduler.h"
-#include "cloud/cloud_file_system_impl.h"
+#include "rocksdb/cloud/cloud_file_deletion_scheduler.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "cloud/cloud_scheduler.h"
-#include "cloud/cloud_storage_provider_impl.h"
+#include "cloud/cloud_manifest.h"
+#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "cloud/db_cloud_impl.h"
 #include "cloud/filename.h"
 #include "cloud/manifest_reader.h"
@@ -80,7 +81,7 @@ class CloudTest : public testing::Test {
 
     CloudFileSystem* afs;
     // create a dummy Gcp env
-    ASSERT_OK(CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
+    ASSERT_OK(CloudFileSystemEnv::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                 cloud_fs_options_,
                                                 options_.info_log, &afs));
     ASSERT_NE(afs, nullptr);
@@ -140,7 +141,7 @@ class CloudTest : public testing::Test {
     // Cleanup the cloud bucket
     if (!cloud_fs_options_.src_bucket.GetBucketName().empty()) {
       CloudFileSystem* afs;
-      Status st = CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
+      Status st = CloudFileSystemEnv::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                     cloud_fs_options_,
                                                     options_.info_log, &afs);
       if (st.ok()) {
@@ -155,11 +156,11 @@ class CloudTest : public testing::Test {
 
   void CreateCloudEnv() {
     CloudFileSystem* cfs;
-    ASSERT_OK(CloudFileSystem::NewGcpFileSystem(base_env_->GetFileSystem(),
+    ASSERT_OK(CloudFileSystemEnv::NewGcpFileSystem(base_env_->GetFileSystem(),
                                                 cloud_fs_options_,
                                                 options_.info_log, &cfs));
     std::shared_ptr<FileSystem> fs(cfs);
-    aenv_ = CloudFileSystem::NewCompositeEnv(base_env_, std::move(fs));
+    aenv_ = CloudFileSystemEnv::NewCompositeEnv(base_env_, std::move(fs));
   }
 
   // Open database via the cloud interface
@@ -245,7 +246,7 @@ class CloudTest : public testing::Test {
       copt.keep_local_sst_files = true;
     }
     // Create new Gcp env
-    Status st = CloudFileSystem::NewGcpFileSystem(
+    Status st = CloudFileSystemEnv::NewGcpFileSystem(
         base_env_->GetFileSystem(), copt, options_.info_log, &cfs);
     if (!st.ok()) {
       return st;
@@ -2447,7 +2448,7 @@ TEST_F(CloudTest, DisableObsoleteFileDeletionOnOpenTest) {
   // obsolete files are not deleted
   EXPECT_EQ(GetAllLocalFiles().size(), 8);
   // obsolete files are deleted!
-  db_->EnableFileDeletions(false /* force */);
+  db_->EnableFileDeletions();
   EXPECT_EQ(GetAllLocalFiles().size(), 6);
   CloseDB();
 }
@@ -2820,7 +2821,7 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
   EXPECT_EQ(local_files.size(), 7);
 
   EXPECT_OK(
-      GetCloudFileSystemImpl()->SanitizeDirectory(options_, dbname_, false));
+      GetCloudFileSystemImpl()->SanitizeLocalDirectory(options_, dbname_, false));
 
   // cleaning up during sanitization not triggered
   EXPECT_EQ(local_files.size(), GetAllLocalFiles().size());
@@ -2830,7 +2831,7 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
       base_env_->DeleteFile(MakeCloudManifestFile(dbname_, "" /* cooke */)));
 
   EXPECT_OK(
-      GetCloudFileSystemImpl()->SanitizeDirectory(options_, dbname_, false));
+      GetCloudFileSystemImpl()->SanitizeLocalDirectory(options_, dbname_, false));
 
   local_files = GetAllLocalFiles();
   // IDENTITY file is downloaded after cleaning up, which is the only file that
@@ -2852,7 +2853,7 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
       base_env_->DeleteFile(MakeCloudManifestFile(dbname_, "" /* cooke */)));
 
   ASSERT_OK(
-      GetCloudFileSystemImpl()->SanitizeDirectory(options_, dbname_, false));
+      GetCloudFileSystemImpl()->SanitizeLocalDirectory(options_, dbname_, false));
 
   // IDENTITY file + the random directory we created
   EXPECT_EQ(GetAllLocalFiles().size(), 2);
@@ -2874,7 +2875,7 @@ TEST_F(CloudTest, SanitizeDirectoryTest) {
       base_env_->DeleteFile(MakeCloudManifestFile(dbname_, "" /* cooke */)));
 
   ASSERT_OK(
-      GetCloudFileSystemImpl()->SanitizeDirectory(options_, dbname_, false));
+      GetCloudFileSystemImpl()->SanitizeLocalDirectory(options_, dbname_, false));
   SyncPoint::GetInstance()->DisableProcessing();
 }
 

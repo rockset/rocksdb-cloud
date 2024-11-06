@@ -10,7 +10,7 @@
 #include <unordered_map>
 
 #include "cloud/aws/aws_file_system.h"
-#include "cloud/cloud_file_system_impl.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_manifest.h"
 #include "cloud/db_cloud_impl.h"
@@ -450,7 +450,7 @@ Status CloudFileSystemEnv::NewAwsFileSystem(
   return NewAwsFileSystem(base_fs, options, logger, cfs);
 }
 
-Status CloudFileSystem::NewGcpFileSystem(
+Status CloudFileSystemEnv::NewGcpFileSystem(
     const std::shared_ptr<FileSystem>& base_fs,
     const std::string& src_cloud_bucket, const std::string& src_cloud_object,
     const std::string& src_cloud_region, const std::string& dest_cloud_bucket,
@@ -669,18 +669,18 @@ Status CloudFileSystemEnv::NewAwsFileSystem(
 #endif
 
 #ifndef USE_GCP
-Status CloudFileSystem::NewGcpFileSystem(
+Status CloudFileSystemEnv::NewGcpFileSystem(
     const std::shared_ptr<FileSystem>& /*base_fs*/,
     const CloudFileSystemOptions& /*options*/,
     const std::shared_ptr<Logger>& /*logger*/, CloudFileSystem** /*cfs*/) {
   return Status::NotSupported("RocksDB Cloud not compiled with GCP support");
 }
 #else
-Status CloudFileSystem::NewGcpFileSystem(
+Status CloudFileSystemEnv::NewGcpFileSystem(
     const std::shared_ptr<FileSystem>& base_fs,
     const CloudFileSystemOptions& options,
     const std::shared_ptr<Logger>& logger, CloudFileSystem** cfs) {
-  CloudFileSystem::RegisterCloudObjects();
+  CloudFileSystemEnv::RegisterCloudObjects();
   // Dump out cloud fs options
   options.Dump(logger.get());
 

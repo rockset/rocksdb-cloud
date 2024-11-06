@@ -7,12 +7,14 @@ namespace gcs = ::google::cloud::storage;
 namespace gcp = ::google::cloud;
 #endif
 
-#include "cloud/cloud_storage_provider_impl.h"
+#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "cloud/filename.h"
 #include "cloud/gcp/gcp_file_system.h"
 #include "rocksdb/cloud/cloud_file_system.h"
 #include "rocksdb/convenience.h"
+#include "port/port_posix.h"
 #include <inttypes.h>
+#include <fstream>
 
 #ifdef _WIN32_WINNT
 #undef GetMessage
