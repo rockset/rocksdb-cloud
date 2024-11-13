@@ -2283,7 +2283,7 @@ IOStatus CloudFileSystemImpl::FindAllLiveFiles(
   // filename will be remapped correctly based on current_epoch of
   // cloud_manifest
   *manifest_file =
-      RemapFilename(ManifestFileWithEpoch("" /* dbname */, "" /* epoch */));
+      RemapFilename(ManifestFileWithEpoch("" /* epoch */));
 
   RemapFileNumbers(file_nums, live_sst_files);
 
