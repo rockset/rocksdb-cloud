@@ -473,6 +473,7 @@ Status CloudFileSystemEnv::NewGcpFileSystem(
 }
 
 int DoRegisterCloudObjects(ObjectLibrary& library, const std::string& arg) {
+  (void) arg; // Suppress unused parameter warning
   int count = 0;
   // Register the FileSystem types
   library.AddFactory<FileSystem>(
