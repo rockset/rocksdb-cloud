@@ -24,6 +24,7 @@ LIB_SOURCES =                                                   \
   cloud/db_cloud_impl.cc                                        \
   cloud/cloud_file_system.cc                                    \
   cloud/cloud_file_system_impl.cc                               \
+  cloud/cloud_file_cache.cc                                     \
   cloud/cloud_log_controller.cc                                 \
   cloud/manifest_reader.cc                                      \
   cloud/purge.cc                                                \
