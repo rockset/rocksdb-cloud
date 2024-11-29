@@ -509,6 +509,10 @@ class CloudFileSystemOptions {
                    const std::string& opts_str);
   Status Serialize(const ConfigOptions& config_options,
                    std::string* result) const;
+  // Is the sst file cache configured?
+  bool hasSstFileCache() const {
+    return sst_file_cache != nullptr && sst_file_cache->GetCapacity() > 0;
+  }
 };
 
 struct CheckpointToCloudOptions {
