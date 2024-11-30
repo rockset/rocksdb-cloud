@@ -3,7 +3,7 @@
 
 #include <cinttypes>
 
-#include "cloud/cloud_file_system_impl.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -19,12 +19,22 @@ struct Value {
 };
 
 // static method to use as a callback from the cache.
-static void DeleteEntry(const Slice& key, void* v) {
+// static void DeleteEntry(const Slice& key, void* v) {
+// Value* value = reinterpret_cast<Value*>(v);
+// std::string filename(key.data(), key.size());
+// value->cfs->FileCacheDeleter(filename);
+// delete value;
+//}
+
+// static method to use as a callback from the cache.
+static void DeleteEntry(Cache::ObjectPtr v, MemoryAllocator* /*allocator*/) {
   Value* value = reinterpret_cast<Value*>(v);
-  std::string filename(key.data(), key.size());
+  std::string filename(value->path);
   value->cfs->FileCacheDeleter(filename);
   delete value;
 }
+
+static Cache::CacheItemHelper cache_helper(CacheEntryRole::kMisc, &DeleteEntry);
 
 // These are used to retrieve all the values from the cache.
 // Only used for unit tests.
@@ -33,8 +43,12 @@ static Value* DecodeValue(void* v) {
 }
 
 static std::vector<std::pair<Value*, uint64_t>> callback_state;
-static void callback(void* entry, size_t charge) {
-  callback_state.push_back({DecodeValue(entry), charge});
+//static void callback(void* entry, size_t charge) {
+  //callback_state.push_back({DecodeValue(entry), charge});
+//}
+static void callback(const Slice& /*key*/, Cache::ObjectPtr obj, size_t charge,
+                               const Cache::CacheItemHelper* /*helper*/) {
+  callback_state.push_back({DecodeValue(obj), charge});
 }
 static void clear_callback_state() { callback_state.clear(); }
 }  // namespace
@@ -65,8 +79,8 @@ void CloudFileSystemImpl::FileCacheInsert(const std::string& fname,
 
   // insert into cache, key is the file path.
   Slice key(fname);
-  cloud_fs_options.sst_file_cache->Insert(key, new Value(fname, this), filesize,
-                                          DeleteEntry);
+  cloud_fs_options.sst_file_cache->Insert(key, new Value(fname, this),
+                                          &cache_helper, filesize);
   log(InfoLogLevel::INFO_LEVEL, fname, "insert");
 }
 
@@ -100,7 +114,9 @@ void CloudFileSystemImpl::FileCacheDeleter(const std::string& fname) {
 //
 uint64_t CloudFileSystemImpl::FileCacheGetCharge() {
   clear_callback_state();
-  cloud_fs_options.sst_file_cache->ApplyToAllCacheEntries(callback, true);
+  Cache::ApplyToAllEntriesOptions atae_opts;
+  atae_opts.average_entries_per_lock = UINT32_MAX;
+  cloud_fs_options.sst_file_cache->ApplyToAllEntries(callback, atae_opts);
   uint64_t total = 0;
   for (auto& it : callback_state) {
     total += it.second;
@@ -114,7 +130,9 @@ uint64_t CloudFileSystemImpl::FileCacheGetCharge() {
 //
 uint64_t CloudFileSystemImpl::FileCacheGetNumItems() {
   clear_callback_state();
-  cloud_fs_options.sst_file_cache->ApplyToAllCacheEntries(callback, true);
+  Cache::ApplyToAllEntriesOptions atae_opts;
+  atae_opts.average_entries_per_lock = UINT32_MAX;
+  cloud_fs_options.sst_file_cache->ApplyToAllEntries(callback, atae_opts);
   return callback_state.size();
 }
 
@@ -129,7 +147,9 @@ void CloudFileSystemImpl::FileCachePurge() {
   }
   // fetch all items from cache
   clear_callback_state();
-  cloud_fs_options.sst_file_cache->ApplyToAllCacheEntries(callback, true);
+  Cache::ApplyToAllEntriesOptions atae_opts;
+  atae_opts.average_entries_per_lock = UINT32_MAX;
+  cloud_fs_options.sst_file_cache->ApplyToAllEntries(callback, atae_opts);
   // for all those items that have a matching cfs, remove them from cache.
   for (auto& it : callback_state) {
     Value* value = it.first;

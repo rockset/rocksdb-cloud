@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "rocksdb/cache.h"
+#include "rocksdb/advanced_cache.h"
 #include "rocksdb/configurable.h"
 #include "rocksdb/file_system.h"
 #include "rocksdb/io_status.h"
@@ -250,7 +250,7 @@ class CloudFileSystemOptions {
   // sst file is not inserted into the local file cache.
   // Cannot be set if keep_local_log_files is true.
   // Default: null (disabled)
-  std::shared_ptr<Cache>* sst_file_cache;
+  std::shared_ptr<Cache> sst_file_cache;
 
   // Access credentials
   AwsCloudAccessCredentials credentials;

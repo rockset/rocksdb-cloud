@@ -24,13 +24,13 @@ LIB_SOURCES =                                                   \
   cloud/db_cloud_impl.cc                                        \
   cloud/cloud_file_system.cc                                    \
   cloud/cloud_file_system_impl.cc                               \
-  cloud/cloud_file_cache.cc                                     \
   cloud/cloud_log_controller.cc                                 \
   cloud/manifest_reader.cc                                      \
   cloud/purge.cc                                                \
   cloud/cloud_manifest.cc                                       \
   cloud/cloud_scheduler.cc                                      \
   cloud/cloud_storage_provider.cc                               \
+  cloud/cloud_file_cache.cc                                     \
   cloud/cloud_file_deletion_scheduler.cc                        \
   db/arena_wrapped_db_iter.cc                                   \
   db/blob/blob_contents.cc                                      \
