@@ -48,6 +48,7 @@ CloudFileSystemImpl::~CloudFileSystemImpl() {
     cloud_fs_options.cloud_log_controller->StopTailingStream();
   }
   StopPurger();
+  FileCachePurge();
   cloud_fs_options.cloud_log_controller.reset();
   cloud_fs_options.storage_provider.reset();
 }
