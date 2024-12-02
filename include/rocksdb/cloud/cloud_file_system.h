@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "rocksdb/cache.h"
+#include "rocksdb/advanced_cache.h"
 #include "rocksdb/configurable.h"
 #include "rocksdb/file_system.h"
 #include "rocksdb/io_status.h"
@@ -237,6 +237,20 @@ class CloudFileSystemOptions {
   // the cloud fs be used.
   // Default:  null
   std::shared_ptr<CloudStorageProvider> storage_provider;
+
+  // Specifies the amount of sst files to be cached in local storage.
+  // If non-null, then the local storage would be used as a file cache.
+  // The Get or a Scan request on the database generates a random read
+  // request on the sst file and such a request causes the sst file to
+  // be inserted into the local file cache.
+  // A compaction request generates a sequential read request on the sst
+  // file and it does not cause the sst file to be inserted into the
+  // local file cache.
+  // A memtable flush generates a write requst to a new sst file and this
+  // sst file is not inserted into the local file cache.
+  // Cannot be set if keep_local_log_files is true.
+  // Default: null (disabled)
+  std::shared_ptr<Cache> sst_file_cache;
 
   // Access credentials
   AwsCloudAccessCredentials credentials;
@@ -495,6 +509,10 @@ class CloudFileSystemOptions {
                    const std::string& opts_str);
   Status Serialize(const ConfigOptions& config_options,
                    std::string* result) const;
+  // Is the sst file cache configured?
+  bool hasSstFileCache() const {
+    return sst_file_cache != nullptr && sst_file_cache->GetCapacity() > 0;
+  }
 };
 
 struct CheckpointToCloudOptions {
