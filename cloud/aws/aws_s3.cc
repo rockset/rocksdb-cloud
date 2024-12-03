@@ -43,13 +43,13 @@
 
 #include "cloud/aws/aws_file.h"
 #include "cloud/aws/aws_file_system.h"
-#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "cloud/filename.h"
 #include "file/read_write_util.h"
 #include "file/writable_file_writer.h"
 #include "port/port.h"
 #include "rocksdb/cloud/cloud_file_system.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
+#include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/options.h"
 #include "util/stderr_logger.h"
@@ -413,6 +413,7 @@ class S3StorageProvider : public CloudStorageProviderImpl {
       std::unique_ptr<CloudStorageWritableFile>* result,
       IODebugContext* dbg) override;
   Status PrepareOptions(const ConfigOptions& options) override;
+
  protected:
   IOStatus DoGetCloudObject(const std::string& bucket_name,
                             const std::string& object_path,
@@ -446,7 +447,15 @@ class S3StorageProvider : public CloudStorageProviderImpl {
 };
 
 Status S3StorageProvider::PrepareOptions(const ConfigOptions& options) {
-  auto cfs = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
+  CloudFileSystem* cfs = nullptr;
+  if (options.env != Env::Default()) {
+    // this code branch is for workaroud coredump when this provider is created
+    // by Env::CreateFromUri()
+    cfs = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
+    cfs_ = cfs;
+  } else {
+    cfs = cfs_;
+  }
   assert(cfs);
   const auto& cloud_opts = cfs->GetCloudFileSystemOptions();
   if (std::string(cfs->Name()) != CloudFileSystemImpl::kAws()) {
@@ -688,7 +697,7 @@ IOStatus S3StorageProvider::ExistsCloudObject(const std::string& bucket_name,
 IOStatus S3StorageProvider::GetCloudObjectSize(const std::string& bucket_name,
                                                const std::string& object_path,
                                                uint64_t* filesize) {
-  HeadObjectResult result;                                             
+  HeadObjectResult result;
   result.size = filesize;
   return HeadObject(bucket_name, object_path, &result);
 }
@@ -852,12 +861,10 @@ namespace {
 class WritableFileStreamBuf : public std::streambuf {
  public:
   WritableFileStreamBuf(IOStatus* fileCloseStatus,
-			std::unique_ptr<WritableFileWriter>&& fileWriter)
-    : fileCloseStatus_(fileCloseStatus), fileWriter_(std::move(fileWriter)) {}
+                        std::unique_ptr<WritableFileWriter>&& fileWriter)
+      : fileCloseStatus_(fileCloseStatus), fileWriter_(std::move(fileWriter)) {}
 
-  ~WritableFileStreamBuf() {
-    *fileCloseStatus_ = fileWriter_->Close({});
-  }
+  ~WritableFileStreamBuf() { *fileCloseStatus_ = fileWriter_->Close({}); }
 
  protected:
   // Appends a block of data to the stream. Must always write n if possible
@@ -890,7 +897,7 @@ class WritableFileStreamBuf : public std::streambuf {
   }
 
  private:
-  IOStatus *fileCloseStatus_;
+  IOStatus* fileCloseStatus_;
   std::unique_ptr<WritableFileWriter> fileWriter_;
 };
 
@@ -919,11 +926,10 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
     // The stream is not flushed when WaitUntilFinished() returns.
     // TODO(igor) Fix this once the AWS SDK's bug is fixed.
     auto ioStreamFactory = [=]() -> Aws::IOStream* {
-        // fallback to FStream
-        return Aws::New<Aws::FStream>(
-            Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
-            std::ios_base::out | std::ios_base::trunc);
-
+      // fallback to FStream
+      return Aws::New<Aws::FStream>(Aws::Utils::ARRAY_ALLOCATION_TAG,
+                                    destination,
+                                    std::ios_base::out | std::ios_base::trunc);
     };
 
     auto handle = s3client_->DownloadFile(ToAwsString(bucket_name),
@@ -950,7 +956,8 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
       // Close() will be called in the destructor of the object returned by
       // this factory. Adding an inner scope so that the destructor is called
       // before checking fileCloseStatus.
-      auto ioStreamFactory = [this, destination, &fileCloseStatus]() -> Aws::IOStream* {
+      auto ioStreamFactory = [this, destination,
+                              &fileCloseStatus]() -> Aws::IOStream* {
         FileOptions foptions;
         foptions.use_direct_writes =
             cfs_->GetCloudFileSystemOptions().use_direct_io_for_cloud_download;
@@ -968,7 +975,7 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
             std::unique_ptr<WritableFileStreamBuf>(new WritableFileStreamBuf(
                 &fileCloseStatus,
                 std::unique_ptr<WritableFileWriter>(new WritableFileWriter(
-                        std::move(file), destination, foptions)))));
+                    std::move(file), destination, foptions)))));
       };
 
       Aws::S3::Model::GetObjectRequest request;
@@ -981,7 +988,8 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
         *remote_size = outcome.GetResult().GetContentLength();
       } else {
         const auto& error = outcome.GetError();
-        std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
+        std::string errmsg(error.GetMessage().c_str(),
+                           error.GetMessage().size());
         if (IsNotFound(error.GetErrorType())) {
           Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
               "[s3] GetObject %s/%s error %s.", bucket_name.c_str(),

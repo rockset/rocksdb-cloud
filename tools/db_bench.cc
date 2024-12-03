@@ -15,7 +15,25 @@ int main() {
 }
 #else
 #include "rocksdb/db_bench_tool.h"
+#ifndef ROCKSDB_LITE
+#ifdef USE_AWS
+#include <aws/core/Aws.h>
+#endif
+#endif
 int main(int argc, char** argv) {
-  return ROCKSDB_NAMESPACE::db_bench_tool(argc, argv);
+#ifndef ROCKSDB_LITE
+#ifdef USE_AWS
+    Aws::SDKOptions aws_options;
+    aws_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Info;
+    Aws::InitAPI(aws_options);
+#endif
+#endif
+   int res = ROCKSDB_NAMESPACE::db_bench_tool(argc, argv);
+#ifndef ROCKSDB_LITE
+#ifdef USE_AWS
+    Aws::ShutdownAPI(aws_options);
+#endif
+#endif
+    return res;
 }
 #endif  // GFLAGS
