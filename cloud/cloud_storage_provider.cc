@@ -254,7 +254,11 @@ Status CloudStorageProvider::CreateFromString(
 }
 
 Status CloudStorageProviderImpl::PrepareOptions(const ConfigOptions& options) {
-  cfs_ = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
+  if(options.env != Env::Default())
+  {
+     // this code branch is for workaroud coredump when this provider is created from Env::CreateFromUri()
+     cfs_ = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
+  }
   assert(cfs_);
   Status st = CloudStorageProvider::PrepareOptions(options);
   if (!st.ok()) {

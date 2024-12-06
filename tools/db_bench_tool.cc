@@ -72,6 +72,8 @@
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/write_batch.h"
+#include "rocksdb/cloud/cloud_file_system.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "test_util/testutil.h"
 #include "test_util/transaction_test_util.h"
 #include "tools/simulated_hybrid_file_system.h"
@@ -1367,6 +1369,13 @@ DEFINE_string(fs_uri, "",
               "URI for registry Filesystem lookup. Mutually exclusive"
               " with --env_uri."
               " Creates a default environment with the specified filesystem.");
+// define rocksdb cloud specific parameters
+DEFINE_string(aws_access_id, "", "Access id for AWS");
+DEFINE_string(aws_secret_key, "", "Secret key for AWS");
+DEFINE_string(aws_region, "", "AWS region");
+DEFINE_bool(keep_local_sst_files, true,
+            "Keep all files in local storage as well as cloud storage");
+// end
 DEFINE_string(simulate_hybrid_fs_file, "",
               "File for Store Metadata for Simulate hybrid FS. Empty means "
               "disable the feature. Now, if it is set, last_level_temperature "
@@ -1697,6 +1706,50 @@ DEFINE_bool(avoid_flush_during_recovery,
 DEFINE_int64(multiread_stride, 0,
              "Stride length for the keys in a MultiGet batch");
 DEFINE_bool(multiread_batched, false, "Use the new MultiGet API");
+
+// create Factory for creating S3 Envs
+#ifndef ROCKSDB_LITE
+#ifdef USE_AWS
+ROCKSDB_NAMESPACE::Env* CreateAwsEnv(
+    const std::string& dbpath,
+    std::unique_ptr<ROCKSDB_NAMESPACE::Env>* result) {
+  fprintf(stderr, "Creating AwsEnv for path %s\n", dbpath.c_str());
+  ROCKSDB_NAMESPACE::CloudFileSystemOptions coptions;
+  std::string region;
+  if (FLAGS_aws_access_id.size() != 0) {
+    coptions.credentials.InitializeSimple(FLAGS_aws_access_id,
+                                          FLAGS_aws_secret_key);
+    region = FLAGS_aws_region;
+  }
+  assert(coptions.credentials.HasValid().ok());
+
+  coptions.keep_local_sst_files = FLAGS_keep_local_sst_files;
+  if (FLAGS_db.empty()) {
+    coptions.TEST_Initialize("dbbench.", "db-bench", region);
+  } else {
+    coptions.TEST_Initialize("dbbench.", FLAGS_db, region);
+  }
+  ROCKSDB_NAMESPACE::CloudFileSystem* s;
+  auto st = ROCKSDB_NAMESPACE::CloudFileSystemEnv::NewAwsFileSystem(
+      ROCKSDB_NAMESPACE::FileSystem::Default(), coptions, nullptr,
+      &s);
+  assert(st.ok());
+  ((ROCKSDB_NAMESPACE::CloudFileSystemImpl*)s)->TEST_DisableCloudManifest();
+  *result = rocksdb::NewCompositeEnv(std::shared_ptr<rocksdb::FileSystem>(s));
+  return result->get();
+}
+
+static const auto& s3_reg __attribute__((__unused__)) =
+    ROCKSDB_NAMESPACE::ObjectLibrary::Default()
+        -> AddFactory<ROCKSDB_NAMESPACE::Env>(
+            ROCKSDB_NAMESPACE::ObjectLibrary::PatternEntry("s3").AddSeparator("://", false),
+            [](const std::string& uri,
+               std::unique_ptr<ROCKSDB_NAMESPACE::Env>* guard, std::string*) {
+              CreateAwsEnv(uri, guard);
+              return guard->get();
+            });
+#endif /* USE_AWS */
+#endif // ROCKSDB_LITE
 
 DEFINE_string(memtablerep, "skip_list", "");
 DEFINE_int64(hash_bucket_count, 1024 * 1024, "hash bucket count");
