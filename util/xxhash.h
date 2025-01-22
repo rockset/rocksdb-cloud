@@ -2058,6 +2058,9 @@ static int XXH_isLittleEndian(void)
 #endif
 
 
+#if defined (__cplusplus)
+}
+#endif
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 201710L)
 /* C23 and future versions have standard "unreachable()" */
 #  include <stddef.h>
@@ -2078,6 +2081,9 @@ static int XXH_isLittleEndian(void)
 #  define XXH_UNREACHABLE()
 #endif
 
+#if defined (__cplusplus)
+extern "C" {
+#endif
 #define XXH_ASSUME(c) if (!(c)) { XXH_UNREACHABLE(); }
 
 /*!

@@ -259,6 +259,64 @@ class BlockBasedTableBuilder::BlockBasedTablePropertiesCollector
   bool prefix_filtering_;
 };
 
+namespace {
+template <typename T>
+class HackUniquePtr {
+private:
+    T* ptr;
+
+public:
+    // Constructor
+    explicit HackUniquePtr(T* p = nullptr) : ptr(p) {}
+
+    // Destructor
+    ~HackUniquePtr() {
+        delete ptr;
+    }
+
+    // Move constructor
+    HackUniquePtr(HackUniquePtr&& other) noexcept : ptr(other.ptr) {
+        other.ptr = nullptr;
+    }
+
+    // Move assignment operator
+    HackUniquePtr& operator=(HackUniquePtr&& other) noexcept {
+        if (this != &other) {
+            delete ptr;
+            ptr = other.ptr;
+            other.ptr = nullptr;
+        }
+        return *this;
+    }
+
+    // Delete copy constructor and copy assignment
+    HackUniquePtr(const HackUniquePtr&) = delete;
+    HackUniquePtr& operator=(const HackUniquePtr&) = delete;
+
+    // Overloaded dereference and arrow operators
+    T& operator*() const { return *ptr; }
+    T* operator->() const { return ptr; }
+
+    // Get the raw pointer
+    T* get() const { return ptr; }
+
+    // Release ownership of the pointer
+    T* release() {
+        T* temp = ptr;
+        ptr = nullptr;
+        return temp;
+    }
+
+    // Reset the unique pointer with a new raw pointer
+    void reset(T* newPtr = nullptr) {
+        delete ptr;
+        ptr = newPtr;
+    }
+};
+
+}
+
+
 struct BlockBasedTableBuilder::Rep {
   const ImmutableOptions ioptions;
   // BEGIN from MutableCFOptions
@@ -355,7 +413,7 @@ struct BlockBasedTableBuilder::Rep {
 
   std::vector<std::unique_ptr<InternalTblPropColl>> table_properties_collectors;
 
-  std::unique_ptr<ParallelCompressionRep> pc_rep;
+  HackUniquePtr<ParallelCompressionRep> pc_rep;
   BlockCreateContext create_context;
 
   // The size of the "tail" part of a SST file. "Tail" refers to
