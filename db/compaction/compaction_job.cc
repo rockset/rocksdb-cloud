@@ -1948,6 +1948,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
 
   writable_file->SetIOPriority(GetRateLimiterPriority());
   writable_file->SetWriteLifeTimeHint(write_hint_);
+
   FileTypeSet tmp_set = db_options_.checksum_handoff_file_types;
   writable_file->SetPreallocationBlockSize(static_cast<size_t>(
       sub_compact->compaction->OutputFilePreallocationSize()));

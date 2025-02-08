@@ -12,6 +12,7 @@
 #include "rocksdb/cloud/cloud_storage_provider_impl.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/env.h"
+#include "rocksdb/io_status.h"
 #include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/object_registry.h"
@@ -183,8 +184,31 @@ IOStatus CloudStorageWritableFileImpl::Close(const IOOptions& opts,
       return status_;
     }
 
-    // delete local file
-    if (!cfs_->GetCloudFileSystemOptions().keep_local_sst_files) {
+    bool has_file_cache = cfs_->GetCloudFileSystemOptions().hasSstFileCache();
+
+    if (has_file_cache || cfs_->GetCloudFileSystemOptions().keep_local_sst_files) {
+      if (has_file_cache) {
+        // get file size
+        uint64_t local_size;
+        auto statx = cfs_->GetBaseFileSystem()->GetFileSize(fname_, opts,
+                                                            &local_size, dbg);
+        if (statx.ok()) {
+          cfs_->FileCacheInsert(fname_, local_size);
+        }
+        else
+        {
+          Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
+            "[%s] CloudWritableFile get file size failed on local file %s",
+            Name(), fname_.c_str());
+          // delete file
+          status_ = cfs_->GetBaseFileSystem()->DeleteFile(fname_, opts, dbg);
+          return status_;
+        }
+      }
+    }
+    else
+    {
+      // delete local file
       status_ = cfs_->GetBaseFileSystem()->DeleteFile(fname_, opts, dbg);
       if (!status_.ok()) {
         Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
@@ -193,6 +217,7 @@ IOStatus CloudStorageWritableFileImpl::Close(const IOOptions& opts,
         return status_;
       }
     }
+
     Log(InfoLogLevel::DEBUG_LEVEL, cfs_->GetLogger(),
         "[%s] CloudWritableFile closed file %s", Name(), fname_.c_str());
   }
@@ -254,10 +279,10 @@ Status CloudStorageProvider::CreateFromString(
 }
 
 Status CloudStorageProviderImpl::PrepareOptions(const ConfigOptions& options) {
-  if(options.env != Env::Default())
-  {
-     // this code branch is for workaroud coredump when this provider is created from Env::CreateFromUri()
-     cfs_ = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
+  if (options.env != Env::Default()) {
+    // this code branch is for workaroud coredump when this provider is created
+    // from Env::CreateFromUri()
+    cfs_ = dynamic_cast<CloudFileSystem*>(options.env->GetFileSystem().get());
   }
   assert(cfs_);
   Status st = CloudStorageProvider::PrepareOptions(options);

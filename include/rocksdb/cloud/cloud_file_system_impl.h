@@ -358,9 +358,9 @@ class CloudFileSystemImpl : public CloudFileSystem {
 
   IOStatus RollNewEpoch(const std::string& local_dbname);
 
-    // helper methods to access the file cache
+  // helper methods to access the file cache
   void FileCacheAccess(const std::string& fname);
-  void FileCacheInsert(const std::string& fname, uint64_t filesize);
+  void FileCacheInsert(const std::string& fname, uint64_t filesize) override;
 
   // The dbid of the source database that is cloned
   std::string src_dbid_;
