@@ -309,7 +309,7 @@ class CloudFileSystemImpl : public CloudFileSystem {
   // REQURIES: Dest bucket set
   // REQURIES: CloudManifest loaded
   // REQURIES: stop writes, stop compactions
-  IOStatus BackupCloudManifest(const std::string& dest_folder) override;
+  IOStatus BackupCloudManifest(const std::string& dest_folder, std::vector<std::string> &backup_files) override;
 
  protected:
   CloudFileSystemOptions cloud_fs_options;

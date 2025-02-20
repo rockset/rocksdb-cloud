@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_manifest.h"
@@ -2355,7 +2356,7 @@ std::string CloudFileSystemImpl::CloudManifestFile(const std::string& dbname) {
   return MakeCloudManifestFile(dbname, cloud_fs_options.cookie_on_open);
 }
 
-IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder) {
+IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder, std::vector<std::string> &backup_files) {
   if (!HasDestBucket()) {
     return IOStatus::InvalidArgument(
         "Dest bucket has to be specified when backing up manifest files");
@@ -2396,6 +2397,8 @@ IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder
     return st;
   }
 
+  backup_files.push_back(cloud_manifest_dest);
+
   // Copy all manifest files from each epoch
   auto epochs = manifest->GetAllEpochs();
   for (const auto& epoch : epochs) {
@@ -2411,6 +2414,7 @@ IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder
           epoch.c_str(), manifest_dest.c_str(), st.ToString().c_str());
       return st;
     }
+    backup_files.push_back(manifest_dest);
   }
 
   Log(InfoLogLevel::INFO_LEVEL, info_log_,

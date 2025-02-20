@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "rocksdb/advanced_cache.h"
 #include "rocksdb/configurable.h"
@@ -688,7 +689,7 @@ class CloudFileSystem : public FileSystem {
   // REQUIRES: Dest bucket set
   // REQUIRES: CloudManifest loaded
   // REQUIRES: stop writes, stop compactions
-  virtual IOStatus BackupCloudManifest(const std::string& dest_folder) = 0;
+  virtual IOStatus BackupCloudManifest(const std::string& dest_folder, std::vector<std::string> &backup_files) = 0;
 
   virtual Logger* GetLogger() const = 0;
   virtual void SetLogger(std::shared_ptr<Logger>) = 0;
