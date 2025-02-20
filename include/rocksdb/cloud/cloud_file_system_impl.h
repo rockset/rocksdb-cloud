@@ -302,6 +302,15 @@ class CloudFileSystemImpl : public CloudFileSystem {
   size_t TEST_NumScheduledJobs() const;
 #endif
 
+  // Buckup the CLOUDMANIFEST and MANIFEST files to cloud storage 
+  // dest_folder is the folder where the files will be saved
+  // the files will be saved as dest_bucket/dest_folder
+  //
+  // REQURIES: Dest bucket set
+  // REQURIES: CloudManifest loaded
+  // REQURIES: stop writes, stop compactions
+  IOStatus BackupCloudManifest(const std::string& dest_folder) override;
+
  protected:
   CloudFileSystemOptions cloud_fs_options;
   std::shared_ptr<FileSystem> base_fs_;  // The underlying file system
