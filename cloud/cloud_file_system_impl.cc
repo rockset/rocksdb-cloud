@@ -2362,16 +2362,8 @@ IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder
         "Dest bucket has to be specified when backing up manifest files");
   }
 
-  // Load the current CloudManifest to get the epochs
-  std::unique_ptr<CloudManifest> manifest;
-  auto st = CloudFileSystemEnv::LoadCloudManifest(
-      GetDestObjectPath(), GetBaseFileSystem(), cloud_fs_options.new_cookie_on_open, &manifest);
-  if (!st.ok()) {
-    std::string cmf_path = MakeCloudManifestFile(GetDestObjectPath(), cloud_fs_options.new_cookie_on_open);
-    Log(InfoLogLevel::ERROR_LEVEL, info_log_,
-        "[cloud_fs_impl] Failed to load CloudManifest for %s: %s",
-        cmf_path.c_str(), st.ToString().c_str());
-    return st;
+  if (!cloud_manifest_) {
+    return IOStatus::Corruption("CloudManifest not loaded");
   }
 
   // Create source and destination paths in S3
@@ -2387,7 +2379,7 @@ IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "[cloud_fs_impl] Backing up CloudManifest from %s to %s, bucket %s",
       cloud_manifest_src.c_str(), cloud_manifest_dest.c_str(), GetDestBucketName().c_str());
-  st = GetStorageProvider()->CopyCloudObject(
+  auto st = GetStorageProvider()->CopyCloudObject(
       GetDestBucketName(), cloud_manifest_src,
       GetDestBucketName(), cloud_manifest_dest);
   if (!st.ok()) {
@@ -2400,7 +2392,7 @@ IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder
   backup_files.push_back(cloud_manifest_dest);
 
   // Copy all manifest files from each epoch
-  auto epochs = manifest->GetAllEpochs();
+  auto epochs = cloud_manifest_->GetAllEpochs();
   for (const auto& epoch : epochs) {
     std::string manifest_src = ManifestFileWithEpoch(src_path, epoch);
     std::string manifest_dest = ManifestFileWithEpoch(dest_path, epoch);
