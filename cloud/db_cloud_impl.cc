@@ -1,4 +1,9 @@
 // Copyright (c) 2017 Rockset.
+#include <atomic>
+#include <cstring>
+#include <memory>
+#include "rocksdb/file_system.h"
+#include "rocksdb/io_status.h"
 #ifndef ROCKSDB_LITE
 
 #include "cloud/db_cloud_impl.h"
@@ -22,6 +27,7 @@
 #include "rocksdb/table.h"
 #include "util/xxhash.h"
 #include "utilities/persistent_cache/block_cache_tier.h"
+#include "cache/lru_cache.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -57,7 +63,17 @@ class ConstantSizeSstFileManager : public SstFileManagerImpl {
 DBCloudImpl::DBCloudImpl(DB* db, std::unique_ptr<Env> local_env)
     : DBCloud(db), cfs_(nullptr), local_env_(std::move(local_env)) {}
 
-DBCloudImpl::~DBCloudImpl() {}
+DBCloudImpl::~DBCloudImpl() {
+  warm_up_is_running_.store(false, std::memory_order_release);
+  for (auto &thd : warm_up_threads_) {
+    if (thd.joinable())
+    {
+      thd.join();
+    }
+  }
+
+  warm_up_threads_.clear();
+}
 
 Status DBCloud::Open(const Options& options, const std::string& dbname,
                      const std::string& persistent_cache_path,
@@ -228,6 +244,173 @@ Status DBCloud::Open(const Options& opt, const std::string& local_dbname,
       "Opened cloud db with local dir %s dbid %s. %s", local_dbname.c_str(),
       dbid.c_str(), st.ToString().c_str());
   return st;
+}
+
+Status DBCloudImpl::WarmUp(size_t max_warm_up_threads)
+{
+  std::string dbid;
+  Options default_options = GetOptions();
+  Status st = GetDbIdentity(dbid);
+  if (!st.ok()) {
+    Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+        "WarmUp: could not get dbid %s", st.ToString().c_str());
+    return st;
+  }
+
+  assert(st.ok());
+
+  CloudFileSystemImpl *cfs = dynamic_cast<CloudFileSystemImpl *>(GetEnv()->GetFileSystem().get());
+  assert(cfs);
+  if (!cfs->HasDestBucket() && !cfs->HasSrcBucket()) {
+    Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+        "WarmUp: cloud dbid %s has no source/dest bucket, nothing to do.",
+        dbid.c_str());
+    return Status::OK();
+  }
+
+  bool expected = false;
+  if (!warm_up_is_running_.compare_exchange_strong(expected, true))
+  {
+    // WarmUp has been started. Just return
+    return Status::OK();
+  }
+
+  for (auto &thd : warm_up_threads_) {
+    if (thd.joinable()) {
+      thd.join();
+    }
+  }
+  
+  warm_up_threads_.clear();
+  
+  if (max_warm_up_threads <= 0) {
+    max_warm_up_threads = 1;
+  }
+
+
+  // find all sst files in the db
+  std::vector<LiveFileMetaData> live_files;
+  GetLiveFilesMetaData(&live_files);
+
+  std::vector<std::string> to_fetch;
+  for (auto file_meta_data : live_files) {
+    // file_meta_data.level;
+    std::string name = file_meta_data.directory + file_meta_data.relative_filename;
+    auto remapped_fname = cfs->RemapFilename(name);
+    to_fetch.push_back(remapped_fname);
+  }
+
+  // keep local sst files
+
+
+  struct FetchFileInfo {
+    std::atomic<size_t> next_file_meta_idx_{0};
+    std::vector<std::string> to_fetch_;
+    std::atomic<size_t> unfinished_thread_cnt_{0};
+  };
+
+  std::shared_ptr<FetchFileInfo> fetch_file_data = std::make_shared<FetchFileInfo>();
+  fetch_file_data->next_file_meta_idx_ = 0;
+  fetch_file_data->to_fetch_ = std::move(to_fetch);
+  fetch_file_data->unfinished_thread_cnt_ = max_warm_up_threads;
+
+
+  std::function<void()> load_handlers_func = [this, fetch_file_data, default_options, dbid, cfs]() {
+      size_t cache_capacity = 0;
+      IOOptions io_options;
+      const auto &base_fs = cfs->GetBaseFileSystem();
+      const auto &cfs_options = cfs->GetCloudFileSystemOptions();
+
+      LRUCache *lru_cache = nullptr;
+      if (cfs_options.hasSstFileCache()) {
+        assert(cfs_options.sst_file_cache != nullptr);
+        cache_capacity = cfs_options.sst_file_cache->GetCapacity();
+        if (std::strcmp(cfs_options.sst_file_cache->Name(), "LRUCache") == 0) {
+          lru_cache = static_cast<LRUCache *>(cfs_options.sst_file_cache.get());
+          cache_capacity = cache_capacity / lru_cache->GetNumShards();
+          assert(cache_capacity > 0);
+        }
+        else {
+          assert(false && "Unimplemented");
+        }
+      }
+
+      std::atomic<size_t> &next_file_meta_idx = fetch_file_data->next_file_meta_idx_;
+      const std::vector<std::string> &to_fetch_file_name = fetch_file_data->to_fetch_;
+
+      Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+                  "WarmUp: start to fetch file from cloud storage");
+
+      while (warm_up_is_running_.load(std::memory_order_acquire)) {
+        // fetch next file name
+        size_t idx = next_file_meta_idx.fetch_add(1);
+        if (idx >= to_fetch_file_name.size()) {
+          break;
+        }
+
+        const auto& fname = to_fetch_file_name[idx];
+
+        if (base_fs->FileExists(fname, io_options, nullptr).ok()) {
+          // skip
+          continue;
+        }
+
+        size_t remote_size = 0;
+        IOStatus io_status = cfs->GetCloudObjectSize(fname, &remote_size);
+        if (!io_status.ok()) {
+          Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+              "WarmUp: failed to fetch object size, file name: %s, err: %s", fname.c_str(), io_status.ToString().c_str());
+          // ignore error
+          continue;
+        }
+
+        assert(io_status.ok());
+        // fast path to check shard cache limit
+        if (lru_cache != nullptr) {
+          Slice key(fname);
+          size_t total_charge  = lru_cache->GetShardUsage(key) + remote_size;
+          if (total_charge >= cache_capacity)
+          {
+            // Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+            //  "WarmUp: total charge %" PRIu64 " exceeds per shard cache limit %" PRIu64, total_charge, cache_capacity);
+
+            // This shard cache is full, we skip this shard cache
+            continue;
+          }
+        }
+
+        // fetch sst from cloud storage
+        io_status = cfs->GetCloudObject(fname);
+
+        if (io_status.ok()) {
+          if (cfs_options.hasSstFileCache()) {
+            // insert into file cache
+            cfs->FileCacheInsert(fname, remote_size);
+          }
+        }
+        else {
+          Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+              "WarmUp: failed to fetch file %s. err: %s", fname.c_str(), io_status.ToString().c_str());
+          // ignore error
+        }
+      }
+
+      // last thread
+      if(fetch_file_data->unfinished_thread_cnt_.fetch_sub(1) == 1) {
+        warm_up_is_running_.store(false, std::memory_order_release);
+      }
+
+      Log(InfoLogLevel::INFO_LEVEL, default_options.info_log,
+                  "WarmUp: stop to fetch file from cloud storage");
+    };
+
+  assert(warm_up_threads_.empty());
+
+  for (size_t idx = 0; idx < max_warm_up_threads; idx++) {
+    warm_up_threads_.emplace_back(load_handlers_func);
+  }
+  
+  return Status::OK();
 }
 
 Status DBCloudImpl::Savepoint() {

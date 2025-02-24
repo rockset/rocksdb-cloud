@@ -55,6 +55,10 @@ class DBCloud : public StackableDB {
   virtual Status CheckpointToCloud(const BucketOptions& destination,
                                    const CheckpointToCloudOptions& options) = 0;
 
+  // Aynchronously fetch all remote files to the local file cache
+  // Important: This function should only be called once for every db instance
+  virtual Status WarmUp(size_t max_warmup_threads) = 0;
+
   // ListColumnFamilies will open the DB specified by argument name
   // and return the list of all column families in that DB
   // through column_families argument. The ordering of

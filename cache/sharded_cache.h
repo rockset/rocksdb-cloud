@@ -16,6 +16,7 @@
 #include "port/lang.h"
 #include "port/port.h"
 #include "rocksdb/advanced_cache.h"
+#include "rocksdb/slice.h"
 #include "util/hash.h"
 #include "util/mutexlock.h"
 
@@ -156,6 +157,12 @@ class ShardedCache : public ShardedCacheBase {
 
   const CacheShard& GetShard(HashCref hash) const {
     return shards_[CacheShard::HashPieceForSharding(hash) & shard_mask_];
+  }
+
+  size_t GetShardUsage(const Slice &key) const {
+    HashVal hash = CacheShard::ComputeHash(key, hash_seed_);
+    const CacheShard &shard = GetShard(hash);
+    return shard.GetUsage();
   }
 
   void SetCapacity(size_t capacity) override {

@@ -62,6 +62,7 @@ void CloudFileSystemImpl::FileCacheAccess(const std::string& fname) {
   }
   Slice key(fname);
   Cache::Handle* handle = cloud_fs_options.sst_file_cache->Lookup(key);
+
   if (handle) {
     cloud_fs_options.sst_file_cache->Release(handle);
   }

@@ -280,11 +280,19 @@ class CloudFileSystemImpl : public CloudFileSystem {
   IOStatus UploadCloudManifest(const std::string& local_dbname,
                                const std::string& cookie) const override;
 
+  // Gets the cloud object fname from the dest or src bucket
+  IOStatus GetCloudObject(const std::string& fname);
+
+  // Gets the size of the named cloud object from the dest or src bucket
+  IOStatus GetCloudObjectSize(const std::string& fname, uint64_t* remote_size);
+
   // Delete invisible files in cloud.
   //
   // REQUIRES: Dest bucket set
   IOStatus DeleteCloudInvisibleFiles(
       const std::vector<std::string>& active_cookies) override;
+
+  void FileCacheInsert(const std::string& fname, uint64_t filesize) override;
 
 #ifndef NDEBUG
   void TEST_InitEmptyCloudManifest();
@@ -309,12 +317,6 @@ class CloudFileSystemImpl : public CloudFileSystem {
 
   // Checks to see if the input fname exists in the dest or src bucket
   IOStatus ExistsCloudObject(const std::string& fname);
-
-  // Gets the cloud object fname from the dest or src bucket
-  IOStatus GetCloudObject(const std::string& fname);
-
-  // Gets the size of the named cloud object from the dest or src bucket
-  IOStatus GetCloudObjectSize(const std::string& fname, uint64_t* remote_size);
 
   // Gets the modification time of the named cloud object from the dest or src
   // bucket
@@ -360,7 +362,6 @@ class CloudFileSystemImpl : public CloudFileSystem {
 
   // helper methods to access the file cache
   void FileCacheAccess(const std::string& fname);
-  void FileCacheInsert(const std::string& fname, uint64_t filesize) override;
 
   // The dbid of the source database that is cloned
   std::string src_dbid_;
