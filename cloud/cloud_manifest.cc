@@ -227,6 +227,17 @@ CloudManifest::TEST_GetPastEpochs() const {
   return pastEpochs_;
 }
 
+std::vector<std::string> CloudManifest::GetAllEpochs() const {
+  ReadLock lck(&mutex_);
+  std::vector<std::string> epochs;
+  epochs.reserve(pastEpochs_.size() + 1);
+  for (auto& pe : pastEpochs_) {
+    epochs.push_back(pe.second);
+  }
+  epochs.push_back(currentEpoch_);
+  return epochs;
+}
+
 std::string CloudManifest::ToString(bool include_past_epochs) {
   ReadLock lck(&mutex_);
   std::ostringstream oss;

@@ -106,3 +106,4 @@ third-party/folly/
 .clang-format
 .editorconfig
 *.vim
+output

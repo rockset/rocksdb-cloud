@@ -35,6 +35,8 @@ namespace ROCKSDB_NAMESPACE {
 // CloudManifest is thread safe after Finalize() is called.
 class CloudManifest {
  public:
+  // Get all epochs in this CloudManifest
+  std::vector<std::string> GetAllEpochs() const;
   static IOStatus LoadFromLog(std::unique_ptr<SequentialFileReader> log,
                               std::unique_ptr<CloudManifest>* manifest);
   // Creates CloudManifest for an empty database

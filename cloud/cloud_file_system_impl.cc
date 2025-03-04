@@ -4,6 +4,9 @@
 #include "rocksdb/cloud/cloud_file_system_impl.h"
 
 #include <cinttypes>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "cloud/cloud_log_controller_impl.h"
 #include "cloud/cloud_manifest.h"
@@ -2351,6 +2354,65 @@ std::string CloudFileSystemImpl::CloudManifestFile(const std::string& dbname) {
     return MakeCloudManifestFile(cloud_fs_options.cookie_on_open);
   }
   return MakeCloudManifestFile(dbname, cloud_fs_options.cookie_on_open);
+}
+
+IOStatus CloudFileSystemImpl::BackupCloudManifest(const std::string& dest_folder, std::vector<std::string> &backup_files) {
+  if (!HasDestBucket()) {
+    return IOStatus::InvalidArgument(
+        "Dest bucket has to be specified when backing up manifest files");
+  }
+
+  if (!cloud_manifest_) {
+    return IOStatus::Corruption("CloudManifest not loaded");
+  }
+
+  // Create source and destination paths in S3
+  std::string src_path = "/" + GetDestObjectPath();
+  std::string dest_path = "/" + dest_folder;
+
+  // Copy CLOUDMANIFEST to the backup location
+  std::string cloud_manifest_src = 
+      MakeCloudManifestFile(src_path, cloud_fs_options.new_cookie_on_open);
+  std::string cloud_manifest_dest = 
+      MakeCloudManifestFile(dest_path, cloud_fs_options.new_cookie_on_open);
+
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[cloud_fs_impl] Backing up CloudManifest from %s to %s, bucket %s",
+      cloud_manifest_src.c_str(), cloud_manifest_dest.c_str(), GetDestBucketName().c_str());
+  auto st = GetStorageProvider()->CopyCloudObject(
+      GetDestBucketName(), cloud_manifest_src,
+      GetDestBucketName(), cloud_manifest_dest);
+  if (!st.ok()) {
+    Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+        "[cloud_fs_impl] Failed to copy CloudManifest to backup location %s: %s",
+        cloud_manifest_dest.c_str(), st.ToString().c_str());
+    return st;
+  }
+
+  backup_files.push_back(cloud_manifest_dest);
+
+  // Copy all manifest files from each epoch
+  auto epochs = cloud_manifest_->GetAllEpochs();
+  for (const auto& epoch : epochs) {
+    std::string manifest_src = ManifestFileWithEpoch(src_path, epoch);
+    std::string manifest_dest = ManifestFileWithEpoch(dest_path, epoch);
+
+    st = GetStorageProvider()->CopyCloudObject(
+        GetDestBucketName(), manifest_src,
+        GetDestBucketName(), manifest_dest);
+    if (!st.ok()) {
+      Log(InfoLogLevel::ERROR_LEVEL, info_log_,
+          "[cloud_fs_impl] Failed to copy manifest for epoch %s to %s: %s",
+          epoch.c_str(), manifest_dest.c_str(), st.ToString().c_str());
+      return st;
+    }
+    backup_files.push_back(manifest_dest);
+  }
+
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[cloud_fs_impl] Successfully backed up CloudManifest and %zu manifest files to %s",
+      epochs.size(), dest_path.c_str());
+  return IOStatus::OK();
 }
 
 #ifndef NDEBUG
