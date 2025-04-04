@@ -1600,6 +1600,10 @@ struct DBOptions {
   // persisted replication sequence, so the max limit here shouldn't be quite
   // large
   uint32_t max_num_replication_epochs = 100;
+
+  // If true, further manifest writes will be skipped on the first manifest
+  // write error. Db has to be reopened to clear the error status
+  bool skip_manifest_write_on_first_manifest_write_error = false;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

@@ -7829,6 +7829,48 @@ TEST_F(DBTest2, TableCacheMissDuringReadFromBlockCacheTier) {
   ASSERT_EQ(orig_num_file_opens, TestGetTickerCount(options, NO_FILE_OPENS));
 }
 
+// RocksdbCloud contribution start
+TEST_F(DBTest2, SkipManifestWriteOnError) {
+  Options options = CurrentOptions();
+  options.create_if_missing = true;
+  options.disable_auto_compactions = true;
+  options.skip_manifest_write_on_first_manifest_write_error = true;
+  Reopen(options);
+
+  WriteOptions wo;
+  wo.disableWAL = true;
+  ASSERT_OK(Put("k1", "v1", wo));
+  ASSERT_OK(Flush());
+  SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
+  SyncPoint::GetInstance()->SetCallBack(
+      "VersionSet::ProcessManifestWrites:AfterSyncManifest", [&](void* arg) {
+        ASSERT_NE(nullptr, arg);
+        auto* s = static_cast<Status*>(arg);
+        ASSERT_OK(*s);
+        *s = Status::IOError("simulated io error");
+      });
+  SyncPoint::GetInstance()->EnableProcessing();
+  ASSERT_OK(Put("k2", "v2", wo));
+  ASSERT_NOK(Flush());
+  
+  ASSERT_NOK(Put("k3", "v3", wo));
+  SyncPoint::GetInstance()->DisableProcessing();
+  SyncPoint::GetInstance()->ClearAllCallBacks();
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  Reopen(options);
+  ASSERT_EQ("v1", Get("k1"));
+  // The version edits are appended to the manifest file, just not synced
+  ASSERT_EQ("v2", Get("k2"));
+  ASSERT_EQ("NOT_FOUND", Get("k3"));
+  ASSERT_OK(Put("k3", "v3", wo));
+  ASSERT_EQ("v3", Get("k3"));
+  ASSERT_OK(Flush());
+  ASSERT_EQ("v3", Get("k3"));
+}
+// RocksdbCloud contribution end
+
 }  // namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {

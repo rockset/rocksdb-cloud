@@ -5632,6 +5632,15 @@ Status VersionSet::ProcessManifestWrites(
   Status s;
   IOStatus io_s;
   IOStatus manifest_io_status;
+  // RocksDB-Cloud contribution begin
+  if (db_options_->skip_manifest_write_on_first_manifest_write_error &&
+    !io_status_.ok()) {
+    // recovering previous io errors so that manifest writes are skipped
+    s = io_status_;
+    io_s = io_status_;
+  }
+  if (s.ok())
+  // RocksDB-Cloud contribution end
   {
     FileOptions opt_file_opts = fs_->OptimizeForManifestWrite(file_options_);
     mu->Unlock();
