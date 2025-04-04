@@ -5322,11 +5322,13 @@ Status VersionSet::ProcessManifestWrites(
     const ColumnFamilyOptions* new_cf_options, const ReadOptions& read_options,
     const WriteOptions& write_options) {
   mu->AssertHeld();
+  // RocksdbCloud contribution start
   if (!db_options_->attempt_recovery_after_manifest_write_error && !io_status_.ok()) {
     // If recovery from manifest write failure is disabled, all following manifest writes
     // get the same errors
     return io_status_;
   }
+  // RocksdbCloud contribution end
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
   ManifestWriter* last_writer = &first_writer;
