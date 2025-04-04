@@ -110,7 +110,7 @@ struct ImmutableDBOptions {
   bool enforce_single_del_contracts;
   bool disable_delete_obsolete_files_on_open;
   uint32_t max_num_replication_epochs;
-  bool skip_manifest_write_on_first_manifest_write_error;
+  bool attempt_recovery_after_manifest_write_error;
 
   bool IsWalDirSameAsDBPath() const;
   bool IsWalDirSameAsDBPath(const std::string& path) const;

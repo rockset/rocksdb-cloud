@@ -775,8 +775,8 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       enforce_single_del_contracts(options.enforce_single_del_contracts),
       disable_delete_obsolete_files_on_open(options.disable_delete_obsolete_files_on_open),
       max_num_replication_epochs(options.max_num_replication_epochs),
-      skip_manifest_write_on_first_manifest_write_error(
-          options.skip_manifest_write_on_first_manifest_write_error) {
+      attempt_recovery_after_manifest_write_error(
+          options.attempt_recovery_after_manifest_write_error) {
   fs = env->GetFileSystem();
   clock = env->GetSystemClock().get();
   logger = info_log.get();

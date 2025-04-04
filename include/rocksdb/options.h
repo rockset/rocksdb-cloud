@@ -1601,9 +1601,8 @@ struct DBOptions {
   // large
   uint32_t max_num_replication_epochs = 100;
 
-  // If true, further manifest writes will be skipped on the first manifest
-  // write error. Db has to be reopened to clear the error status
-  bool skip_manifest_write_on_first_manifest_write_error = false;
+  // If false, all manifest writes are failed until db is reopened
+  bool attempt_recovery_after_manifest_write_error = true;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

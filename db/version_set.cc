@@ -5322,6 +5322,11 @@ Status VersionSet::ProcessManifestWrites(
     const ColumnFamilyOptions* new_cf_options, const ReadOptions& read_options,
     const WriteOptions& write_options) {
   mu->AssertHeld();
+  if (!db_options_->attempt_recovery_after_manifest_write_error && !io_status_.ok()) {
+    // If recovery from manifest write failure is disabled, all following manifest writes
+    // get the same errors
+    return io_status_;
+  }
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
   ManifestWriter* last_writer = &first_writer;
@@ -5632,15 +5637,6 @@ Status VersionSet::ProcessManifestWrites(
   Status s;
   IOStatus io_s;
   IOStatus manifest_io_status;
-  // RocksDB-Cloud contribution begin
-  if (db_options_->skip_manifest_write_on_first_manifest_write_error &&
-    !io_status_.ok()) {
-    // recovering previous io errors so that manifest writes are skipped
-    s = io_status_;
-    io_s = io_status_;
-  }
-  if (s.ok())
-  // RocksDB-Cloud contribution end
   {
     FileOptions opt_file_opts = fs_->OptimizeForManifestWrite(file_options_);
     mu->Unlock();

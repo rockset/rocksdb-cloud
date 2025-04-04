@@ -7830,11 +7830,11 @@ TEST_F(DBTest2, TableCacheMissDuringReadFromBlockCacheTier) {
 }
 
 // RocksdbCloud contribution start
-TEST_F(DBTest2, SkipManifestWriteOnError) {
+TEST_F(DBTest2, DisableRecoveryOnManifestWriteError) {
   Options options = CurrentOptions();
   options.create_if_missing = true;
   options.disable_auto_compactions = true;
-  options.skip_manifest_write_on_first_manifest_write_error = true;
+  options.attempt_recovery_after_manifest_write_error = false;
   Reopen(options);
 
   WriteOptions wo;
