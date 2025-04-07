@@ -222,7 +222,8 @@ static std::unordered_map<std::string,
     block_base_table_prepopulate_block_cache_string_map = {
         {"kDisable", BlockBasedTableOptions::PrepopulateBlockCache::kDisable},
         {"kFlushOnly",
-         BlockBasedTableOptions::PrepopulateBlockCache::kFlushOnly}};
+         BlockBasedTableOptions::PrepopulateBlockCache::kFlushOnly},
+        {"kFlushAndCompaction", BlockBasedTableOptions::PrepopulateBlockCache::kFlushAndCompaction}};
 
 static std::unordered_map<std::string, OptionTypeInfo>
     block_based_table_type_info = {
@@ -412,7 +413,6 @@ static std::unordered_map<std::string, OptionTypeInfo>
                    num_file_reads_for_auto_readahead),
           OptionType::kUInt64T, OptionVerificationType::kNormal,
           OptionTypeFlags::kMutable}},
-
 };
 
 // TODO(myabandeh): We should return an error instead of silently changing the
@@ -839,6 +839,11 @@ std::string BlockBasedTableFactory::GetPrintableOptions() const {
            "  num_file_reads_for_auto_readahead: %" PRIu64 "\n",
            table_options_.num_file_reads_for_auto_readahead);
   ret.append(buffer);
+  if (table_options_.compaction_prepoulate_block_cache_policy) {
+    snprintf(buffer, kBufferSize,
+            "  compaction_prepoulate_block_cache_policy: %p\n",
+            static_cast<void*>(table_options_.compaction_prepoulate_block_cache_policy.get()));
+  }
   return ret;
 }
 
