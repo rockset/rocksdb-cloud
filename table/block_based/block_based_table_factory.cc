@@ -25,6 +25,7 @@
 #include "rocksdb/flush_block_policy.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "rocksdb/table.h"
+#include "rocksdb/table_properties.h"
 #include "rocksdb/utilities/options_type.h"
 #include "table/block_based/block_based_table_builder.h"
 #include "table/block_based/block_based_table_reader.h"
@@ -839,10 +840,11 @@ std::string BlockBasedTableFactory::GetPrintableOptions() const {
            "  num_file_reads_for_auto_readahead: %" PRIu64 "\n",
            table_options_.num_file_reads_for_auto_readahead);
   ret.append(buffer);
-  if (table_options_.compaction_prepoulate_block_cache_policy) {
+  if (table_options_.compaction_prepopulate_block_cache_filter) {
     snprintf(buffer, kBufferSize,
-            "  compaction_prepoulate_block_cache_policy: %p\n",
-            static_cast<void*>(table_options_.compaction_prepoulate_block_cache_policy.get()));
+             "  compaction_prepopulate_block_cache_filter: %p\n",
+                 &table_options_.compaction_prepopulate_block_cache_filter);
+    ret.append(buffer);
   }
   return ret;
 }

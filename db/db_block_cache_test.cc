@@ -26,6 +26,7 @@
 #include "rocksdb/table_properties.h"
 #include "table/block_based/block_based_table_reader.h"
 #include "table/unique_id_impl.h"
+#include "test_util/mock_time_env.h"
 #include "util/compression.h"
 #include "util/defer.h"
 #include "util/hash.h"
@@ -612,18 +613,6 @@ TEST_F(DBBlockCacheTest, DynamicallyWarmCacheDuringFlush) {
   }
 }
 
-class TestPrepulateBlockCachePolicy: public CompactionPrepulateBlockCachePolicy {
-public:
-  bool shouldWarmCache(const TableProperties& props) override {
-    return props.creation_time >= oldest_ancester_time_.load();
-  }
-
-  void setOldestAncestorTime(uint64_t oldest_ancester_time) {
-    oldest_ancester_time_.store(oldest_ancester_time);
-  }
-private:
-  std::atomic<uint64_t> oldest_ancester_time_{0};
-};
 TEST_F(DBBlockCacheTest, WarmCacheDuringFlushAndCompaction) {
   Options options = CurrentOptions();
   options.create_if_missing = true;
@@ -643,15 +632,19 @@ TEST_F(DBBlockCacheTest, WarmCacheDuringFlushAndCompaction) {
   table_options.cache_index_and_filter_blocks = false;
   table_options.prepopulate_block_cache =
       BlockBasedTableOptions::PrepopulateBlockCache::kFlushAndCompaction;
-  auto compaction_prepoulate_block_cache_policy = std::make_shared<TestPrepulateBlockCachePolicy>();
-  table_options.compaction_prepoulate_block_cache_policy = compaction_prepoulate_block_cache_policy;
+  std::atomic<uint64_t> oldest_ancestor_time_to_prepopulate{10};
+  table_options.compaction_prepopulate_block_cache_filter =
+      [&oldest_ancestor_time_to_prepopulate](const TableProperties& props) {
+        return props.creation_time >=
+               oldest_ancestor_time_to_prepopulate.load();
+      };
 
   options.table_factory.reset(NewBlockBasedTableFactory(table_options));
   DestroyAndReopen(options);
 
   std::string value(kValueSize, 'a');
   mock_clock->SetCurrentTime(10);
-  compaction_prepoulate_block_cache_policy->setOldestAncestorTime(5);
+  oldest_ancestor_time_to_prepopulate.store(10);
   for (size_t i = 1; i <= 2; i++) {
     ASSERT_OK(Put(std::to_string(i), value));
     ASSERT_OK(Flush());
@@ -674,7 +667,7 @@ TEST_F(DBBlockCacheTest, WarmCacheDuringFlushAndCompaction) {
   EXPECT_EQ(1, options.statistics->getAndResetTickerCount(BLOCK_CACHE_DATA_ADD));
 
   mock_clock->MockSleepForSeconds(20);
-  compaction_prepoulate_block_cache_policy->setOldestAncestorTime(20);
+  oldest_ancestor_time_to_prepopulate.store(20);
 
   for (size_t i = 3; i <= 5; i++) {
     ASSERT_OK(Put(std::to_string(i), value));
@@ -685,7 +678,7 @@ TEST_F(DBBlockCacheTest, WarmCacheDuringFlushAndCompaction) {
 
   ASSERT_OK(db_->CompactRange(cro, /*begin=*/nullptr, /*end=*/nullptr));
   // All of them are compacted into one file, with oldest_ancestor_time = 10,
-  // which is < prepoulation threshold
+  // which is < prepopulation threshold
   EXPECT_EQ(0, options.statistics->getTickerCount(BLOCK_CACHE_DATA_ADD));
 
   Destroy(options);

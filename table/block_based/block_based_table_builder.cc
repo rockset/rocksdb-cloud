@@ -1398,11 +1398,12 @@ void BlockBasedTableBuilder::WriteMaybeCompressedBlock(
         break;
       // Rocksdb-Cloud contribution begin
       case BlockBasedTableOptions::PrepopulateBlockCache::kFlushAndCompaction: {
-        warm_cache = (r->reason == TableFileCreationReason::kFlush ||
-                      (r->reason == TableFileCreationReason::kCompaction &&
-                       r->table_options.compaction_prepoulate_block_cache_policy &&
-                       r->table_options.compaction_prepoulate_block_cache_policy
-                           ->shouldWarmCache(r->props)));
+        warm_cache =
+            (r->reason == TableFileCreationReason::kFlush ||
+             (r->reason == TableFileCreationReason::kCompaction &&
+              r->table_options.compaction_prepopulate_block_cache_filter &&
+              r->table_options.compaction_prepopulate_block_cache_filter(
+                  r->props)));
         break;
       }
       // Rocksdb-Cloud contribution end
