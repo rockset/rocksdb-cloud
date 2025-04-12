@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
 
 #include "rocksdb/cache.h"
@@ -24,6 +25,28 @@ namespace S3 {
 class S3Client;
 }
 }  // namespace Aws
+
+#ifdef USE_GCP
+#include <google/cloud/version.h>
+
+namespace google {
+namespace cloud {
+GOOGLE_CLOUD_CPP_INLINE_NAMESPACE_BEGIN
+class Options;
+GOOGLE_CLOUD_CPP_INLINE_NAMESPACE_END
+}  // namespace cloud
+}  // namespace google
+
+namespace google {
+namespace cloud {
+namespace storage {
+GOOGLE_CLOUD_CPP_INLINE_NAMESPACE_BEGIN
+class Client;
+GOOGLE_CLOUD_CPP_INLINE_NAMESPACE_END
+}  // namespace storage
+}  // namespace cloud
+}  // namespace google
+#endif
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -97,6 +120,12 @@ class AwsCloudAccessCredentials {
 using S3ClientFactory = std::function<std::shared_ptr<Aws::S3::S3Client>(
     const std::shared_ptr<Aws::Auth::AWSCredentialsProvider>&,
     const Aws::Client::ClientConfiguration&)>;
+
+#ifdef USE_GCP
+using GCSClientFactory =
+    std::function<std::shared_ptr<google::cloud::storage::Client>(
+        const google::cloud::Options&)>;
+#endif
 
 // Defines parameters required to connect to Kafka
 class KafkaLogOptions {
@@ -212,8 +241,19 @@ class CloudFileSystemOptions {
   // Access credentials
   AwsCloudAccessCredentials credentials;
 
+  // Access credentials for GCP
+  // It is ADC based, which is not managable by user land
+  // Reserved for future use
+  // GcpCloudAccessCredentials gcp_credentials;
+
   // If present, s3_client_factory will be used to create S3Client instances
   S3ClientFactory s3_client_factory;
+
+  // If present, gcs_client_factory will be used to create
+  // GCSCliet instances
+#ifdef USE_GCP
+  GCSClientFactory gcs_client_factory;
+#endif
 
   // Only used if keep_local_log_files is true and log_type is kKafka.
   KafkaLogOptions kafka_log_options;
@@ -480,6 +520,7 @@ class CloudFileSystem : public FileSystem {
  public:
   static const char* kCloud() { return "cloud"; }
   static const char* kAws() { return "aws"; }
+  static char const* kGcp() { return "gcp"; }
 
   // Returns the underlying file system
   virtual const std::shared_ptr<FileSystem>& GetBaseFileSystem() const = 0;
@@ -587,6 +628,7 @@ class CloudFileSystem : public FileSystem {
   // Delete both local and cloud invisble files
   virtual IOStatus DeleteCloudInvisibleFiles(
       const std::vector<std::string>& active_cookies) = 0;
+
   // Delete local invisible files. This could be helpful when there is one
   // single instance managing lifetime of files in cloud while the other
   // instances reference and download the files in cloud. The other instances
@@ -672,6 +714,21 @@ class CloudFileSystemEnv {
                                  const std::shared_ptr<Logger>& logger,
                                  CloudFileSystem** cfs);
 
+  static Status NewGcpFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const std::string& src_bucket_name,
+                                 const std::string& src_object_prefix,
+                                 const std::string& src_buck_region,
+                                 const std::string& dest_bucket_name,
+                                 const std::string& dest_bucket_prefix,
+                                 const std::string& dest_bucket_region,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
+                                 CloudFileSystem** cfs);
+  static Status NewGcpFileSystem(const std::shared_ptr<FileSystem>& base_fs,
+                                 const CloudFileSystemOptions& fs_options,
+                                 const std::shared_ptr<Logger>& logger,
+                                 CloudFileSystem** cfs);
+
   // Creates a new Env that delegates all thread/time related
   // calls to env, and all file operations to fs
   static std::unique_ptr<Env> NewCompositeEnv(
@@ -683,5 +740,4 @@ class CloudFileSystemEnv {
       const std::string& cookie,
       std::unique_ptr<CloudManifest>* cloud_manifest);
 };
-
 }  // namespace ROCKSDB_NAMESPACE

@@ -1,11 +1,13 @@
 // Copyright (c) 2017 Rockset
+
 #ifndef ROCKSDB_LITE
 
-#ifdef USE_AWS
+#include <cstdio>
 
-#include "rocksdb/cloud/cloud_file_system.h"
+#ifdef USE_GCP
 
 #include "cloud/cloud_log_controller_impl.h"
+#include "rocksdb/cloud/cloud_file_system.h"
 #include "rocksdb/cloud/cloud_log_controller.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/cloud/cloud_storage_provider_impl.h"
@@ -13,8 +15,6 @@
 #include "rocksdb/env.h"
 #include "test_util/testharness.h"
 #include "util/string_util.h"
-
-#include <aws/core/Aws.h>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -163,112 +163,68 @@ TEST(CloudFileSystemTest, TestInitialize) {
   ASSERT_EQ(cfs->GetDestObjectPath(), "/my_path");
 }
 
-TEST(CloudFileSystemTest, ConfigureAwsEnv) {
+TEST(CloudFileSystemTest, ConfigureGcpEnv) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
   Status s = CloudFileSystemEnv::CreateFromString(
-      config_options, "id=aws; keep_local_sst_files=true", &cfs);
-#ifdef USE_AWS
+      config_options, "id=gcp; keep_local_sst_files=true", &cfs);
+#ifdef USE_GCP
   ASSERT_OK(s);
   ASSERT_NE(cfs, nullptr);
-  ASSERT_STREQ(cfs->Name(), "aws");
+  ASSERT_STREQ(cfs->Name(), "gcp");
   auto copts = cfs->GetOptions<CloudFileSystemOptions>();
   ASSERT_NE(copts, nullptr);
   ASSERT_TRUE(copts->keep_local_sst_files);
   ASSERT_NE(cfs->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cfs->GetStorageProvider()->Name(),
-               CloudStorageProviderImpl::kS3());
+               CloudStorageProviderImpl::kGcs());
 #else
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 #endif
 }
 
-TEST(CloudFileSystemTest, ConfigureS3Provider) {
+TEST(CloudFileSystemTest, ConfigureGcsProvider) {
   std::unique_ptr<CloudFileSystem> cfs;
 
   ConfigOptions config_options;
-  Status s =
-      CloudFileSystemEnv::CreateFromString(config_options, "provider=s3", &cfs);
+  Status s = CloudFileSystemEnv::CreateFromString(config_options,
+                                                  "provider=gcs", &cfs);
   ASSERT_NOK(s);
   ASSERT_EQ(cfs, nullptr);
 
-#ifdef USE_AWS
+#ifdef USE_GCP
   ASSERT_OK(CloudFileSystemEnv::CreateFromString(config_options,
-                                              "id=aws; provider=s3", &cfs));
-  ASSERT_STREQ(cfs->Name(), "aws");
+                                                 "id=gcp; provider=gcs", &cfs));
+  ASSERT_STREQ(cfs->Name(), "gcp");
   ASSERT_NE(cfs->GetStorageProvider(), nullptr);
   ASSERT_STREQ(cfs->GetStorageProvider()->Name(),
-               CloudStorageProviderImpl::kS3());
+               CloudStorageProviderImpl::kGcs());
 #endif
 }
-
-// Test is disabled until we have a mock provider and authentication issues are
-// resolved
-TEST(CloudFileSystemTest, DISABLED_ConfigureKinesisController) {
-  std::unique_ptr<CloudFileSystem> cfs;
-
-  ConfigOptions config_options;
-  Status s = CloudFileSystemEnv::CreateFromString(
-      config_options, "provider=mock; controller=kinesis", &cfs);
-  ASSERT_NOK(s);
-  ASSERT_EQ(cfs, nullptr);
-
-#ifdef USE_AWS
-  ASSERT_OK(CloudFileSystemEnv::CreateFromString(
-      config_options, "id=aws; controller=kinesis; TEST=dbcloud:/test", &cfs));
-  ASSERT_STREQ(cfs->Name(), "aws");
-  ASSERT_NE(cfs->GetCloudFileSystemOptions().cloud_log_controller, nullptr);
-  ASSERT_STREQ(cfs->GetCloudFileSystemOptions().cloud_log_controller->Name(),
-               CloudLogControllerImpl::kKinesis());
-#endif
-}
-
-TEST(CloudFileSystemTest, ConfigureKafkaController) {
-  std::unique_ptr<CloudFileSystem> cfs;
-
-  ConfigOptions config_options;
-  Status s = CloudFileSystemEnv::CreateFromString(
-      config_options, "provider=mock; controller=kafka", &cfs);
-#ifdef USE_KAFKA
-  ASSERT_OK(s);
-  ASSERT_NE(cfs, nullptr);
-  ASSERT_NE(cfs->GetCloudFileSystemOptions().cloud_log_controller, nullptr);
-  ASSERT_STREQ(cfs->GetCloudFileSystemOptions().cloud_log_controller->Name(),
-               CloudLogControllerImpl::kKafka());
-#else
-  ASSERT_NOK(s);
-  ASSERT_EQ(cfs, nullptr);
-#endif
-}
-
 }  // namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  Aws::InitAPI(Aws::SDKOptions());
   return RUN_ALL_TESTS();
 }
 
-#else  // USE_AWS
-
+#else  // USE_GCP
 #include <stdio.h>
 
 int main(int, char**) {
   fprintf(stderr,
-          "SKIPPED as DBCloud is supported only when USE_AWS is defined.\n");
+          "SKIPPED as DBCloud is supported only when USE_GCP is defined.\n");
   return 0;
 }
-#endif  // USE_AWS
+#endif  // USE_GCP
 
 #else  // ROCKSDB_LITE
-
 #include <stdio.h>
 
 int main(int, char**) {
-  fprintf(stderr, "SKIPPED as DBCloud is not supported in ROCKSDB_LITE\n");
+  fprintf(stderr, "SKIPPED as DBCloud is not supported in ROCKSDB_LITE.\n");
   return 0;
 }
-
 #endif  // ROCKSDB_LITE

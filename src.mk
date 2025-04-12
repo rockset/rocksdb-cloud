@@ -18,6 +18,9 @@ LIB_SOURCES =                                                   \
   cloud/aws/aws_kinesis.cc                                      \
   cloud/aws/aws_retry.cc                                        \
   cloud/aws/aws_s3.cc                                           \
+  cloud/gcp/gcp_cs.cc                                           \
+  cloud/gcp/gcp_file_system.cc                                  \
+  cloud/gcp/gcp_retry.cc                                        \
   cloud/db_cloud_impl.cc                                        \
   cloud/cloud_file_system.cc                                    \
   cloud/cloud_file_system_impl.cc                               \
@@ -455,6 +458,8 @@ TEST_MAIN_SOURCES =                                                     \
   cache/cache_reservation_manager_test.cc                               \
   cloud/db_cloud_test.cc                                                \
   cloud/cloud_file_system_test.cc                                       \
+  cloud/gcp/gcp_file_system_test.cc                                     \
+  cloud/gcp/gcp_db_cloud_test.cc                                        \
   cloud/cloud_manifest_test.cc                                          \
   cloud/cloud_scheduler_test.cc                                         \
   cloud/replication_test.cc                                             \
