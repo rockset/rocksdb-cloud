@@ -330,6 +330,10 @@ class GcsStorageProvider : public CloudStorageProviderImpl {
   IOStatus ListCloudObjects(std::string const& bucket_name,
                             std::string const& object_path,
                             std::vector<std::string>* result) override;
+  IOStatus ListCloudObjectsWithPrefix(const std::string& bucket_name,
+                                    const std::string& object_path,
+				    const std::string& object_prefix,
+                                    std::vector<std::string>* result) override;
   IOStatus ExistsCloudObject(std::string const& bucket_name,
                              std::string const& object_path) override;
   IOStatus GetCloudObjectSize(std::string const& bucket_name,
@@ -494,6 +498,42 @@ IOStatus GcsStorageProvider::ListCloudObjects(
   return IOStatus::OK();
 }
 
+IOStatus GcsStorageProvider::ListCloudObjectsWithPrefix(
+    std::string const& bucket_name, std::string const& object_path,
+    std::string const& object_prefix,
+    std::vector<std::string>* result) {
+  // follow with aws_s3
+  auto prefix = normalzie_object_path(object_path);
+  prefix = ensure_ends_with_pathsep(prefix);
+  std::string object_path_prefix = prefix;
+  // Append object prefix to prefix
+  prefix.append(object_prefix);
+  // MaxResults is about page limits
+  // https://stackoverflow.com/questions/77069696/how-to-limit-number-of-objects-returned-from-listobjects
+  auto objects = gcs_client_->ListCloudObjects(
+      bucket_name, prefix,
+      cfs_->GetCloudFileSystemOptions().number_objects_listed_in_one_iteration);
+  if (!objects.ok()) {
+    std::string errmsg(objects.status().message());
+    if (IsNotFound(objects.status())) {
+      Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
+          "[Gcs] GetChildren dir %s does not exist: %s", object_path.c_str(),
+          errmsg.c_str());
+      return IOStatus::NotFound(object_path, errmsg.c_str());
+    }
+    return IOStatus::IOError(object_path, errmsg.c_str());
+  }
+  for (auto const& obj : objects.value()) {
+    // Our path should be a prefix of the fetched value
+    std::string name = obj.value().name();
+    if (name.find(object_path_prefix) != 0) {  // npos or other value
+      return IOStatus::IOError("Unexpected result from Gcs: " + name);
+    }
+    auto fname = name.substr(object_path_prefix.size());
+    result->push_back(std::move(fname));
+  }
+  return IOStatus::OK();
+}
 IOStatus GcsStorageProvider::ExistsCloudObject(std::string const& bucket_name,
                                                std::string const& object_path) {
   HeadObjectResult result;

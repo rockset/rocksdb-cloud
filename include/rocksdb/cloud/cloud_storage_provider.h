@@ -76,6 +76,15 @@ class CloudStorageProvider : public Configurable {
                                     const std::string& object_path,
                                     std::vector<std::string>* path_names) = 0;
 
+
+  // Does the specified object exist in the cloud storage
+  // List all the objects in the specified bucket with the
+  // specified path and prefix are stored in a cloud bucket
+  virtual IOStatus ListCloudObjectsWithPrefix(const std::string& bucket_name,
+                                    const std::string& object_path,
+				    const std::string& object_prefix,
+                                    std::vector<std::string>* path_names) = 0;
+
   // Does the specified object exist in the cloud storage
   virtual IOStatus ExistsCloudObject(const std::string& bucket_name,
                                      const std::string& object_path) = 0;

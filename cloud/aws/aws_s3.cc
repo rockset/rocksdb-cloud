@@ -383,6 +383,10 @@ class S3StorageProvider : public CloudStorageProviderImpl {
   IOStatus ListCloudObjects(const std::string& bucket_name,
                             const std::string& object_path,
                             std::vector<std::string>* result) override;
+  IOStatus ListCloudObjectsWithPrefix(const std::string& bucket_name,
+                                    const std::string& object_path,
+				    const std::string& object_prefix,
+                                    std::vector<std::string>* result) override;
   IOStatus ExistsCloudObject(const std::string& bucket_name,
                              const std::string& object_path) override;
   IOStatus GetCloudObjectSize(const std::string& bucket_name,
@@ -686,6 +690,78 @@ IOStatus S3StorageProvider::ListCloudObjects(const std::string& bucket_name,
   return IOStatus::OK();
 }
 
+IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(const std::string& bucket_name,
+                                                       const std::string& object_path,
+                                                       const std::string& object_prefix,
+                                                       std::vector<std::string>* result)
+{
+  // S3 paths don't start with '/'
+  auto prefix = ltrim_if(object_path, '/');
+  // S3 paths better end with '/', otherwise we might also get a list of files
+  // in a directory for which our path is a prefix
+  prefix = ensure_ends_with_pathsep(std::move(prefix));
+  std::string object_path_prefix = prefix;
+  // Append object prefix to prefix
+  prefix.append(object_prefix);
+  // the starting object marker
+  Aws::String marker;
+  bool loop = true;
+
+  // get info of bucket+object
+  while (loop) {
+    Aws::S3::Model::ListObjectsRequest request;
+    request.SetBucket(ToAwsString(bucket_name));
+    request.SetMaxKeys(cfs_->GetCloudFileSystemOptions()
+                           .number_objects_listed_in_one_iteration);
+
+    request.SetPrefix(ToAwsString(prefix));
+    request.SetMarker(marker);
+
+    Aws::S3::Model::ListObjectsOutcome outcome =
+        s3client_->ListCloudObjects(request);
+    bool isSuccess = outcome.IsSuccess();
+    if (!isSuccess) {
+      const Aws::Client::AWSError<Aws::S3::S3Errors>& error =
+          outcome.GetError();
+      std::string errmsg(error.GetMessage().c_str());
+      if (IsNotFound(error.GetErrorType())) {
+        Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
+            "[s3] GetChildren dir %s does not exist: %s", object_path.c_str(),
+            errmsg.c_str());
+        return IOStatus::NotFound(object_path, errmsg.c_str());
+      }
+      return IOStatus::IOError(object_path, errmsg.c_str());
+    }
+    const Aws::S3::Model::ListObjectsResult& res = outcome.GetResult();
+    const Aws::Vector<Aws::S3::Model::Object>& objs = res.GetContents();
+    for (const auto& o : objs) {
+      const Aws::String& key = o.GetKey();
+      // Our path should be a prefix of the fetched value
+      std::string keystr(key.c_str(), key.size());
+      assert(keystr.find(object_path_prefix) == 0);
+      if (keystr.find(object_path_prefix) != 0) {
+        return IOStatus::IOError("Unexpected result from AWS S3: " + keystr);
+      }
+      auto fname = keystr.substr(object_path_prefix.size());
+      result->push_back(std::move(fname));
+    }
+
+    // If there are no more entries, then we are done.
+    if (!res.GetIsTruncated()) {
+      break;
+    }
+    // The new starting point
+    marker = res.GetNextMarker();
+    if (marker.empty()) {
+      // If response does not include the NextMaker and it is
+      // truncated, you can use the value of the last Key in the response
+      // as the marker in the subsequent request because all objects
+      // are returned in alphabetical order
+      marker = objs.back().GetKey();
+    }
+  }
+  return IOStatus::OK();
+}
 // check existence of the cloud object
 IOStatus S3StorageProvider::ExistsCloudObject(const std::string& bucket_name,
                                               const std::string& object_path) {
