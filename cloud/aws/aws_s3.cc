@@ -30,6 +30,8 @@
 #include <aws/s3/model/HeadObjectResult.h>
 #include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/ListObjectsResult.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/PutObjectResult.h>
 #include <aws/s3/model/ServerSideEncryption.h>
@@ -142,6 +144,15 @@ class AwsS3ClientWrapper {
     CloudRequestCallbackGuard t(cloud_request_callback_.get(),
                                 CloudRequestOpType::kListOp);
     auto outcome = client_->ListObjects(request);
+    t.SetSuccess(outcome.IsSuccess());
+    return outcome;
+  }
+
+  Aws::S3::Model::ListObjectsV2Outcome ListCloudObjectsV2(
+      const Aws::S3::Model::ListObjectsV2Request& request) {
+    CloudRequestCallbackGuard t(cloud_request_callback_.get(),
+                                CloudRequestOpType::kListOp);
+    auto outcome = client_->ListObjectsV2(request);
     t.SetSuccess(outcome.IsSuccess());
     return outcome;
   }
@@ -383,10 +394,10 @@ class S3StorageProvider : public CloudStorageProviderImpl {
   IOStatus ListCloudObjects(const std::string& bucket_name,
                             const std::string& object_path,
                             std::vector<std::string>* result) override;
-  IOStatus ListCloudObjectsWithPrefix(const std::string& bucket_name,
-                                    const std::string& object_path,
-				    const std::string& object_prefix,
-                                    std::vector<std::string>* result) override;
+  IOStatus ListCloudObjectsWithPrefix(
+      const std::string& bucket_name, const std::string& object_path,
+      const std::string& object_prefix,
+      std::vector<std::string>* result) override;
   IOStatus ExistsCloudObject(const std::string& bucket_name,
                              const std::string& object_path) override;
   IOStatus GetCloudObjectSize(const std::string& bucket_name,
@@ -630,22 +641,26 @@ IOStatus S3StorageProvider::ListCloudObjects(const std::string& bucket_name,
   // S3 paths better end with '/', otherwise we might also get a list of files
   // in a directory for which our path is a prefix
   prefix = ensure_ends_with_pathsep(std::move(prefix));
-  // the starting object marker
-  Aws::String marker;
+  // the continuation token (used for pagination in V2 API)
+  Aws::String continuation_token;
   bool loop = true;
 
   // get info of bucket+object
   while (loop) {
-    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsV2Request request;
     request.SetBucket(ToAwsString(bucket_name));
     request.SetMaxKeys(cfs_->GetCloudFileSystemOptions()
                            .number_objects_listed_in_one_iteration);
 
     request.SetPrefix(ToAwsString(prefix));
-    request.SetMarker(marker);
 
-    Aws::S3::Model::ListObjectsOutcome outcome =
-        s3client_->ListCloudObjects(request);
+    // Set continuation token if we have one from previous iteration
+    if (!continuation_token.empty()) {
+      request.SetContinuationToken(continuation_token);
+    }
+
+    Aws::S3::Model::ListObjectsV2Outcome outcome =
+        s3client_->ListCloudObjectsV2(request);
     bool isSuccess = outcome.IsSuccess();
     if (!isSuccess) {
       const Aws::Client::AWSError<Aws::S3::S3Errors>& error =
@@ -659,7 +674,7 @@ IOStatus S3StorageProvider::ListCloudObjects(const std::string& bucket_name,
       }
       return IOStatus::IOError(object_path, errmsg.c_str());
     }
-    const Aws::S3::Model::ListObjectsResult& res = outcome.GetResult();
+    const Aws::S3::Model::ListObjectsV2Result& res = outcome.GetResult();
     const Aws::Vector<Aws::S3::Model::Object>& objs = res.GetContents();
     for (const auto& o : objs) {
       const Aws::String& key = o.GetKey();
@@ -677,24 +692,26 @@ IOStatus S3StorageProvider::ListCloudObjects(const std::string& bucket_name,
     if (!res.GetIsTruncated()) {
       break;
     }
-    // The new starting point
-    marker = res.GetNextMarker();
-    if (marker.empty()) {
-      // If response does not include the NextMaker and it is
-      // truncated, you can use the value of the last Key in the response
-      // as the marker in the subsequent request because all objects
-      // are returned in alphabetical order
-      marker = objs.back().GetKey();
+
+    // Get the continuation token for the next request
+    continuation_token = res.GetNextContinuationToken();
+    // If we don't have a continuation token but the response is truncated,
+    // something went wrong
+    if (continuation_token.empty()) {
+      Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
+          "[s3] ListObjectsV2 got truncated response without continuation "
+          "token for %s",
+          object_path.c_str());
+      return IOStatus::IOError(
+          "Missing continuation token in truncated response");
     }
   }
   return IOStatus::OK();
 }
 
-IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(const std::string& bucket_name,
-                                                       const std::string& object_path,
-                                                       const std::string& object_prefix,
-                                                       std::vector<std::string>* result)
-{
+IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(
+    const std::string& bucket_name, const std::string& object_path,
+    const std::string& object_prefix, std::vector<std::string>* result) {
   // S3 paths don't start with '/'
   auto prefix = ltrim_if(object_path, '/');
   // S3 paths better end with '/', otherwise we might also get a list of files
@@ -703,22 +720,26 @@ IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(const std::string& bucket
   std::string object_path_prefix = prefix;
   // Append object prefix to prefix
   prefix.append(object_prefix);
-  // the starting object marker
-  Aws::String marker;
+  // the continuation token for pagination in V2 API
+  Aws::String continuation_token;
   bool loop = true;
 
   // get info of bucket+object
   while (loop) {
-    Aws::S3::Model::ListObjectsRequest request;
+    Aws::S3::Model::ListObjectsV2Request request;
     request.SetBucket(ToAwsString(bucket_name));
     request.SetMaxKeys(cfs_->GetCloudFileSystemOptions()
                            .number_objects_listed_in_one_iteration);
 
     request.SetPrefix(ToAwsString(prefix));
-    request.SetMarker(marker);
 
-    Aws::S3::Model::ListObjectsOutcome outcome =
-        s3client_->ListCloudObjects(request);
+    // Set continuation token if we have one from previous iteration
+    if (!continuation_token.empty()) {
+      request.SetContinuationToken(continuation_token);
+    }
+
+    Aws::S3::Model::ListObjectsV2Outcome outcome =
+        s3client_->ListCloudObjectsV2(request);
     bool isSuccess = outcome.IsSuccess();
     if (!isSuccess) {
       const Aws::Client::AWSError<Aws::S3::S3Errors>& error =
@@ -732,7 +753,7 @@ IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(const std::string& bucket
       }
       return IOStatus::IOError(object_path, errmsg.c_str());
     }
-    const Aws::S3::Model::ListObjectsResult& res = outcome.GetResult();
+    const Aws::S3::Model::ListObjectsV2Result& res = outcome.GetResult();
     const Aws::Vector<Aws::S3::Model::Object>& objs = res.GetContents();
     for (const auto& o : objs) {
       const Aws::String& key = o.GetKey();
@@ -750,14 +771,18 @@ IOStatus S3StorageProvider::ListCloudObjectsWithPrefix(const std::string& bucket
     if (!res.GetIsTruncated()) {
       break;
     }
-    // The new starting point
-    marker = res.GetNextMarker();
-    if (marker.empty()) {
-      // If response does not include the NextMaker and it is
-      // truncated, you can use the value of the last Key in the response
-      // as the marker in the subsequent request because all objects
-      // are returned in alphabetical order
-      marker = objs.back().GetKey();
+
+    // Get the continuation token for the next request
+    continuation_token = res.GetNextContinuationToken();
+    // If we don't have a continuation token but the response is truncated,
+    // something went wrong
+    if (continuation_token.empty()) {
+      Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
+          "[s3] ListObjectsV2 got truncated response without continuation "
+          "token for %s",
+          object_path.c_str());
+      return IOStatus::IOError(
+          "Missing continuation token in truncated response");
     }
   }
   return IOStatus::OK();
