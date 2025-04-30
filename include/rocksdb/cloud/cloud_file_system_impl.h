@@ -401,6 +401,10 @@ class CloudFileSystemImpl : public CloudFileSystem {
     return cloud_fs_options;
   }
 
+  CloudFileSystemOptions& GetMutableCloudFileSystemOptions() override {
+    return cloud_fs_options;
+  }
+
   const std::string& GetSrcBucketName() const override {
     return cloud_fs_options.src_bucket.GetBucketName();
   }
