@@ -659,6 +659,9 @@ class CloudFileSystem : public FileSystem {
   // returns the options used to create this object
   virtual const CloudFileSystemOptions& GetCloudFileSystemOptions() const = 0;
 
+  // returns the options used to create this object
+  virtual CloudFileSystemOptions& GetMutableCloudFileSystemOptions() = 0;
+
   // The SrcBucketName identifies the cloud storage bucket and
   // GetSrcObjectPath specifies the path inside that bucket
   // where data files reside. The specified bucket is used in
