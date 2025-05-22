@@ -1603,6 +1603,7 @@ Status ColumnFamilyData::SetOptions(
     // Disabling flush on running db is not supported due to bunch of checks we
     // added to catch unexpected flush. But it's easy to support it later if we
     // want to
+    // TODO: make it supported
     if (!mutable_cf_options_.disable_auto_flush && cf_opts.disable_auto_flush) {
       s = Status::NotSupported(
           "Disabling flush on running db is not supported");

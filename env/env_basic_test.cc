@@ -389,6 +389,33 @@ TEST_P(EnvMoreTestWithParam, GetChildrenIgnoresDotAndDotDot) {
   ASSERT_EQ(result.at(0), "test_file");
 }
 
+TEST_P(EnvBasicTestWithParam, CopyFileSourceEqualsTarget) {
+  // Create a file
+  std::string file_path = test_dir_ + "/copyfile_test";
+  std::unique_ptr<WritableFile> writable_file;
+  ASSERT_OK(env_->NewWritableFile(file_path, &writable_file, soptions_));
+  std::string file_content = "test content";
+  ASSERT_OK(writable_file->Append(file_content));
+  ASSERT_OK(writable_file->Close());
+  writable_file.reset();
+
+  // Call CopyFile with source == destination
+  auto fs = FileSystem::Default();
+  IOStatus s = CopyFile(fs.get(), file_path, Temperature::kUnknown, file_path, Temperature::kUnknown, 0, false, nullptr);
+  ASSERT_OK(s);
+
+  // Check that the file still exists and content is unchanged
+  uint64_t file_size = 0;
+  ASSERT_OK(env_->GetFileSize(file_path, &file_size));
+  ASSERT_EQ(file_size, file_content.size());
+  std::unique_ptr<SequentialFile> seq_file;
+  ASSERT_OK(env_->NewSequentialFile(file_path, &seq_file, soptions_));
+  Slice result;
+  char scratch[100];
+  ASSERT_OK(seq_file->Read(file_content.size(), &result, scratch));
+  ASSERT_EQ(result.ToString(), file_content);
+}
+
 }  // namespace ROCKSDB_NAMESPACE
 int main(int argc, char** argv) {
   ROCKSDB_NAMESPACE::port::InstallStackTraceHandler();

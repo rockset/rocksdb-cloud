@@ -79,6 +79,10 @@ IOStatus CopyFile(FileSystem* fs, const std::string& source,
   IOStatus io_s;
   std::unique_ptr<WritableFileWriter> dest_writer;
 
+  if (source == destination) {
+    return IOStatus::OK();
+  }
+
   {
     options.temperature = dst_temp;
     std::unique_ptr<FSWritableFile> destfile;

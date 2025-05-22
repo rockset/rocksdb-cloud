@@ -1795,12 +1795,14 @@ Status DBImpl::SetOptions(
     return Status::InvalidArgument("empty input");
   }
 
-  bool only_set_disable_write_stall = false;
-  if (options_map.size() == 1 &&
-      options_map.find("disable_write_stall") != options_map.end()) {
-    only_set_disable_write_stall = true;
+  bool skip_log_and_apply = true;
+  std::unordered_set<std::string> skip_log_and_apply_keys = {"disable_write_stall", "disable_auto_compactions", "disable_auto_flush"};
+  for (auto it = options_map.begin(); it != options_map.end(); it++) {
+    if (skip_log_and_apply_keys.count(it->first) == 0) {
+      skip_log_and_apply = false;
+      break;
+    }
   }
-
   InstrumentedMutexLock ol(&options_mutex_);
   MutableCFOptions new_options;
   Status s;
@@ -1812,9 +1814,9 @@ Status DBImpl::SetOptions(
     s = cfd->SetOptions(db_options, options_map);
     if (s.ok()) {
       new_options = *cfd->GetLatestMutableCFOptions();
-      // If the only thing we change is `disable_write_stall`, there is no need
+      // If the only thing we change is all in `skip_log_and_apply_keys`, there is no need
       // to append the dummy version
-      if (!only_set_disable_write_stall) {
+      if (!skip_log_and_apply) {
         // Append new version to recompute compaction score.
         VersionEdit dummy_edit;
         s = versions_->LogAndApply(cfd, new_options, read_options,

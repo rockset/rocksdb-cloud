@@ -7531,6 +7531,59 @@ TEST_F(DBTest, ShuttingDownNotBlockStalledWrites) {
   thd.join();
 }
 
+TEST_F(DBTest, SetOptionsVersionInstallBehavior) {
+  Options options = CurrentOptions();
+  options.create_if_missing = true;
+  options.env = env_;
+  options.write_buffer_size = 1024 * 1024; // 1MB
+  DestroyAndReopen(options);
+
+  // Set up SyncPoint to count LogAndApply calls
+  std::atomic<int> log_and_apply_calls(0);
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->SetCallBack(
+      "VersionSet::LogAndApply:WriteManifestStart",
+      [&](void*) { log_and_apply_calls.fetch_add(1); });
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->EnableProcessing();
+
+  // SetOptions with disable_write_stall
+  ASSERT_OK(dbfull()->SetOptions({{"disable_write_stall", "true"}}));
+  ASSERT_EQ(dbfull()->GetOptions().disable_write_stall, true);
+  ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_write_stall";
+
+  // SetOptions with disable_auto_compactions
+  ASSERT_OK(dbfull()->SetOptions({{"disable_auto_compactions", "false"}}));
+  ASSERT_EQ(dbfull()->GetOptions().disable_auto_compactions, false);
+  ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_auto_compactions";
+
+  // SetOptions with disable_auto_flush
+  // Note: disabling auto flush on a running DB may not be supported, so we check for NotSupported
+  Status s = dbfull()->SetOptions({{"disable_auto_flush", "true"}});
+  if (s.IsNotSupported()) {
+    // Acceptable, skip this check
+  } else {
+    ASSERT_OK(s);
+    ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_auto_flush";
+  }
+
+  // SetOptions with two all together
+  // TODO: add disable_auto_flush once it's supported
+  std::unordered_map<std::string, std::string> opts = {
+      {"disable_write_stall", "true"},
+      {"disable_auto_compactions", "true"},
+  };
+  s = dbfull()->SetOptions(opts);
+  ASSERT_OK(s);
+  ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disables only";
+
+  // SetOptions with write_buffer_size (should install new SuperVersion)
+  ASSERT_OK(dbfull()->SetOptions({{"write_buffer_size", "2097152"}}));
+  ASSERT_EQ(log_and_apply_calls.load(), 1) << "LogAndApply should be called for write_buffer_size change";
+
+  // Clean up SyncPoint
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->DisableProcessing();
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->ClearAllCallBacks();
+}
+
 }  // namespace ROCKSDB_NAMESPACE
 
 int main(int argc, char** argv) {
