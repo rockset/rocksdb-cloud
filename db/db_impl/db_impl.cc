@@ -1796,12 +1796,33 @@ Status DBImpl::SetOptions(
   }
 
   bool skip_log_and_apply = true;
-  std::unordered_set<std::string> skip_log_and_apply_keys = {"disable_write_stall", "disable_auto_compactions", "disable_auto_flush"};
-  for (auto it = options_map.begin(); it != options_map.end(); it++) {
-    if (skip_log_and_apply_keys.count(it->first) == 0) {
-      skip_log_and_apply = false;
-      break;
-    }
+
+  std::unordered_map<std::string, std::optional<bool>> skip_log_and_apply_keys = {
+      {"disable_write_stall",            std::nullopt}, // either "true" or "false" is ok
+      {"disable_auto_compactions",       true},         // must be "true"
+      {"disable_auto_flush",             true},          // must be "true"
+  };
+
+  for (const auto& kv : options_map) {
+      const std::string& opt_name  = kv.first;
+      const std::string& opt_value = kv.second;
+
+      auto it = skip_log_and_apply_keys.find(opt_name);
+      if (it == skip_log_and_apply_keys.end()) {
+          // option not recognized
+          skip_log_and_apply = false;
+          break;
+      }
+
+      const std::optional<bool>& required = it->second;
+      if (required.has_value()) {
+          bool actual = (opt_value == "true"); // only "true" can be skipped
+          if (actual != *required) {
+              // value does not match the one that can be skipped
+              skip_log_and_apply = false;
+              break;
+          }
+      }
   }
   InstrumentedMutexLock ol(&options_mutex_);
   MutableCFOptions new_options;

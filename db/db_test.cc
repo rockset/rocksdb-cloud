@@ -7551,8 +7551,8 @@ TEST_F(DBTest, SetOptionsVersionInstallBehavior) {
   ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_write_stall";
 
   // SetOptions with disable_auto_compactions
-  ASSERT_OK(dbfull()->SetOptions({{"disable_auto_compactions", "false"}}));
-  ASSERT_EQ(dbfull()->GetOptions().disable_auto_compactions, false);
+  ASSERT_OK(dbfull()->SetOptions({{"disable_auto_compactions", "true"}}));
+  ASSERT_EQ(dbfull()->GetOptions().disable_auto_compactions, true);
   ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_auto_compactions";
 
   // SetOptions with disable_auto_flush
@@ -7578,6 +7578,12 @@ TEST_F(DBTest, SetOptionsVersionInstallBehavior) {
   // SetOptions with write_buffer_size (should install new SuperVersion)
   ASSERT_OK(dbfull()->SetOptions({{"write_buffer_size", "2097152"}}));
   ASSERT_EQ(log_and_apply_calls.load(), 1) << "LogAndApply should be called for write_buffer_size change";
+
+  ASSERT_OK(dbfull()->SetOptions({{"disable_write_stall", "false"}}));
+  ASSERT_EQ(log_and_apply_calls.load(), 1) << "LogAndApply should not be called for disable_write_stall change";
+
+  ASSERT_OK(dbfull()->SetOptions({{"disable_auto_compactions", "false"}}));
+  ASSERT_EQ(log_and_apply_calls.load(), 2) << "LogAndApply should be called for disable_auto_compactions change";
 
   // Clean up SyncPoint
   ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->DisableProcessing();
