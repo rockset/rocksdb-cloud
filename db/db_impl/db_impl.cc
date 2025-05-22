@@ -1800,13 +1800,10 @@ Status DBImpl::SetOptions(
   std::unordered_map<std::string, std::optional<bool>> skip_log_and_apply_keys = {
       {"disable_write_stall",            std::nullopt}, // either "true" or "false" is ok
       {"disable_auto_compactions",       true},         // must be "true"
-      {"disable_auto_flush",             true},          // must be "true"
+      {"disable_auto_flush",             true},         // must be "true"
   };
 
-  for (const auto& kv : options_map) {
-      const std::string& opt_name  = kv.first;
-      const std::string& opt_value = kv.second;
-
+  for (const auto& [opt_name, opt_value] : options_map) {
       auto it = skip_log_and_apply_keys.find(opt_name);
       if (it == skip_log_and_apply_keys.end()) {
           // option not recognized
