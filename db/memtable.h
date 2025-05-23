@@ -543,6 +543,8 @@ class MemTable {
 
   // Enable auto flush if it's previously disabled
   void EnableAutoFlush();
+  // Disable auto flush if it's previously enabled
+  void DisableAutoFlush();
   bool TEST_IsAutoFlushEnabled() const;
   void ConstructFragmentedRangeTombstones();
 

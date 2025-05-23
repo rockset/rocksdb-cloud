@@ -256,6 +256,15 @@ void MemTable::EnableAutoFlush() {
   }
 }
 
+void MemTable::DisableAutoFlush() {
+  bool flush_previously_enabled =
+      !disable_auto_flush_.exchange(true, std::memory_order_relaxed);
+  if (!flush_previously_enabled) {
+    ROCKS_LOG_WARN(moptions_.info_log,
+                   "DisableFlush called when flush is already disabled");
+  }
+}
+
 bool MemTable::TEST_IsAutoFlushEnabled() const {
   return !disable_auto_flush_.load(std::memory_order_relaxed);
 }
