@@ -117,7 +117,10 @@ class Random64;
 class CloudStorageProviderImpl : public CloudStorageProvider {
  public:
   static Status CreateS3Provider(std::unique_ptr<CloudStorageProvider>* result);
+  static Status CreateGcsProvider(
+      std::unique_ptr<CloudStorageProvider>* result);
   static const char* kS3() { return "s3"; }
+  static const char* kGcs() { return "gcs"; }
 
   CloudStorageProviderImpl();
   virtual ~CloudStorageProviderImpl();

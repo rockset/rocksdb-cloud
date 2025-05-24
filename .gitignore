@@ -102,3 +102,7 @@ cmake-build-*
 third-party/folly/
 .cache
 *.sublime-*
+
+.clang-format
+.editorconfig
+*.vim
