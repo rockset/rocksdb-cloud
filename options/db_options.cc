@@ -571,6 +571,16 @@ static std::unordered_map<std::string, OptionTypeInfo>
                    disable_delete_obsolete_files_on_open),
           OptionType::kBoolean, OptionVerificationType::kNormal,
           OptionTypeFlags::kNone}},
+        {"max_num_replication_epochs",
+         {offsetof(struct ImmutableDBOptions,
+                   attempt_recovery_after_manifest_write_error),
+          OptionType::kInt, OptionVerificationType::kNormal,
+          OptionTypeFlags::kNone}},
+        {"attempt_recovery_after_manifest_write_error",
+         {offsetof(struct ImmutableDBOptions,
+                   attempt_recovery_after_manifest_write_error),
+          OptionType::kBoolean, OptionVerificationType::kNormal,
+          OptionTypeFlags::kNone}},
 };
 
 const std::string OptionsHelper::kDBOptionsName = "DBOptions";
@@ -957,6 +967,8 @@ void ImmutableDBOptions::Dump(Logger* log) const {
                    disable_delete_obsolete_files_on_open ? "true" : "false");
   ROCKS_LOG_HEADER(log, "              Options.max_num_replication_epochs: %d",
                    max_num_replication_epochs);
+  ROCKS_LOG_HEADER(log, "              Options.attempt_recovery_after_manifest_write_error: %d",
+                   attempt_recovery_after_manifest_write_error);
 }
 
 bool ImmutableDBOptions::IsWalDirSameAsDBPath() const {

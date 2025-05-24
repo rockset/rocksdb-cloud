@@ -184,6 +184,8 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
   options.disable_delete_obsolete_files_on_open =
       immutable_db_options.disable_delete_obsolete_files_on_open;
   options.daily_offpeak_time_utc = mutable_db_options.daily_offpeak_time_utc;
+  options.max_num_replication_epochs = immutable_db_options.max_num_replication_epochs;
+  options.attempt_recovery_after_manifest_write_error = immutable_db_options.attempt_recovery_after_manifest_write_error;
   return options;
 }
 
