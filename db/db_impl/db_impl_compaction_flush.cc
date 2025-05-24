@@ -537,6 +537,12 @@ Status DBImpl::AtomicFlushMemTablesToOutputFiles(
 
     all_mutable_cf_options.emplace_back(*cfd->GetLatestMutableCFOptions());
     const MutableCFOptions& mutable_cf_options = all_mutable_cf_options.back();
+    if (mutable_cf_options.disable_auto_flush) {
+      ROCKS_LOG_INFO(immutable_db_options_.info_log,
+                     "Skipping flush for column family [%s] because auto flush is disabled.",
+                     cfd->GetName().c_str());
+      continue;
+    }
     uint64_t max_memtable_id = bg_flush_args[i].max_memtable_id_;
     FlushReason flush_reason = bg_flush_args[i].flush_reason_;
     jobs.emplace_back(new FlushJob(
