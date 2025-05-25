@@ -437,197 +437,7 @@ struct BlockBasedTableBuilder::Rep {
   }
 
   Rep(const BlockBasedTableOptions& table_opt, const TableBuilderOptions& tbo,
-      WritableFileWriter* f)
-      : ioptions(tbo.ioptions),
-        prefix_extractor(tbo.moptions.prefix_extractor),
-        write_options(tbo.write_options),
-        table_options(table_opt),
-        internal_comparator(tbo.internal_comparator),
-        ts_sz(tbo.internal_comparator.user_comparator()->timestamp_size()),
-        persist_user_defined_timestamps(
-            tbo.ioptions.persist_user_defined_timestamps),
-        file(f),
-        offset(0),
-        alignment(table_options.block_align
-                      ? std::min(static_cast<size_t>(table_options.block_size),
-                                 kDefaultPageSize)
-                      : 0),
-        data_block(table_options.block_restart_interval,
-                   table_options.use_delta_encoding,
-                   false /* use_value_delta_encoding */,
-                   tbo.internal_comparator.user_comparator()
-                           ->CanKeysWithDifferentByteContentsBeEqual()
-                       ? BlockBasedTableOptions::kDataBlockBinarySearch
-                       : table_options.data_block_index_type,
-                   table_options.data_block_hash_table_util_ratio, ts_sz,
-                   persist_user_defined_timestamps),
-        range_del_block(
-            1 /* block_restart_interval */, true /* use_delta_encoding */,
-            false /* use_value_delta_encoding */,
-            BlockBasedTableOptions::kDataBlockBinarySearch /* index_type */,
-            0.75 /* data_block_hash_table_util_ratio */, ts_sz,
-            persist_user_defined_timestamps),
-        internal_prefix_transform(prefix_extractor.get()),
-        compression_type(tbo.compression_type),
-        sample_for_compression(tbo.moptions.sample_for_compression),
-        compressible_input_data_bytes(0),
-        uncompressible_input_data_bytes(0),
-        sampled_input_data_bytes(0),
-        sampled_output_slow_data_bytes(0),
-        sampled_output_fast_data_bytes(0),
-        compression_opts(tbo.compression_opts),
-        compression_dict(),
-        compression_ctxs(tbo.compression_opts.parallel_threads),
-        verify_ctxs(tbo.compression_opts.parallel_threads),
-        verify_dict(),
-        state((tbo.compression_opts.max_dict_bytes > 0 &&
-               tbo.compression_type != kNoCompression)
-                  ? State::kBuffered
-                  : State::kUnbuffered),
-        use_delta_encoding_for_index_values(table_opt.format_version >= 4 &&
-                                            !table_opt.block_align),
-        reason(tbo.reason),
-        flush_block_policy(
-            table_options.flush_block_policy_factory->NewFlushBlockPolicy(
-                table_options, data_block)),
-        create_context(&table_options, &ioptions, ioptions.stats,
-                       compression_type == kZSTD ||
-                           compression_type == kZSTDNotFinalCompression,
-                       tbo.moptions.block_protection_bytes_per_key,
-                       tbo.internal_comparator.user_comparator(),
-                       !use_delta_encoding_for_index_values,
-                       table_opt.index_type ==
-                           BlockBasedTableOptions::kBinarySearchWithFirstKey),
-        tail_size(0),
-        status_ok(true),
-        io_status_ok(true) {
-    if (tbo.target_file_size == 0) {
-      buffer_limit = compression_opts.max_dict_buffer_bytes;
-    } else if (compression_opts.max_dict_buffer_bytes == 0) {
-      buffer_limit = tbo.target_file_size;
-    } else {
-      buffer_limit = std::min(tbo.target_file_size,
-                              compression_opts.max_dict_buffer_bytes);
-    }
-
-    const auto compress_dict_build_buffer_charged =
-        table_options.cache_usage_options.options_overrides
-            .at(CacheEntryRole::kCompressionDictionaryBuildingBuffer)
-            .charged;
-    if (table_options.block_cache &&
-        (compress_dict_build_buffer_charged ==
-             CacheEntryRoleOptions::Decision::kEnabled ||
-         compress_dict_build_buffer_charged ==
-             CacheEntryRoleOptions::Decision::kFallback)) {
-      compression_dict_buffer_cache_res_mgr =
-          std::make_shared<CacheReservationManagerImpl<
-              CacheEntryRole::kCompressionDictionaryBuildingBuffer>>(
-              table_options.block_cache);
-    } else {
-      compression_dict_buffer_cache_res_mgr = nullptr;
-    }
-
-    assert(compression_ctxs.size() >= compression_opts.parallel_threads);
-    for (uint32_t i = 0; i < compression_opts.parallel_threads; i++) {
-      compression_ctxs[i].reset(
-          new CompressionContext(compression_type, compression_opts));
-    }
-    if (table_options.index_type ==
-        BlockBasedTableOptions::kTwoLevelIndexSearch) {
-      p_index_builder_ = PartitionedIndexBuilder::CreateIndexBuilder(
-          &internal_comparator, use_delta_encoding_for_index_values,
-          table_options, ts_sz, persist_user_defined_timestamps);
-      index_builder.reset(p_index_builder_);
-    } else {
-      index_builder.reset(IndexBuilder::CreateIndexBuilder(
-          table_options.index_type, &internal_comparator,
-          &this->internal_prefix_transform, use_delta_encoding_for_index_values,
-          table_options, ts_sz, persist_user_defined_timestamps));
-    }
-    if (ioptions.optimize_filters_for_hits && tbo.is_bottommost) {
-      // Apply optimize_filters_for_hits setting here when applicable by
-      // skipping filter generation
-      filter_builder.reset();
-    } else if (tbo.skip_filters) {
-      // For SstFileWriter skip_filters
-      filter_builder.reset();
-    } else if (!table_options.filter_policy) {
-      // Null filter_policy -> no filter
-      filter_builder.reset();
-    } else {
-      FilterBuildingContext filter_context(table_options);
-
-      filter_context.info_log = ioptions.logger;
-      filter_context.column_family_name = tbo.column_family_name;
-      filter_context.reason = reason;
-
-      // Only populate other fields if known to be in LSM rather than
-      // generating external SST file
-      if (reason != TableFileCreationReason::kMisc) {
-        filter_context.compaction_style = ioptions.compaction_style;
-        filter_context.num_levels = ioptions.num_levels;
-        filter_context.level_at_creation = tbo.level_at_creation;
-        filter_context.is_bottommost = tbo.is_bottommost;
-        assert(filter_context.level_at_creation < filter_context.num_levels);
-      }
-
-      filter_builder.reset(CreateFilterBlockBuilder(
-          ioptions, tbo.moptions, filter_context,
-          use_delta_encoding_for_index_values, p_index_builder_, ts_sz,
-          persist_user_defined_timestamps));
-    }
-
-    assert(tbo.internal_tbl_prop_coll_factories);
-    for (auto& factory : *tbo.internal_tbl_prop_coll_factories) {
-      assert(factory);
-
-      std::unique_ptr<InternalTblPropColl> collector{
-          factory->CreateInternalTblPropColl(tbo.column_family_id,
-                                             tbo.level_at_creation)};
-      if (collector) {
-        table_properties_collectors.emplace_back(std::move(collector));
-      }
-    }
-    table_properties_collectors.emplace_back(
-        new BlockBasedTablePropertiesCollector(
-            table_options.index_type, table_options.whole_key_filtering,
-            prefix_extractor != nullptr));
-    if (ts_sz > 0 && persist_user_defined_timestamps) {
-      table_properties_collectors.emplace_back(
-          new TimestampTablePropertiesCollector(
-              tbo.internal_comparator.user_comparator()));
-    }
-    if (table_options.verify_compression) {
-      for (uint32_t i = 0; i < compression_opts.parallel_threads; i++) {
-        verify_ctxs[i].reset(new UncompressionContext(compression_type));
-      }
-    }
-
-    // These are only needed for populating table properties
-    props.column_family_id = tbo.column_family_id;
-    props.column_family_name = tbo.column_family_name;
-    props.oldest_key_time = tbo.oldest_key_time;
-    props.file_creation_time = tbo.file_creation_time;
-    props.orig_file_number = tbo.cur_file_num;
-    props.db_id = tbo.db_id;
-    props.db_session_id = tbo.db_session_id;
-    props.db_host_id = ioptions.db_host_id;
-    if (!ReifyDbHostIdProperty(ioptions.env, &props.db_host_id).ok()) {
-      ROCKS_LOG_INFO(ioptions.logger, "db_host_id property will not be set");
-    }
-
-    if (FormatVersionUsesContextChecksum(table_options.format_version)) {
-      // Must be non-zero and semi- or quasi-random
-      // TODO: ideally guaranteed different for related files (e.g. use file
-      // number and db_session, for benefit of SstFileWriter)
-      do {
-        base_context_checksum = Random::GetTLSInstance()->Next();
-      } while (UNLIKELY(base_context_checksum == 0));
-    } else {
-      base_context_checksum = 0;
-    }
-  }
-
+      WritableFileWriter* f);
   Rep(const Rep&) = delete;
   Rep& operator=(const Rep&) = delete;
 
@@ -949,6 +759,199 @@ struct BlockBasedTableBuilder::ParallelCompressionRep {
     return block_rep;
   }
 };
+
+BlockBasedTableBuilder::Rep::Rep(const BlockBasedTableOptions& table_opt,
+                                 const TableBuilderOptions& tbo,
+                                 WritableFileWriter* f)
+    : ioptions(tbo.ioptions),
+      prefix_extractor(tbo.moptions.prefix_extractor),
+      write_options(tbo.write_options),
+      table_options(table_opt),
+      internal_comparator(tbo.internal_comparator),
+      ts_sz(tbo.internal_comparator.user_comparator()->timestamp_size()),
+      persist_user_defined_timestamps(
+          tbo.ioptions.persist_user_defined_timestamps),
+      file(f),
+      offset(0),
+      alignment(table_options.block_align
+                    ? std::min(static_cast<size_t>(table_options.block_size),
+                               kDefaultPageSize)
+                    : 0),
+      data_block(table_options.block_restart_interval,
+                 table_options.use_delta_encoding,
+                 false /* use_value_delta_encoding */,
+                 tbo.internal_comparator.user_comparator()
+                         ->CanKeysWithDifferentByteContentsBeEqual()
+                     ? BlockBasedTableOptions::kDataBlockBinarySearch
+                     : table_options.data_block_index_type,
+                 table_options.data_block_hash_table_util_ratio, ts_sz,
+                 persist_user_defined_timestamps),
+      range_del_block(
+          1 /* block_restart_interval */, true /* use_delta_encoding */,
+          false /* use_value_delta_encoding */,
+          BlockBasedTableOptions::kDataBlockBinarySearch /* index_type */,
+          0.75 /* data_block_hash_table_util_ratio */, ts_sz,
+          persist_user_defined_timestamps),
+      internal_prefix_transform(prefix_extractor.get()),
+      compression_type(tbo.compression_type),
+      sample_for_compression(tbo.moptions.sample_for_compression),
+      compressible_input_data_bytes(0),
+      uncompressible_input_data_bytes(0),
+      sampled_input_data_bytes(0),
+      sampled_output_slow_data_bytes(0),
+      sampled_output_fast_data_bytes(0),
+      compression_opts(tbo.compression_opts),
+      compression_dict(),
+      compression_ctxs(tbo.compression_opts.parallel_threads),
+      verify_ctxs(tbo.compression_opts.parallel_threads),
+      verify_dict(),
+      state((tbo.compression_opts.max_dict_bytes > 0 &&
+             tbo.compression_type != kNoCompression)
+                ? State::kBuffered
+                : State::kUnbuffered),
+      use_delta_encoding_for_index_values(table_opt.format_version >= 4 &&
+                                          !table_opt.block_align),
+      reason(tbo.reason),
+      flush_block_policy(
+          table_options.flush_block_policy_factory->NewFlushBlockPolicy(
+              table_options, data_block)),
+      create_context(&table_options, &ioptions, ioptions.stats,
+                     compression_type == kZSTD ||
+                         compression_type == kZSTDNotFinalCompression,
+                     tbo.moptions.block_protection_bytes_per_key,
+                     tbo.internal_comparator.user_comparator(),
+                     !use_delta_encoding_for_index_values,
+                     table_opt.index_type ==
+                         BlockBasedTableOptions::kBinarySearchWithFirstKey),
+      tail_size(0),
+      status_ok(true),
+      io_status_ok(true) {
+  if (tbo.target_file_size == 0) {
+    buffer_limit = compression_opts.max_dict_buffer_bytes;
+  } else if (compression_opts.max_dict_buffer_bytes == 0) {
+    buffer_limit = tbo.target_file_size;
+  } else {
+    buffer_limit =
+        std::min(tbo.target_file_size, compression_opts.max_dict_buffer_bytes);
+  }
+
+  const auto compress_dict_build_buffer_charged =
+      table_options.cache_usage_options.options_overrides
+          .at(CacheEntryRole::kCompressionDictionaryBuildingBuffer)
+          .charged;
+  if (table_options.block_cache &&
+      (compress_dict_build_buffer_charged ==
+           CacheEntryRoleOptions::Decision::kEnabled ||
+       compress_dict_build_buffer_charged ==
+           CacheEntryRoleOptions::Decision::kFallback)) {
+    compression_dict_buffer_cache_res_mgr =
+        std::make_shared<CacheReservationManagerImpl<
+            CacheEntryRole::kCompressionDictionaryBuildingBuffer>>(
+            table_options.block_cache);
+  } else {
+    compression_dict_buffer_cache_res_mgr = nullptr;
+  }
+
+  assert(compression_ctxs.size() >= compression_opts.parallel_threads);
+  for (uint32_t i = 0; i < compression_opts.parallel_threads; i++) {
+    compression_ctxs[i].reset(
+        new CompressionContext(compression_type, compression_opts));
+  }
+  if (table_options.index_type ==
+      BlockBasedTableOptions::kTwoLevelIndexSearch) {
+    p_index_builder_ = PartitionedIndexBuilder::CreateIndexBuilder(
+        &internal_comparator, use_delta_encoding_for_index_values,
+        table_options, ts_sz, persist_user_defined_timestamps);
+    index_builder.reset(p_index_builder_);
+  } else {
+    index_builder.reset(IndexBuilder::CreateIndexBuilder(
+        table_options.index_type, &internal_comparator,
+        &this->internal_prefix_transform, use_delta_encoding_for_index_values,
+        table_options, ts_sz, persist_user_defined_timestamps));
+  }
+  if (ioptions.optimize_filters_for_hits && tbo.is_bottommost) {
+    // Apply optimize_filters_for_hits setting here when applicable by
+    // skipping filter generation
+    filter_builder.reset();
+  } else if (tbo.skip_filters) {
+    // For SstFileWriter skip_filters
+    filter_builder.reset();
+  } else if (!table_options.filter_policy) {
+    // Null filter_policy -> no filter
+    filter_builder.reset();
+  } else {
+    FilterBuildingContext filter_context(table_options);
+
+    filter_context.info_log = ioptions.logger;
+    filter_context.column_family_name = tbo.column_family_name;
+    filter_context.reason = reason;
+
+    // Only populate other fields if known to be in LSM rather than
+    // generating external SST file
+    if (reason != TableFileCreationReason::kMisc) {
+      filter_context.compaction_style = ioptions.compaction_style;
+      filter_context.num_levels = ioptions.num_levels;
+      filter_context.level_at_creation = tbo.level_at_creation;
+      filter_context.is_bottommost = tbo.is_bottommost;
+      assert(filter_context.level_at_creation < filter_context.num_levels);
+    }
+
+    filter_builder.reset(CreateFilterBlockBuilder(
+        ioptions, tbo.moptions, filter_context,
+        use_delta_encoding_for_index_values, p_index_builder_, ts_sz,
+        persist_user_defined_timestamps));
+  }
+
+  assert(tbo.internal_tbl_prop_coll_factories);
+  for (auto& factory : *tbo.internal_tbl_prop_coll_factories) {
+    assert(factory);
+
+    std::unique_ptr<InternalTblPropColl> collector{
+        factory->CreateInternalTblPropColl(tbo.column_family_id,
+                                           tbo.level_at_creation)};
+    if (collector) {
+      table_properties_collectors.emplace_back(std::move(collector));
+    }
+  }
+  table_properties_collectors.emplace_back(
+      new BlockBasedTablePropertiesCollector(table_options.index_type,
+                                             table_options.whole_key_filtering,
+                                             prefix_extractor != nullptr));
+  if (ts_sz > 0 && persist_user_defined_timestamps) {
+    table_properties_collectors.emplace_back(
+        new TimestampTablePropertiesCollector(
+            tbo.internal_comparator.user_comparator()));
+  }
+  if (table_options.verify_compression) {
+    for (uint32_t i = 0; i < compression_opts.parallel_threads; i++) {
+      verify_ctxs[i].reset(new UncompressionContext(compression_type));
+    }
+  }
+
+  // These are only needed for populating table properties
+  props.column_family_id = tbo.column_family_id;
+  props.column_family_name = tbo.column_family_name;
+  props.oldest_key_time = tbo.oldest_key_time;
+  props.file_creation_time = tbo.file_creation_time;
+  props.orig_file_number = tbo.cur_file_num;
+  props.db_id = tbo.db_id;
+  props.db_session_id = tbo.db_session_id;
+  props.db_host_id = ioptions.db_host_id;
+  if (!ReifyDbHostIdProperty(ioptions.env, &props.db_host_id).ok()) {
+    ROCKS_LOG_INFO(ioptions.logger, "db_host_id property will not be set");
+  }
+
+  if (FormatVersionUsesContextChecksum(table_options.format_version)) {
+    // Must be non-zero and semi- or quasi-random
+    // TODO: ideally guaranteed different for related files (e.g. use file
+    // number and db_session, for benefit of SstFileWriter)
+    do {
+      base_context_checksum = Random::GetTLSInstance()->Next();
+    } while (UNLIKELY(base_context_checksum == 0));
+  } else {
+    base_context_checksum = 0;
+  }
+}
 
 BlockBasedTableBuilder::BlockBasedTableBuilder(
     const BlockBasedTableOptions& table_options, const TableBuilderOptions& tbo,
@@ -1533,7 +1536,6 @@ IOStatus BlockBasedTableBuilder::io_status() const {
 Status BlockBasedTableBuilder::InsertBlockInCacheHelper(
     const Slice& block_contents, const BlockHandle* handle,
     BlockType block_type) {
-
   Cache* block_cache = rep_->table_options.block_cache.get();
   Status s;
   auto helper =
