@@ -4,8 +4,8 @@
 #include <atomic>
 #include <thread>
 
-#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "rocksdb/cloud/cloud_file_system.h"
+#include "rocksdb/cloud/cloud_file_system_impl.h"
 #include "rocksdb/cloud/cloud_storage_provider.h"
 #include "rocksdb/status.h"
 
@@ -91,7 +91,8 @@ class MockStorageProvider : public CloudStorageProvider {
 
   IOStatus PutCloudObject(const std::string& /*local_path*/,
                           const std::string& /*bucket_name*/,
-                          const std::string& /*object_path*/) override {
+                          const std::string& /*object_path*/,
+                          const std::string& /*md5_checksum*/ = "") override {
     return notsup_;
   }
 
