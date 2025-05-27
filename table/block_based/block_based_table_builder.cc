@@ -355,7 +355,7 @@ struct BlockBasedTableBuilder::Rep {
 
   std::vector<std::unique_ptr<InternalTblPropColl>> table_properties_collectors;
 
-  std::unique_ptr<ParallelCompressionRep> pc_rep;
+  std::shared_ptr<ParallelCompressionRep> pc_rep;
   BlockCreateContext create_context;
 
   // The size of the "tail" part of a SST file. "Tail" refers to
