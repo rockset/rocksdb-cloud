@@ -509,9 +509,11 @@ class CloudFileSystem : public FileSystem {
 
   // Deletes file from a destination bucket.
   virtual IOStatus DeleteCloudFileFromDest(const std::string& fname) = 0;
-  // Copies a local file to a destination bucket.
-  virtual IOStatus CopyLocalFileToDest(const std::string& local_name,
-                                       const std::string& cloud_name) = 0;
+  // Copies a local file to a destination bucket. If md5_checksum is provided,
+  // it will be used to verify the file after it is copied.
+  virtual IOStatus CopyLocalFileToDest(
+      const std::string& local_name, const std::string& cloud_name,
+      const std::string& md5_checksum = "") = 0;
 
   // Returns CloudManifest file name for a given db.
   virtual std::string CloudManifestFile(const std::string& dbname) = 0;
@@ -527,7 +529,7 @@ class CloudFileSystem : public FileSystem {
                                      bool read_only) = 0;
 
   virtual IOStatus UploadCloudManifest(const std::string& local_dbname,
-                               const std::string& cookie) const = 0;
+                                       const std::string& cookie) const = 0;
 
   // Prepare a local directory for use as a clone of the cloud storage
   virtual IOStatus SanitizeLocalDirectory(const DBOptions& options,
