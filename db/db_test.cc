@@ -7558,18 +7558,14 @@ TEST_F(DBTest, SetOptionsVersionInstallBehavior) {
   // SetOptions with disable_auto_flush
   // Note: disabling auto flush on a running DB may not be supported, so we check for NotSupported
   Status s = dbfull()->SetOptions({{"disable_auto_flush", "true"}});
-  if (s.IsNotSupported()) {
-    // Acceptable, skip this check
-  } else {
-    ASSERT_OK(s);
-    ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_auto_flush";
-  }
+  ASSERT_OK(s);
+  ASSERT_EQ(log_and_apply_calls.load(), 0) << "LogAndApply should not be called for disable_auto_flush";
 
   // SetOptions with two all together
-  // TODO: add disable_auto_flush once it's supported
   std::unordered_map<std::string, std::string> opts = {
       {"disable_write_stall", "true"},
       {"disable_auto_compactions", "true"},
+      {"disable_auto_flush", "true"},
   };
   s = dbfull()->SetOptions(opts);
   ASSERT_OK(s);
@@ -7584,6 +7580,9 @@ TEST_F(DBTest, SetOptionsVersionInstallBehavior) {
 
   ASSERT_OK(dbfull()->SetOptions({{"disable_auto_compactions", "false"}}));
   ASSERT_EQ(log_and_apply_calls.load(), 2) << "LogAndApply should be called for disable_auto_compactions change";
+
+  ASSERT_OK(dbfull()->SetOptions({{"disable_auto_flush", "false"}}));
+  ASSERT_EQ(log_and_apply_calls.load(), 3) << "LogAndApply should be called for disable_auto_flush change";
 
   // Clean up SyncPoint
   ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->DisableProcessing();
