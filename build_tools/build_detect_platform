@@ -641,6 +641,16 @@ if [ "${USE_AWS}XXX" = "1XXX" ]; then
   COMMON_FLAGS="$COMMON_FLAGS $S3_CCFLAGS"
   PLATFORM_LDFLAGS="$S3_LDFLAGS $PLATFORM_LDFLAGS"
 fi
+
+if [ "${USE_GCP}XXX" = "1XXX" ]; then
+  GCP_SDK=/usr/local
+  GCI=${GCP_SDK}/include/
+  GCS_CCFLAGS="$GCS_CCFLAGS -I$GCI -DUSE_GCP"
+  GCS_LDFLAGS="$GCS_LDFLAGS -lgoogle_cloud_cpp_common -lgoogle_cloud_cpp_storage -labsl_bad_variant_access -labsl_bad_optional_access"
+  COMMON_FLAGS="$COMMON_FLAGS $GCS_CCFLAGS"
+  PLATFORM_LDFLAGS="$GCS_LDFLAGS $PLATFORM_LDFLAGS"
+fi
+
 #
 # Support the Kafka WAL storing if the env variable named USE_KAFKA
 # is set to 1. Setting it to any other value or not setting it at all means
