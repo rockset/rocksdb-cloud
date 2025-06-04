@@ -347,7 +347,7 @@ IOStatus CloudStorageProviderImpl::GetCloudObject(
 
 IOStatus CloudStorageProviderImpl::PutCloudObject(
     const std::string& local_file, const std::string& bucket_name,
-    const std::string& object_path, const std::string& md5_checksum) {
+    const std::string& object_path, const std::vector<uint8_t>& checksum) {
   uint64_t fsize = 0;
   // debugging paranoia. Files uploaded to Cloud can never be zero size.
   auto st = cfs_->GetBaseFileSystem()->GetFileSize(local_file, IOOptions(),
@@ -366,7 +366,7 @@ IOStatus CloudStorageProviderImpl::PutCloudObject(
   }
 
   return DoPutCloudObject(local_file, bucket_name, object_path, fsize,
-                          md5_checksum);
+                          checksum);
 }
 
 #endif  // ROCKSDB_LITE

@@ -107,12 +107,12 @@ class CloudStorageProvider : public Configurable {
                                   const std::string& object_path,
                                   const std::string& local_path) = 0;
 
-  // Uploads object to the cloud. If md5_checksum is provided, it will be used
+  // Uploads object to the cloud. If checksum is provided, it will be used
   // to verify the file after it is uploaded.
-  virtual IOStatus PutCloudObject(const std::string& local_path,
-                                  const std::string& bucket_name,
-                                  const std::string& object_path,
-                                  const std::string& md5_checksum = "") = 0;
+  virtual IOStatus PutCloudObject(
+      const std::string& local_path, const std::string& bucket_name,
+      const std::string& object_path,
+      const std::vector<uint8_t>& checksum = {}) = 0;
 
   // Updates/Sets the metadata of the object in cloud storage
   virtual IOStatus PutCloudObjectMetadata(
