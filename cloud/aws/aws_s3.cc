@@ -420,8 +420,8 @@ class S3StorageProvider : public CloudStorageProviderImpl {
                             uint64_t* remote_size) override;
   IOStatus DoPutCloudObject(const std::string& local_file,
                             const std::string& bucket_name,
-                            const std::string& object_path,
-                            uint64_t file_size) override;
+                            const std::string& object_path, uint64_t file_size,
+                            const std::vector<uint8_t>& checksum = {}) override;
 
  private:
   struct HeadObjectResult {
@@ -1007,10 +1007,10 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
   return IOStatus::OK();
 }
 
-IOStatus S3StorageProvider::DoPutCloudObject(const std::string& local_file,
-                                             const std::string& bucket_name,
-                                             const std::string& object_path,
-                                             uint64_t file_size) {
+IOStatus S3StorageProvider::DoPutCloudObject(
+    const std::string& local_file, const std::string& bucket_name,
+    const std::string& object_path, uint64_t file_size,
+    const std::vector<uint8_t>& checksum) {
   if (s3client_->HasTransferManager()) {
     auto handle = s3client_->UploadFile(ToAwsString(bucket_name),
                                         ToAwsString(object_path),
