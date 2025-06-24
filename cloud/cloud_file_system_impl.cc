@@ -53,6 +53,13 @@ CloudFileSystemImpl::~CloudFileSystemImpl() {
   StopPurger();
   FileCachePurge();
   cloud_fs_options.cloud_log_controller.reset();
+  // Force to cancel all scheduled file deletions jobs before destruction.
+  // Since the jobs can reference this object through the storage provider,
+  // we need to ensure that the jobs are cancelled before the destruction
+  // of this object.
+  if (cloud_file_deletion_scheduler_) {
+    cloud_file_deletion_scheduler_.reset();
+  }
   cloud_fs_options.storage_provider.reset();
 }
 
