@@ -7,6 +7,8 @@
 #include <mutex>
 #include <vector>
 #include "rocksdb/io_status.h"
+#include "rocksdb/env.h"
+
 
 namespace ROCKSDB_NAMESPACE {
 class CloudScheduler;
@@ -35,6 +37,13 @@ class CloudFileDeletionScheduler
   rocksdb::IOStatus ScheduleFileDeletion(const std::string& filename,
                                          FileDeletionRunnable runnable);
 
+
+  Logger* GetLogger() const { return info_log_.get(); }
+
+  void SetLogger(std::shared_ptr<Logger> l) {
+    info_log_ = std::move(l);
+  }
+
 #ifndef NDEBUG
   size_t TEST_NumScheduledJobs() const;
 
@@ -58,6 +67,7 @@ class CloudFileDeletionScheduler
   mutable std::mutex files_to_delete_mutex_;
   std::unordered_map<std::string, int> files_to_delete_;
   std::chrono::seconds file_deletion_delay_;
+  mutable std::shared_ptr<Logger> info_log_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

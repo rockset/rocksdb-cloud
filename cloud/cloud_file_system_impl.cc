@@ -57,6 +57,10 @@ CloudFileSystemImpl::~CloudFileSystemImpl() {
   // Since the jobs can reference this object through the storage provider,
   // we need to ensure that the jobs are cancelled before the destruction
   // of this object.
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[%s] CloudFileSystemImpl::~CloudFileSystemImpl: Cancelling all scheduled "
+      "file deletions, cloud_file_deletion_scheduler_: %p, size: %zu",
+      Name(), (void *)cloud_file_deletion_scheduler_.get(), cloud_file_deletion_scheduler_.use_count());
   if (cloud_file_deletion_scheduler_) {
     cloud_file_deletion_scheduler_.reset();
   }
@@ -74,6 +78,13 @@ IOStatus CloudFileSystemImpl::ExistsCloudObject(const std::string& fname) {
                                                  srcname(fname));
   }
   return st;
+}
+
+void CloudFileSystemImpl::SetLogger(std::shared_ptr<Logger> l) {
+  info_log_ = std::move(l);
+  if (cloud_file_deletion_scheduler_) {
+    cloud_file_deletion_scheduler_->SetLogger(info_log_);
+  }
 }
 
 IOStatus CloudFileSystemImpl::GetCloudObject(const std::string& fname) {

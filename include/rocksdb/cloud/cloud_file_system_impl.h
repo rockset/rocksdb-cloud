@@ -439,9 +439,7 @@ class CloudFileSystemImpl : public CloudFileSystem {
   }
 
   Logger* GetLogger() const override { return info_log_.get(); }
-  void SetLogger(std::shared_ptr<Logger> l) override {
-    info_log_ = std::move(l);
-  }
+  void SetLogger(std::shared_ptr<Logger> l) override;
 
  private:
   // Files are invisibile if:
