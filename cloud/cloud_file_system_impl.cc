@@ -47,6 +47,9 @@ CloudFileSystemImpl::CloudFileSystemImpl(
 }
 
 CloudFileSystemImpl::~CloudFileSystemImpl() {
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[%s] CloudFileSystemImpl::~CloudFileSystemImpl: Destroying CloudFileSystemImpl",
+      Name());
   if (cloud_fs_options.cloud_log_controller) {
     cloud_fs_options.cloud_log_controller->StopTailingStream();
   }
