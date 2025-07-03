@@ -65,6 +65,10 @@ CloudFileSystemImpl::~CloudFileSystemImpl() {
       "file deletions, cloud_file_deletion_scheduler_: %p, size: %zu",
       Name(), (void *)cloud_file_deletion_scheduler_.get(), cloud_file_deletion_scheduler_.use_count());
   if (cloud_file_deletion_scheduler_) {
+    // Cancel all scheduled jobs before destruction
+    // otherwise, the jobs will be executed after the destruction of the cfs object,
+    // which can cause a crash.
+    cloud_file_deletion_scheduler_->CancelAllJobs();
     cloud_file_deletion_scheduler_.reset();
   }
   cloud_fs_options.storage_provider.reset();

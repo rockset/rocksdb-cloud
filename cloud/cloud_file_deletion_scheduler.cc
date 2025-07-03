@@ -21,15 +21,21 @@ CloudFileDeletionScheduler::~CloudFileDeletionScheduler() {
   // NOTE: no need to cancel jobs here. These jobs won't be executed
   // as longs as `CloudFileDeletionScheduler` is destructed. Also,
   // `LocalCloudScheduler` will remove the jobs in the queue when destructed
+}
+
+void CloudFileDeletionScheduler::CancelAllJobs() {
+  std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
-      "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::~CloudFileDeletionScheduler: "
-      "Cancelling all scheduled jobs, size: %zu, schduler_.use_count: %zu", files_to_delete_.size(), scheduler_.use_count());
+      "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
+      "Cancelling all scheduled jobs, size: %zu, schduler_.use_count: %zu",
+      files_to_delete_.size(), scheduler_.use_count());
   for (const auto& [file, handle] : files_to_delete_) {
     Log(InfoLogLevel::INFO_LEVEL, info_log_,
-        "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::~CloudFileDeletionScheduler: "
+        "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
         "Cancelling job for file: %s, handle: %d", file.c_str(), handle);
     scheduler_->CancelJob(handle);
   }
+  files_to_delete_.clear();
 }
 
 void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filename) {

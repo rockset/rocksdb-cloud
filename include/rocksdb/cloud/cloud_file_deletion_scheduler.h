@@ -30,6 +30,11 @@ class CloudFileDeletionScheduler
 
   ~CloudFileDeletionScheduler();
 
+  // Cancel all scheduled jobs before destruction.
+  // Otherwise, the jobs will be executed after the destruction of the cfs object,
+  // which can cause a crash.
+  void CancelAllJobs();
+
   void UnscheduleFileDeletion(const std::string& filename);
   using FileDeletionRunnable = std::function<void()>;
   // Schedule the file deletion runnable(which actually delets the file from
