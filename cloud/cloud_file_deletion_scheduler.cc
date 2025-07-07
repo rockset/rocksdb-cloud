@@ -24,7 +24,11 @@ CloudFileDeletionScheduler::~CloudFileDeletionScheduler() {
 }
 
 void CloudFileDeletionScheduler::CancelAllJobs() {
-  std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
+  // No lock should be needed here, because this function is called
+  // only when the `CloudFileDeletionScheduler` is being destructed,
+  // and no other thread should be accessing `files_to_delete_` at this point.
+  // Otherwise, deadlock happen if the lock is acquired here, conflicting with
+  // DoDeleteFile() which been called in the scheduled job.
   Log(InfoLogLevel::INFO_LEVEL, info_log_,
       "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
       "Cancelling all scheduled jobs, size: %zu, schduler_.use_count: %zu",
@@ -35,6 +39,7 @@ void CloudFileDeletionScheduler::CancelAllJobs() {
         "Cancelling job for file: %s, handle: %d", file.c_str(), handle);
     scheduler_->CancelJob(handle);
   }
+
   files_to_delete_.clear();
 }
 
