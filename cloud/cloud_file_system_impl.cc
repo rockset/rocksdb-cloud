@@ -72,6 +72,9 @@ CloudFileSystemImpl::~CloudFileSystemImpl() {
     cloud_file_deletion_scheduler_.reset();
   }
   cloud_fs_options.storage_provider.reset();
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[%s] CloudFileSystemImpl::~CloudFileSystemImpl: Destroyed CloudFileSystemImpl", Name());
+  LogFlush(info_log_);
 }
 
 IOStatus CloudFileSystemImpl::ExistsCloudObject(const std::string& fname) {

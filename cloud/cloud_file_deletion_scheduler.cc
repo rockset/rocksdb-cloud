@@ -33,14 +33,27 @@ void CloudFileDeletionScheduler::CancelAllJobs() {
       "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
       "Cancelling all scheduled jobs, size: %zu, schduler_.use_count: %zu",
       files_to_delete_.size(), scheduler_.use_count());
-  for (const auto& [file, handle] : files_to_delete_) {
-    Log(InfoLogLevel::INFO_LEVEL, info_log_,
-        "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
-        "Cancelling job for file: %s, handle: %d", file.c_str(), handle);
+
+  std::vector<int> handles_to_cancel;
+  {
+    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
+    handles_to_cancel.reserve(files_to_delete_.size());
+    for (const auto& [file, handle] : files_to_delete_) {
+      Log(InfoLogLevel::INFO_LEVEL, info_log_,
+          "[CloudFileDeletionScheduler] CloudFileDeletionScheduler::CancelAllJobs: "
+          "Cancelling job for file: %s, handle: %d", file.c_str(), handle);
+      handles_to_cancel.push_back(handle);
+    }
+  }
+
+  for (const auto& handle : handles_to_cancel) {
     scheduler_->CancelJob(handle);
   }
 
-  files_to_delete_.clear();
+  {
+    std::lock_guard<std::mutex> lk(files_to_delete_mutex_);
+    files_to_delete_.clear();
+  }
 }
 
 void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filename) {
@@ -54,6 +67,9 @@ void CloudFileDeletionScheduler::UnscheduleFileDeletion(const std::string& filen
 
 rocksdb::IOStatus CloudFileDeletionScheduler::ScheduleFileDeletion(
     const std::string& fname, FileDeletionRunnable runnable) {
+  Log(InfoLogLevel::INFO_LEVEL, info_log_,
+      "[CloudFileDeletionScheduler] ScheduleFileDeletion: Scheduling deletion "
+      "of file: %s, runnable: %p", fname.c_str(), (void*)runnable.target<void()>());
   auto wp = this->weak_from_this();
   auto doDeleteFile = [wp = std::move(wp), fname, runnable = std::move(runnable)](void*) {
     TEST_SYNC_POINT(
