@@ -128,7 +128,7 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
   IOStatus PutCloudObject(const std::string& local_file,
                           const std::string& bucket_name,
                           const std::string& object_path,
-                          const std::vector<uint8_t>& checksum = {}) override;
+                          const PutObjectOptions& options = {}) override;
   IOStatus NewCloudReadableFile(
       const std::string& bucket, const std::string& fname,
       const FileOptions& options,
@@ -149,10 +149,11 @@ class CloudStorageProviderImpl : public CloudStorageProvider {
                                     const std::string& object_path,
                                     const std::string& local_path,
                                     uint64_t* remote_size) = 0;
-  virtual IOStatus DoPutCloudObject(
-      const std::string& local_file, const std::string& object_path,
-      const std::string& bucket_name, uint64_t file_size,
-      const std::vector<uint8_t>& checksum = {}) = 0;
+  virtual IOStatus DoPutCloudObject(const std::string& local_file,
+                                    const std::string& object_path,
+                                    const std::string& bucket_name,
+                                    uint64_t file_size,
+                                    const PutObjectOptions& options = {}) = 0;
 
   CloudFileSystem* cfs_;
   Status status_;

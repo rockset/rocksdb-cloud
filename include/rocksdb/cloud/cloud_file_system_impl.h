@@ -241,9 +241,8 @@ class CloudFileSystemImpl : public CloudFileSystem {
   CloudManifest* GetCloudManifest() override { return cloud_manifest_.get(); }
 
   IOStatus DeleteCloudFileFromDest(const std::string& fname) override;
-  IOStatus CopyLocalFileToDest(
-      const std::string& local_name, const std::string& cloud_name,
-      const std::vector<uint8_t>& checksum = {}) override;
+  IOStatus CopyLocalFileToDest(const std::string& local_name,
+                               const std::string& cloud_name) override;
 
   Status PrepareOptions(const ConfigOptions& config_options) override;
   Status ValidateOptions(const DBOptions& /*db_opts*/,
