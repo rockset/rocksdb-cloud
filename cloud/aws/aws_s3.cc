@@ -413,7 +413,6 @@ class S3StorageProvider : public CloudStorageProviderImpl {
       std::unique_ptr<CloudStorageWritableFile>* result,
       IODebugContext* dbg) override;
   Status PrepareOptions(const ConfigOptions& options) override;
-
  protected:
   IOStatus DoGetCloudObject(const std::string& bucket_name,
                             const std::string& object_path,
@@ -853,10 +852,12 @@ namespace {
 class WritableFileStreamBuf : public std::streambuf {
  public:
   WritableFileStreamBuf(IOStatus* fileCloseStatus,
-                        std::unique_ptr<WritableFileWriter>&& fileWriter)
-      : fileCloseStatus_(fileCloseStatus), fileWriter_(std::move(fileWriter)) {}
+			std::unique_ptr<WritableFileWriter>&& fileWriter)
+    : fileCloseStatus_(fileCloseStatus), fileWriter_(std::move(fileWriter)) {}
 
-  ~WritableFileStreamBuf() { *fileCloseStatus_ = fileWriter_->Close({}); }
+  ~WritableFileStreamBuf() {
+    *fileCloseStatus_ = fileWriter_->Close({});
+  }
 
  protected:
   // Appends a block of data to the stream. Must always write n if possible
@@ -889,7 +890,7 @@ class WritableFileStreamBuf : public std::streambuf {
   }
 
  private:
-  IOStatus* fileCloseStatus_;
+  IOStatus *fileCloseStatus_;
   std::unique_ptr<WritableFileWriter> fileWriter_;
 };
 
@@ -918,10 +919,11 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
     // The stream is not flushed when WaitUntilFinished() returns.
     // TODO(igor) Fix this once the AWS SDK's bug is fixed.
     auto ioStreamFactory = [=]() -> Aws::IOStream* {
-      // fallback to FStream
-      return Aws::New<Aws::FStream>(Aws::Utils::ARRAY_ALLOCATION_TAG,
-                                    destination,
-                                    std::ios_base::out | std::ios_base::trunc);
+        // fallback to FStream
+        return Aws::New<Aws::FStream>(
+            Aws::Utils::ARRAY_ALLOCATION_TAG, destination,
+            std::ios_base::out | std::ios_base::trunc);
+
     };
 
     auto handle = s3client_->DownloadFile(ToAwsString(bucket_name),
@@ -948,8 +950,7 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
       // Close() will be called in the destructor of the object returned by
       // this factory. Adding an inner scope so that the destructor is called
       // before checking fileCloseStatus.
-      auto ioStreamFactory = [this, destination,
-                              &fileCloseStatus]() -> Aws::IOStream* {
+      auto ioStreamFactory = [this, destination, &fileCloseStatus]() -> Aws::IOStream* {
         FileOptions foptions;
         foptions.use_direct_writes =
             cfs_->GetCloudFileSystemOptions().use_direct_io_for_cloud_download;
@@ -967,7 +968,7 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
             std::unique_ptr<WritableFileStreamBuf>(new WritableFileStreamBuf(
                 &fileCloseStatus,
                 std::unique_ptr<WritableFileWriter>(new WritableFileWriter(
-                    std::move(file), destination, foptions)))));
+                        std::move(file), destination, foptions)))));
       };
 
       Aws::S3::Model::GetObjectRequest request;
@@ -980,8 +981,7 @@ IOStatus S3StorageProvider::DoGetCloudObject(const std::string& bucket_name,
         *remote_size = outcome.GetResult().GetContentLength();
       } else {
         const auto& error = outcome.GetError();
-        std::string errmsg(error.GetMessage().c_str(),
-                           error.GetMessage().size());
+        std::string errmsg(error.GetMessage().c_str(), error.GetMessage().size());
         if (IsNotFound(error.GetErrorType())) {
           Log(InfoLogLevel::ERROR_LEVEL, cfs_->GetLogger(),
               "[s3] GetObject %s/%s error %s.", bucket_name.c_str(),

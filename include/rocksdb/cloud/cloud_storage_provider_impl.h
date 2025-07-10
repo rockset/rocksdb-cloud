@@ -2,9 +2,8 @@
 
 #pragma once
 
-#include <optional>
-
 #include "rocksdb/cloud/cloud_storage_provider.h"
+#include <optional>
 
 namespace ROCKSDB_NAMESPACE {
 class CloudStorageReadableFileImpl : public CloudStorageReadableFile {

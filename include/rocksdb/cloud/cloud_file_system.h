@@ -527,7 +527,7 @@ class CloudFileSystem : public FileSystem {
                                      bool read_only) = 0;
 
   virtual IOStatus UploadCloudManifest(const std::string& local_dbname,
-                                       const std::string& cookie) const = 0;
+                               const std::string& cookie) const = 0;
 
   // Prepare a local directory for use as a clone of the cloud storage
   virtual IOStatus SanitizeLocalDirectory(const DBOptions& options,
