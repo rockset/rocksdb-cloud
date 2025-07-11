@@ -112,8 +112,8 @@ class CloudStorageProvider : public Configurable {
                                   const std::string& object_path,
                                   const std::string& local_path) = 0;
 
-  // Uploads object to the cloud. If checksum is provided, it will be used
-  // to verify the file after it is uploaded.
+  // Uploads object to the cloud. If checksum is provided in options, it will be
+  // used to verify the file after it is uploaded.
   virtual IOStatus PutCloudObject(const std::string& local_path,
                                   const std::string& bucket_name,
                                   const std::string& object_path,

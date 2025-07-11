@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <rocksdb/cloud/cloud_storage_provider.h>
 #include <unordered_map>
 
 #include "rocksdb/cache.h"
@@ -510,8 +511,9 @@ class CloudFileSystem : public FileSystem {
   // Deletes file from a destination bucket.
   virtual IOStatus DeleteCloudFileFromDest(const std::string& fname) = 0;
   // Copies a local file to a destination bucket.
-  virtual IOStatus CopyLocalFileToDest(const std::string& local_name,
-                                       const std::string& cloud_name) = 0;
+  virtual IOStatus CopyLocalFileToDest(const std::string &local_name,
+                                       const std::string &cloud_name,
+                                       const PutObjectOptions &options = {}) = 0;
 
   // Returns CloudManifest file name for a given db.
   virtual std::string CloudManifestFile(const std::string& dbname) = 0;

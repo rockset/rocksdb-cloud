@@ -242,7 +242,8 @@ class CloudFileSystemImpl : public CloudFileSystem {
 
   IOStatus DeleteCloudFileFromDest(const std::string& fname) override;
   IOStatus CopyLocalFileToDest(const std::string& local_name,
-                               const std::string& cloud_name) override;
+                               const std::string& cloud_name,
+                               const PutObjectOptions& options = {}) override;
 
   Status PrepareOptions(const ConfigOptions& config_options) override;
   Status ValidateOptions(const DBOptions& /*db_opts*/,

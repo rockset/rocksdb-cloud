@@ -763,14 +763,15 @@ IOStatus CloudFileSystemImpl::DeleteFile(const std::string& logical_fname,
 }
 
 IOStatus CloudFileSystemImpl::CopyLocalFileToDest(
-    const std::string& local_name, const std::string& dest_name) {
+    const std::string& local_name, const std::string& dest_name,
+    const PutObjectOptions& options) {
   if (cloud_file_deletion_scheduler_) {
     // Remove file from deletion queue
     cloud_file_deletion_scheduler_->UnscheduleFileDeletion(
         basename(local_name));
   }
   return GetStorageProvider()->PutCloudObject(local_name, GetDestBucketName(),
-                                              dest_name);
+                                              dest_name, options);
 }
 
 IOStatus CloudFileSystemImpl::DeleteCloudFileFromDest(
