@@ -3446,7 +3446,11 @@ TEST_F(DBFlushTest, DisableAutoFlushMultiCF) {
 }
 
 TEST_F(DBFlushTest, DisableAutoFlushOnRunningDB) {
-  EXPECT_NOK(db_->SetOptions({{"disable_auto_flush", "true"}}));
+  EXPECT_OK(db_->SetOptions({{"disable_auto_flush", "true"}}));
+  EXPECT_TRUE(db_->GetOptions().disable_auto_flush);
+
+  EXPECT_OK(db_->SetOptions({{"disable_auto_flush", "false"}}));
+  EXPECT_FALSE(db_->GetOptions().disable_auto_flush);
 }
 
 // Test the case that non-trival compaction job is triggered before
@@ -3516,11 +3520,8 @@ TEST_F(DBFlushTest, AutoCompactionBeforeEnablingFlush) {
   // old super version of compaction job installed, which has
   // `disable_auto_flush = true!`
   EXPECT_TRUE(cfd->GetSuperVersion()->mutable_cf_options.disable_auto_flush);
-  // But auto flush of memtable won't be disabled. So we have a short period
-  // of time that current superversion's `mutable_cf_option` to be not consistent
-  // with memtable's auto_flush setting, which is fine since next time we call
-  // `InstallSuperVersion` will fix this
-  EXPECT_TRUE(cfd->GetSuperVersion()->mem->TEST_IsAutoFlushEnabled());
+  // Auto flush of memtable is disabled
+  EXPECT_FALSE(cfd->GetSuperVersion()->mem->TEST_IsAutoFlushEnabled());
 
   // trigger a manual flush to install a new super version
   // the new superversion will use the latest `mutable_cf_options` of the
