@@ -605,10 +605,35 @@ Status BlockBasedTable::Open(
   const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0;
   const bool preload_all = !table_options.cache_index_and_filter_blocks;
 
+  // We do a two-phased Prefetch, to avoid prefetching large index/filter blocks
+  // when we don't need to read them. The algorithm is:
+  // if (prefetch_all || preload_all):
+  //   [Single Phase] Prefetch full tail, starting from index block.
+  // else:
+  //   [Phase 1] Prefetch footer + properties.
+  //   if (pin top-level index/filter blocks or index/filter partition blocks):
+  //     [Phase 2] Prefetch full tail, starting from index block
+  //   else:
+  //     [Phase 2] No-op.
+  //       We do not need to prefetch index/filter blocks since they will
+  //       not be read as part of Open().
+  //       It is possible we read other meta blocks as part of Open(), like
+  //       RangeDelBlock, or CompressionDictBlock. Those reads might go to disk
+  //       in case they were not included in the prefetch buffer in Phase 1.
+  //       We can optimize this in future if needed.
+
+  bool maybeNeedsFullPrefetch = false;
+  auto tail_prefetch_size = tail_size;
   if (!ioptions.allow_mmap_reads && !env_options.use_mmap_reads) {
+    if (!prefetch_all && !preload_all) {
+      // Only prefetch footer + properties, and pre-fetch full tail later.
+      tail_prefetch_size = 0;
+      maybeNeedsFullPrefetch = true;
+    }
+    // Prefetch Phase 1
     s = PrefetchTail(ro, file.get(), file_size, force_direct_prefetch,
                      tail_prefetch_stats, prefetch_all, preload_all,
-                     &prefetch_buffer, ioptions.stats, tail_size,
+                     &prefetch_buffer, ioptions.stats, tail_prefetch_size,
                      ioptions.logger);
     // Return error in prefetch path to users.
     if (!s.ok()) {
@@ -692,6 +717,22 @@ Status BlockBasedTable::Open(
                                      metaindex_iter.get(), largest_seqno);
   if (!s.ok()) {
     return s;
+  }
+
+  auto pinningInfo = ShouldPinIndexFilterBlocks(
+      table_options, rep, level, file_size, max_file_size_for_l0_meta_pin);
+  if (maybeNeedsFullPrefetch &&
+      (pinningInfo.pin_top_level_index || pinningInfo.pin_top_level_filter ||
+       pinningInfo.pin_partition)) {
+    // Prefetch Phase 2
+    prefetch_buffer.reset();
+    s = PrefetchTail(ro, file.get(), file_size, force_direct_prefetch,
+                     tail_prefetch_stats, prefetch_all, preload_all,
+                     &prefetch_buffer, ioptions.stats, tail_size,
+                     ioptions.logger);
+    if (!s.ok()) {
+      return s;
+    }
   }
 
   // Populate BlockCreateContext
@@ -1048,6 +1089,61 @@ Status BlockBasedTable::ReadRangeDelBlock(
   return s;
 }
 
+BlockBasedTable::IndexFilterPinningInfo
+BlockBasedTable::ShouldPinIndexFilterBlocks(
+    const BlockBasedTableOptions& table_options, const Rep* rep,
+    const int level, size_t file_size, size_t max_file_size_for_l0_meta_pin) {
+  const bool maybe_flushed =
+      level == 0 && file_size <= max_file_size_for_l0_meta_pin;
+  std::function<bool(PinningTier, PinningTier)> is_pinned =
+      [maybe_flushed, &is_pinned](PinningTier pinning_tier,
+                                  PinningTier fallback_pinning_tier) {
+        // Fallback to fallback would lead to infinite recursion. Disallow it.
+        assert(fallback_pinning_tier != PinningTier::kFallback);
+
+        switch (pinning_tier) {
+          case PinningTier::kFallback:
+            return is_pinned(fallback_pinning_tier,
+                             PinningTier::kNone /* fallback_pinning_tier */);
+          case PinningTier::kNone:
+            return false;
+          case PinningTier::kFlushedAndSimilar:
+            return maybe_flushed;
+          case PinningTier::kAll:
+            return true;
+        };
+
+        // In GCC, this is needed to suppress `control reaches end of non-void
+        // function [-Werror=return-type]`.
+        assert(false);
+        return false;
+      };
+  const bool pin_top_level_index = is_pinned(
+      table_options.metadata_cache_options.top_level_index_pinning,
+      table_options.pin_top_level_index_and_filter ? PinningTier::kAll
+                                                   : PinningTier::kNone);
+  const bool pin_partition =
+      is_pinned(table_options.metadata_cache_options.partition_pinning,
+                table_options.pin_l0_filter_and_index_blocks_in_cache
+                    ? PinningTier::kFlushedAndSimilar
+                    : PinningTier::kNone);
+  const bool pin_unpartitioned =
+      is_pinned(table_options.metadata_cache_options.unpartitioned_pinning,
+                table_options.pin_l0_filter_and_index_blocks_in_cache
+                    ? PinningTier::kFlushedAndSimilar
+                    : PinningTier::kNone);
+
+  // pin the first level of index
+  return IndexFilterPinningInfo{
+      rep->index_type == BlockBasedTableOptions::kTwoLevelIndexSearch
+          ? pin_top_level_index
+          : pin_unpartitioned,
+      rep->filter_type == Rep::FilterType::kPartitionedFilter
+          ? pin_top_level_index
+          : pin_unpartitioned,
+      pin_partition, pin_unpartitioned};
+}
+
 Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
     const ReadOptions& ro, FilePrefetchBuffer* prefetch_buffer,
     InternalIterator* meta_iter, BlockBasedTable* new_table, bool prefetch_all,
@@ -1136,64 +1232,19 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
     return s;
   }
 
-  BlockBasedTableOptions::IndexType index_type = rep_->index_type;
-
   const bool use_cache = table_options.cache_index_and_filter_blocks;
+  auto pinningInfo = ShouldPinIndexFilterBlocks(
+      table_options, rep_, level, file_size, max_file_size_for_l0_meta_pin);
 
-  const bool maybe_flushed =
-      level == 0 && file_size <= max_file_size_for_l0_meta_pin;
-  std::function<bool(PinningTier, PinningTier)> is_pinned =
-      [maybe_flushed, &is_pinned](PinningTier pinning_tier,
-                                  PinningTier fallback_pinning_tier) {
-        // Fallback to fallback would lead to infinite recursion. Disallow it.
-        assert(fallback_pinning_tier != PinningTier::kFallback);
-
-        switch (pinning_tier) {
-          case PinningTier::kFallback:
-            return is_pinned(fallback_pinning_tier,
-                             PinningTier::kNone /* fallback_pinning_tier */);
-          case PinningTier::kNone:
-            return false;
-          case PinningTier::kFlushedAndSimilar:
-            return maybe_flushed;
-          case PinningTier::kAll:
-            return true;
-        };
-
-        // In GCC, this is needed to suppress `control reaches end of non-void
-        // function [-Werror=return-type]`.
-        assert(false);
-        return false;
-      };
-  const bool pin_top_level_index = is_pinned(
-      table_options.metadata_cache_options.top_level_index_pinning,
-      table_options.pin_top_level_index_and_filter ? PinningTier::kAll
-                                                   : PinningTier::kNone);
-  const bool pin_partition =
-      is_pinned(table_options.metadata_cache_options.partition_pinning,
-                table_options.pin_l0_filter_and_index_blocks_in_cache
-                    ? PinningTier::kFlushedAndSimilar
-                    : PinningTier::kNone);
-  const bool pin_unpartitioned =
-      is_pinned(table_options.metadata_cache_options.unpartitioned_pinning,
-                table_options.pin_l0_filter_and_index_blocks_in_cache
-                    ? PinningTier::kFlushedAndSimilar
-                    : PinningTier::kNone);
-
-  // pin the first level of index
-  const bool pin_index =
-      index_type == BlockBasedTableOptions::kTwoLevelIndexSearch
-          ? pin_top_level_index
-          : pin_unpartitioned;
   // prefetch the first level of index
   // WART: this might be redundant (unnecessary cache hit) if !pin_index,
   // depending on prepopulate_block_cache option
-  const bool prefetch_index = prefetch_all || pin_index;
+  auto prefetch_index = prefetch_all || pinningInfo.pin_top_level_index;
 
   std::unique_ptr<IndexReader> index_reader;
-  s = new_table->CreateIndexReader(ro, prefetch_buffer, meta_iter, use_cache,
-                                   prefetch_index, pin_index, lookup_context,
-                                   &index_reader);
+  s = new_table->CreateIndexReader(
+      ro, prefetch_buffer, meta_iter, use_cache, prefetch_index,
+      pinningInfo.pin_top_level_index, lookup_context, &index_reader);
   if (!s.ok()) {
     return s;
   }
@@ -1203,33 +1254,29 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   // The partitions of partitioned index are always stored in cache. They
   // are hence follow the configuration for pin and prefetch regardless of
   // the value of cache_index_and_filter_blocks
-  if (prefetch_all || pin_partition) {
-    s = rep_->index_reader->CacheDependencies(ro, pin_partition,
+  if (prefetch_all || pinningInfo.pin_partition) {
+    s = rep_->index_reader->CacheDependencies(ro, pinningInfo.pin_partition,
                                               prefetch_buffer);
   }
   if (!s.ok()) {
     return s;
   }
 
-  // pin the first level of filter
-  const bool pin_filter =
-      rep_->filter_type == Rep::FilterType::kPartitionedFilter
-          ? pin_top_level_index
-          : pin_unpartitioned;
   // prefetch the first level of filter
   // WART: this might be redundant (unnecessary cache hit) if !pin_filter,
   // depending on prepopulate_block_cache option
-  const bool prefetch_filter = prefetch_all || pin_filter;
+  const bool prefetch_filter = prefetch_all || pinningInfo.pin_top_level_filter;
 
   if (rep_->filter_policy) {
     auto filter = new_table->CreateFilterBlockReader(
-        ro, prefetch_buffer, use_cache, prefetch_filter, pin_filter,
-        lookup_context);
+        ro, prefetch_buffer, use_cache, prefetch_filter,
+        pinningInfo.pin_top_level_filter, lookup_context);
 
     if (filter) {
       // Refer to the comment above about paritioned indexes always being cached
-      if (prefetch_all || pin_partition) {
-        s = filter->CacheDependencies(ro, pin_partition, prefetch_buffer);
+      if (prefetch_all || pinningInfo.pin_partition) {
+        s = filter->CacheDependencies(ro, pinningInfo.pin_partition,
+                                      prefetch_buffer);
         if (!s.ok()) {
           return s;
         }
@@ -1241,8 +1288,10 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   if (!rep_->compression_dict_handle.IsNull()) {
     std::unique_ptr<UncompressionDictReader> uncompression_dict_reader;
     s = UncompressionDictReader::Create(
-        this, ro, prefetch_buffer, use_cache, prefetch_all || pin_unpartitioned,
-        pin_unpartitioned, lookup_context, &uncompression_dict_reader);
+        this, ro, prefetch_buffer, use_cache,
+        prefetch_all || pinningInfo.pin_unpartitioned,
+        pinningInfo.pin_unpartitioned, lookup_context,
+        &uncompression_dict_reader);
     if (!s.ok()) {
       return s;
     }
