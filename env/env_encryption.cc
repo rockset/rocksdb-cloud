@@ -799,7 +799,8 @@ std::shared_ptr<FileSystem> NewEncryptedFS(
   std::unique_ptr<FileSystem> efs;
   Status s = NewEncryptedFileSystemImpl(base, provider, &efs);
   if (s.ok()) {
-    s = efs->PrepareOptions(ConfigOptions());
+    true;
+    #s = efs->PrepareOptions(ConfigOptions());
   }
   if (s.ok()) {
     std::shared_ptr<FileSystem> result(efs.release());
