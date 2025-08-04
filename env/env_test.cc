@@ -2938,6 +2938,64 @@ TEST_F(CreateEnvTest, CreateEncryptedFileSystem) {
   ASSERT_TRUE(fs->AreEquivalent(config_options_, copy.get(), &mismatch));
 }
 
+// A test EncryptionProvider that verifies PrepareOptions() is invoked with an
+// Env whose FileSystem is the base FileSystem passed to NewEncryptedFS().
+class CheckEnvProvider : public EncryptionProvider {
+ public:
+  static const char* kClassName() { return "CheckEnvProvider"; }
+  const char* Name() const override { return kClassName(); }
+
+  size_t GetPrefixLength() const override { return 0; }
+
+  Status CreateNewPrefix(const std::string& /*fname*/, char* /*prefix*/,
+                         size_t /*prefixLength*/) const override {
+    return Status::OK();
+  }
+
+  Status AddCipher(const std::string& /*descriptor*/, const char* /*cipher*/,
+                   size_t /*len*/, bool /*for_write*/) override {
+    return Status::OK();
+  }
+
+  Status CreateCipherStream(
+      const std::string& /*fname*/, const EnvOptions& /*options*/, Slice& /*prefix*/,
+      std::unique_ptr<BlockAccessCipherStream>* /*result*/) override {
+    // This provider is only used to test PrepareOptions(). We should never
+    // get here in this test.
+    return Status::NotSupported();
+  }
+
+  Status PrepareOptions(const ConfigOptions& options) override {
+    // We expect NewEncryptedFS() to call PrepareOptions() with an Env whose
+    // FileSystem is the base FileSystem passed into NewEncryptedFS(). To make
+    // this observable, the test uses a CountedFileSystem as the base and we
+    // assert that options.env->GetFileSystem() is a CountedFileSystem.
+    if (options.env == nullptr) {
+      return Status::InvalidArgument("env not set");
+    }
+    std::shared_ptr<FileSystem> fs = options.env->GetFileSystem();
+    if (!fs || !fs->IsInstanceOf(CountedFileSystem::kClassName())) {
+      return Status::NotSupported(
+          "PrepareOptions called with unexpected Env/FileSystem");
+    }
+    return EncryptionProvider::PrepareOptions(options);
+  }
+};
+
+TEST_F(CreateEnvTest, EncryptedFSBaseEnv) {
+  // Tests that the base file system is set correctly when we're creating
+  // an `EncryptedFileSystem` wrapper.
+
+  // Use a distinctive FileSystem (CountedFileSystem) as the base.
+  auto base_fs = std::make_shared<CountedFileSystem>(FileSystem::Default());
+  auto provider = std::make_shared<CheckEnvProvider>();
+
+  // This will fail (return nullptr) without the fix because PrepareOptions()
+  // will see the wrong Env/FileSystem. With the fix, it returns a valid FS.
+  auto enc_fs = NewEncryptedFS(base_fs, provider);
+  ASSERT_NE(enc_fs, nullptr);
+}
+
 
 namespace {
 

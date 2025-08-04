@@ -799,7 +799,12 @@ std::shared_ptr<FileSystem> NewEncryptedFS(
   std::unique_ptr<FileSystem> efs;
   Status s = NewEncryptedFileSystemImpl(base, provider, &efs);
   if (s.ok()) {
-    s = efs->PrepareOptions(ConfigOptions());
+    // We must call PrepareOptions() with the Env pointing to
+    // the correct base FileSystem.
+    auto env = CompositeEnvWrapper(Env::Default(), base);
+    ConfigOptions opt;
+    opt.env = &env;
+    s = efs->PrepareOptions(opt);
   }
   if (s.ok()) {
     std::shared_ptr<FileSystem> result(efs.release());
