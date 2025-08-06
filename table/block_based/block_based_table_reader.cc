@@ -903,7 +903,7 @@ Status BlockBasedTable::PrefetchTail(
                      "Tail prefetch size %zu is calculated based on heuristics",
                      tail_prefetch_size);
     } else {
-      ROCKS_LOG_WARN(
+      ROCKS_LOG_DEBUG(
           logger,
           "Tail prefetch size %zu is calculated based on TailPrefetchStats",
           tail_prefetch_size);
