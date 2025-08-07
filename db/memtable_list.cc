@@ -1021,7 +1021,8 @@ Status InstallMemtableAtomicFlushResults(
 }
 
 void MemTableList::RemoveOldMemTables(uint64_t log_number,
-                                      autovector<MemTable*>* to_delete) {
+                                      autovector<MemTable*>* to_delete,
+                                      Logger* info_log) {
   assert(to_delete != nullptr);
   InstallNewVersion();
   auto& memlist = current_->memlist_;
@@ -1032,6 +1033,18 @@ void MemTableList::RemoveOldMemTables(uint64_t log_number,
       break;
     }
     old_memtables.push_back(mem);
+  }
+
+  if (!old_memtables.empty()) {
+    uint64_t approximate_memory_usage = 0;
+    for (auto* m : old_memtables) {
+      approximate_memory_usage +=
+          static_cast<uint64_t>(m->ApproximateMemoryUsageFast());
+    }
+    ROCKS_LOG_INFO(info_log,
+         "Removing %zu memtables (approximate_memory_usage=%" PRIu64 ")"
+         ", log_number: %" PRIu64,
+         old_memtables.size(), approximate_memory_usage, log_number);
   }
 
   for (auto it = old_memtables.begin(); it != old_memtables.end(); ++it) {

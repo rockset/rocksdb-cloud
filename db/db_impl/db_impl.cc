@@ -1608,7 +1608,8 @@ Status DBImpl::ApplyReplicationLogRecord(ReplicationLogRecord record,
             continue;
           }
           cfd->imm()->RemoveOldMemTables(cfd->GetLogNumber(),
-                                         &job_context.memtables_to_free);
+                                         &job_context.memtables_to_free,
+                                         immutable_db_options_.info_log.get());
           auto& sv_context = job_context.superversion_contexts.back();
           if (!sv_context.new_superversion) {
             sv_context.NewSuperVersion();

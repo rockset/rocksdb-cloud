@@ -445,7 +445,8 @@ class MemTableList {
   // was created, i.e. mem->GetNextLogNumber() <= log_number. The memtables are
   // not freed, but put into a vector for future deref and reclamation.
   void RemoveOldMemTables(uint64_t log_number,
-                          autovector<MemTable*>* to_delete);
+                          autovector<MemTable*>* to_delete,
+                          Logger* info_log);
 
   // @return vector of <memtable id, next_log_num, replication_sequence> in
   // unflushed memtables

@@ -711,7 +711,8 @@ Status DBImplSecondary::TryCatchUpWithPrimary() {
     if (s.ok()) {
       for (auto cfd : cfds_changed) {
         cfd->imm()->RemoveOldMemTables(cfd->GetLogNumber(),
-                                       &job_context.memtables_to_free);
+                                       &job_context.memtables_to_free,
+                                       immutable_db_options_.info_log.get());
         auto& sv_context = job_context.superversion_contexts.back();
         cfd->InstallSuperVersion(&sv_context, &mutex_);
         sv_context.NewSuperVersion();
