@@ -1,4 +1,6 @@
 // Copyright (c) 2017-present, Rockset, Inc.  All rights reserved.
+#include <aws/core/Aws.h>
+
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -43,7 +45,7 @@ Status CloneDB(const std::string& clone_name, const std::string& src_bucket,
 
   // Create new AWS env
   CloudFileSystem* cfs;
-  Status st = CloudFileSystem::NewAwsFileSystem(
+  Status st = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), src_bucket, src_object_path, kRegion, dest_bucket,
       dest_object_path, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!st.ok()) {
@@ -79,6 +81,8 @@ Status CloneDB(const std::string& clone_name, const std::string& src_bucket,
 }
 
 int main() {
+  Aws::InitAPI(Aws::SDKOptions());
+
   // cloud environment config options here
   CloudFileSystemOptions cloud_fs_options;
 
@@ -108,7 +112,7 @@ int main() {
 
   // Create a new AWS cloud env Status
   CloudFileSystem* cfs;
-  Status s = CloudFileSystem::NewAwsFileSystem(
+  Status s = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), kBucketSuffix, kDBPath, kRegion, kBucketSuffix,
       kDBPath, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!s.ok()) {
@@ -185,5 +189,6 @@ int main() {
 
   fprintf(stdout, "Successfully used db at %s and clone at %s in bucket %s.\n",
           kDBPath.c_str(), kClonePath.c_str(), bucketName.c_str());
+  Aws::ShutdownAPI(Aws::SDKOptions());
   return 0;
 }
