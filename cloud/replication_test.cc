@@ -1477,7 +1477,7 @@ TEST_F(ReplicationTest, MaxNumReplicationEpochs) {
 
   ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().size(),
             2);
-  
+
   UpdateLeaderEpoch(4);
   // generate some manifest writes without changing persisted replication
   // sequence
@@ -1500,6 +1500,57 @@ TEST_F(ReplicationTest, MaxNumReplicationEpochs) {
             2);
   ASSERT_EQ(leaderFull()->GetVersionSet()->TEST_GetReplicationEpochSet().GetSmallestEpoch(),
             3);
+}
+
+class LastDurableSequenceListener : public ReplicationLogListener {
+ public:
+  std::string OnReplicationLogRecord(ReplicationLogRecord record) override {
+    if (record.type == ReplicationLogRecord::kManifestWrite) {
+      assert(record.last_durable_sequence_preapply);
+      if (db_) {
+        std::vector<LiveFileMetaData> files;
+        db_->GetLiveFilesMetaData(&files);
+        uint64_t max_seqno = 0;
+        for (auto& f : files) {
+          max_seqno = std::max(max_seqno, f.largest_seqno);
+        }
+        // This equality doesn't always hold, because it's possible that some
+        // compacted files on the bottommost level zero-out the sequence number,
+        // or some other files with the largest sequence number get deleted.
+        // However, in the way we currently have the test setup, the equation
+        // holds, and that's what we're trying to verify.
+        assert(max_seqno == *record.last_durable_sequence_preapply);
+      }
+    }
+    return "";
+  }
+
+  void setDb(DB* db) { db_ = db; }
+
+ private:
+  DB* db_{nullptr};
+};
+
+TEST_F(ReplicationTest, LastDurableSequence) {
+  auto dbname = leaderPath();
+
+  auto options = leaderOptions();
+  auto listener = std::make_shared<LastDurableSequenceListener>();
+  options.replication_log_listener = listener;
+
+  DB* db;
+  // open DB
+  ASSERT_OK(DB::Open(options, dbname, &db));
+
+  listener->setDb(db);
+
+  for (size_t i = 0; i < 10; ++i) {
+    ASSERT_OK(db->Put(wo(), "A" + std::to_string(i), "value"));
+    ASSERT_OK(db->Put(wo(), "B" + std::to_string(i), "value"));
+    ASSERT_OK(db->Flush(FlushOptions{}));
+  }
+
+  ASSERT_OK(db->CompactRange(CompactRangeOptions(), nullptr, nullptr));
 }
 
 }  //  namespace ROCKSDB_NAMESPACE

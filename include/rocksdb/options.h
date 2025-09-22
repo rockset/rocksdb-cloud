@@ -505,6 +505,10 @@ struct ReplicationLogRecord {
   enum Type { kMemtableWrite, kMemtableSwitch, kManifestWrite };
   Type type;
   std::string contents;
+  // Only set if type == kManifestWrite.
+  // Corresponds to the last sequence number committed to the manifest before
+  // the current replication log record is applied.
+  std::optional<SequenceNumber> last_durable_sequence_preapply;
 };
 
 // ReplicationLogListener provides a mechanism to implement physical replication

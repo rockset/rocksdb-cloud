@@ -2695,7 +2695,7 @@ void Version::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
           f = fp.GetNextFileInLevel();
           // RocksDB-Cloud contribution begin
           if (f) {
-            // We have another file to read. This implies that the read on 
+            // We have another file to read. This implies that the read on
             // this file was blocked (or serialized) behind the previous read.
             PERF_COUNTER_ADD(multiget_sst_serialized_file_read_count, 1);
           }
@@ -3078,7 +3078,7 @@ Status Version::MultiGetAsync(
           } else {
             // RocksDB-Cloud contribution begin
             // We still need to read files in the current level despite running
-            // some rounds of coroutine parallel reads. Record the fact that 
+            // some rounds of coroutine parallel reads. Record the fact that
             // file reads were serialized.
             PERF_COUNTER_ADD(multiget_sst_serialized_file_read_count, 1);
             // RocksDB-Cloud contribution end
@@ -5754,6 +5754,7 @@ Status VersionSet::ProcessManifestWrites(
       if (s.ok() && db_options_->replication_log_listener) {
         ReplicationLogRecord rlr;
         rlr.type = ReplicationLogRecord::kManifestWrite;
+        rlr.last_durable_sequence_preapply = descriptor_last_sequence_;
         s = SerializeReplicationLogManifestWrite(&rlr.contents, batch_edits,
                                                  batch_edits_ts_sz);
         if (s.ok()) {
