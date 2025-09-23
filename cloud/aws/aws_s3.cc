@@ -305,13 +305,12 @@ class S3ReadableFile : public CloudStorageReadableFileImpl {
           fname_.c_str(), offset, rangeLen);
       return IOStatus::IOError("S3ReadableFile vsnprintf ", fname_.c_str());
     }
-    Aws::String range(buffer);
 
     // set up S3 request to read this range
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(ToAwsString(bucket_));
     request.SetKey(ToAwsString(fname_));
-    request.SetRange(range);
+    request.SetRange(Aws::String(buffer, ret));
 
     Aws::S3::Model::GetObjectOutcome outcome =
         s3client_->GetCloudObject(request);
@@ -332,7 +331,6 @@ class S3ReadableFile : public CloudStorageReadableFileImpl {
           fname_.c_str(), offset, buffer, error.GetMessage().c_str());
       return IOStatus::IOError(fname_, errmsg.c_str());
     }
-    std::stringstream ss;
     // const Aws::S3::Model::GetObjectResult& res = outcome.GetResult();
 
     // extract data payload
