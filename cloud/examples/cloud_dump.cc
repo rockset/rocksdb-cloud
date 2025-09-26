@@ -1,4 +1,6 @@
 // Copyright (c) 2017-present, Rockset, Inc.  All rights reserved.
+#include <aws/core/Aws.h>
+
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -20,6 +22,8 @@ std::string kBucketSuffix = "cloud.durable.example.";
 std::string kRegion = "us-west-2";
 
 int main() {
+  Aws::InitAPI(Aws::SDKOptions());
+
   // cloud environment config options here
   CloudFileSystemOptions cloud_fs_options;
 
@@ -53,7 +57,7 @@ int main() {
 
   // Create a new AWS cloud env Status
   CloudFileSystem* cfs;
-  Status s = CloudFileSystem::NewAwsFileSystem(
+  Status s = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), kBucketSuffix, kDBPath, kRegion, kBucketSuffix,
       kDBPath, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!s.ok()) {
@@ -102,5 +106,6 @@ int main() {
 
   fprintf(stdout, "Successfully read db at path %s in bucket %s.\n",
           kDBPath.c_str(), bucketName.c_str());
+  Aws::ShutdownAPI(Aws::SDKOptions());
   return 0;
 }

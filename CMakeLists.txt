@@ -1648,6 +1648,25 @@ if(WITH_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
+option(WITH_CLOUD_EXAMPLES "build with cloud examples" OFF)
+if(WITH_CLOUD_EXAMPLES)
+  set(EXAMPLES
+    cloud/examples/clone_example.cc
+    cloud/examples/cloud_dump.cc
+    cloud/examples/cloud_durable_example.cc
+  )
+  foreach(sourcefile ${EXAMPLES})
+    message(${sourcefile})
+    get_filename_component(exename ${sourcefile} NAME_WE)
+    add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile})
+    target_link_libraries(${exename}${ARTIFACT_SUFFIX}
+      PRIVATE
+        ${ROCKSDB_LIB}
+        ${THIRDPARTY_LIBS}
+    )
+  endforeach()
+endif()
+
 option(WITH_BENCHMARK "build benchmark tests" OFF)
 if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
