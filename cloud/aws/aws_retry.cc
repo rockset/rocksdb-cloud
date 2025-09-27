@@ -127,6 +127,7 @@ Status AwsCloudOptions::GetClientConfiguration(
   if (cloud_fs_options.request_timeout_ms != 0) {
     config->requestTimeoutMs = cloud_fs_options.request_timeout_ms;
   }
+  config->endpointOverride = cloud_env_options.aws_options.endpoint_override;
 
   config->region = ToAwsString(region);
   return Status::OK();
