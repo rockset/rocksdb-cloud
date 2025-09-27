@@ -43,7 +43,7 @@ Status CloneDB(const std::string& clone_name, const std::string& src_bucket,
 
   // Create new AWS env
   CloudFileSystem* cfs;
-  Status st = CloudFileSystem::NewAwsFileSystem(
+  Status st = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), src_bucket, src_object_path, kRegion, dest_bucket,
       dest_object_path, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!st.ok()) {
@@ -108,7 +108,7 @@ int main() {
 
   // Create a new AWS cloud env Status
   CloudFileSystem* cfs;
-  Status s = CloudFileSystem::NewAwsFileSystem(
+  Status s = CloudFileSystemEnv::NewAwsFileSystem(
       FileSystem::Default(), kBucketSuffix, kDBPath, kRegion, kBucketSuffix,
       kDBPath, kRegion, cloud_fs_options, nullptr, &cfs);
   if (!s.ok()) {
